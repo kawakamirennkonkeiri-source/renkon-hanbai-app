@@ -1,0 +1,1443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>カワカミ蓮根 農産物 仕入販売管理（公開版）</title>
+<style>
+:root{--or:#C1440E;--or-d:#A03809;--or-l:#FBEDE7;--red:#DC3545;--grn:#1E7D34;--grn-l:#E9F4ED;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;background:#F7F7F8;color:#333;font-size:13px;line-height:1.6}
+header{background:var(--or);color:#fff;padding:9px 18px;display:flex;align-items:center;
+  gap:14px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:bold}
+header .ver{font-size:11.5px;opacity:.85;margin-left:8px;font-weight:400}
+header .sp{flex:1}
+header .hbadge{background:rgba(255,255,255,.22);padding:4px 11px;border-radius:4px;font-size:11.5px}
+header .hbtn{background:#fff;color:var(--or);border:none;padding:6px 13px;border-radius:4px;
+  cursor:pointer;font-size:12px;font-weight:bold;font-family:inherit}
+header .hbtn.y{background:#F5C242;color:#4a3400}
+header .hbtn.r{background:#DC3545;color:#fff}
+header .who{font-size:11.5px;display:flex;align-items:center;gap:6px}
+header .who input{padding:5px 8px;border:none;border-radius:4px;font-size:12px;
+  font-family:inherit;width:110px}
+.menu{position:relative;display:inline-block}
+.menu-list{display:none;position:absolute;right:0;top:calc(100% + 5px);background:#fff;
+  border:1px solid #DDD;border-radius:5px;box-shadow:0 6px 18px rgba(0,0,0,.16);
+  min-width:210px;z-index:50;overflow:hidden}
+.menu-list.on{display:block}
+.menu-list button{display:block;width:100%;text-align:left;background:none;border:none;
+  padding:10px 14px;font-size:12.5px;font-family:inherit;cursor:pointer;color:#333}
+.menu-list button:hover{background:var(--or-l)}
+.menu-list .sep{border-top:1px solid #EEE}
+.menu-list .cap{padding:7px 14px;font-size:11px;color:#888;background:#FAFAFA}
+nav{background:#fff;padding:0 20px;display:flex;border-top:0;
+  border-bottom:1px solid #E3E3E5;overflow-x:auto;position:sticky;top:0;z-index:10}
+nav button{background:none;border:1px solid transparent;padding:14px 16px;cursor:pointer;
+  font-size:13.5px;color:#444;white-space:nowrap;font-family:inherit;border-radius:3px;margin:6px 1px}
+nav button:hover{background:#FAFAFA}
+nav button.active{color:#111;font-weight:bold;border-color:var(--or)}
+.topbar{background:#fff;border-bottom:1px solid #E3E3E5;padding:8px 20px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px;color:#666}
+.topbar b{color:var(--or)}
+main{padding:16px;max-width:1700px;margin:0 auto}
+.panel{display:none}.panel.active{display:block}
+.card{background:#fff;border:1px solid #E3E3E5;border-radius:5px;padding:16px 18px;margin-bottom:14px}
+.card h2{font-size:16px;color:#222;padding-bottom:10px;margin-bottom:12px;
+  border-bottom:1px solid #E8E8EA;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card h2 .cnt{font-size:12px;font-weight:400;color:#777}
+.card h2 .sp{flex:1}
+.hint{font-size:11.5px;color:#777;margin-bottom:10px;line-height:1.7}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.kpi{background:#fff;border:1px solid #E3E3E5;border-radius:5px;padding:10px 16px;min-width:150px;flex:1}
+.kpi .l{font-size:11.5px;color:#777}
+.kpi .v{font-size:21px;font-weight:bold;font-variant-numeric:tabular-nums}
+.kpi.sale .v{color:var(--or)}.kpi.buy .v{color:var(--grn)}.kpi.gp .v{color:#8A5A00}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:var(--or);color:#fff;padding:8px 10px;text-align:left;font-weight:600;white-space:nowrap}
+.scroll th{position:sticky;top:0;z-index:2}
+td{padding:7px 10px;border-bottom:1px solid #EEE;vertical-align:middle}
+tbody tr:hover{background:#FCFAF9}
+.text-right,.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{font-weight:bold;background:var(--or-l);border-top:2px solid var(--or)}
+.scroll{overflow:auto;max-height:60vh;border:1px solid #E8E8EA;border-radius:4px}
+.badge{display:inline-block;padding:1px 8px;border-radius:3px;font-size:11px;font-weight:bold}
+.b-sale{background:var(--or-l);color:var(--or)}
+.b-buy{background:var(--grn-l);color:var(--grn)}
+.b-ok{background:var(--grn-l);color:var(--grn)}
+.b-ng{background:#FBE9E7;color:#C62828}
+.b-wait{background:#FFF4DB;color:#8A5A00}
+.b-gray{background:#EEE;color:#666}
+.note{background:#FFF4DB;border-left:4px solid #E0A800;padding:9px 13px;margin:9px 0;font-size:12.5px}
+.note.red{background:#FBE9E7;border-left-color:#C62828}
+.note.ok{background:var(--grn-l);border-left-color:var(--grn)}
+.note.or{background:var(--or-l);border-left-color:var(--or)}
+textarea{width:100%;min-height:120px;font-family:Consolas,monospace;font-size:12px;
+  padding:9px;border:1px solid #D5D5D8;border-radius:4px;resize:vertical}
+.btn{background:var(--or);color:#fff;border:none;padding:8px 16px;border-radius:4px;
+  cursor:pointer;font-size:12px;font-weight:bold;font-family:inherit}
+.btn:hover{filter:brightness(1.1)}
+.btn.sub{background:#fff;color:#444;border:1px solid #CCC}
+.btn.grn{background:var(--grn)}
+.btn.sm{padding:4px 11px;font-size:11px}
+.btn.dgr{background:var(--red)}
+.del{background:var(--red);color:#fff;border:none;border-radius:3px;padding:3px 10px;
+  cursor:pointer;font-size:11px;font-weight:bold;font-family:inherit}
+.edit{background:#fff;color:#444;border:1px solid #CCC;border-radius:3px;padding:3px 10px;
+  cursor:pointer;font-size:11px;font-family:inherit}
+.flex{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:9px 0}
+label{font-size:12.5px;color:#555}
+select,input.find,input[type=month],input[type=date]{padding:7px 10px;border:1px solid #D5D5D8;
+  border-radius:4px;font-size:13px;font-family:inherit;background:#fff}
+input.find{min-width:200px}
+input.cell{width:100%;min-width:56px;padding:3px 6px;border:1px solid transparent;
+  border-radius:3px;font-size:12.5px;font-family:inherit;background:#F8F8F9}
+input.cell:hover{border-color:#D5D5D8;background:#fff}
+input.cell:focus{border-color:var(--or);background:#fff;outline:none}
+input.cell.n{text-align:right;font-variant-numeric:tabular-nums}
+input.cell.need{background:#FFF4DB;border-color:#E0A800}
+select.cell{width:100%;padding:3px 5px;border:1px solid #D5D5D8;border-radius:3px;
+  font-size:12.5px;font-family:inherit;background:#fff}
+tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{background:transparent}}
+/* 請求プレビューカード */
+.prev{border:1px solid #E3E3E5;border-radius:5px;margin-bottom:14px;background:#fff}
+.prev-h{padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.prev-h .ttl{font-size:14.5px;font-weight:bold}
+.prev-h .cond{font-size:12px;color:#777;font-weight:400}
+.prev-h .sp{flex:1}
+.prev-h .amt{font-size:12px;color:#777;white-space:nowrap}
+.prev-h .amt b{font-size:15px;color:#222}
+.prev-h .amt .big{font-size:19px;color:#111;font-weight:bold}
+.prev table{border-top:1px solid #EEE}
+/* 帳票 */
+.doc{background:#fff;padding:32px 38px;border:1px solid #E3E3E5;border-radius:5px}
+.doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.doc-title{text-align:center;font-size:24px;font-weight:bold;letter-spacing:.45em;margin:14px 0 20px;text-indent:.45em}
+.doc-to{font-size:18px;font-weight:bold;border-bottom:2px solid #333;padding-bottom:3px;display:inline-block;min-width:300px}
+.doc-to .ad{display:block;font-size:11.5px;font-weight:400;color:#666;border:0;margin-top:3px}
+.doc-total{background:var(--or-l);border:2px solid var(--or);border-radius:5px;padding:10px 20px;margin:16px 0;display:inline-block}
+.doc-total.b{background:var(--grn-l);border-color:var(--grn)}
+.doc-total .l{font-size:11.5px;color:var(--or)}.doc-total.b .l{color:var(--grn)}
+.doc-total .v{font-size:27px;font-weight:bold;color:var(--or);font-variant-numeric:tabular-nums}
+.doc-total.b .v{color:var(--grn)}
+.doc-meta{font-size:12px;color:#666;text-align:right;line-height:1.9}
+.doc-foot{margin-top:20px;display:flex;justify-content:flex-end}
+.doc-foot table{width:auto;min-width:290px}
+.doc-foot td{border-bottom:1px solid #EEE}
+.doc table.buy th{background:var(--grn)}
+.doc tr.total td{background:var(--or-l);border-top-color:var(--or)}
+.doc table.buy tr.total td{background:var(--grn-l);border-top-color:var(--grn)}
+.bank{margin-top:22px;padding-top:12px;border-top:1px solid #EEE;font-size:11.5px;color:#666}
+@media print{
+  nav,.topbar,.no-print{display:none!important}
+  body{background:#fff}main{padding:0;max-width:none}
+  .panel{display:none!important}.panel.active{display:block!important}
+  .doc{border:0;padding:0}.scroll{max-height:none;overflow:visible;border:0}
+  .scroll th{position:static}
+}
+</style>
+</head>
+<body>
+
+<header class="no-print">
+  <div><span style="font-size:17px;font-weight:bold">カワカミ蓮根　農産物 仕入販売管理</span>
+    <span class="ver" id="verLabel"></span></div>
+  <div class="sp"></div>
+  <span class="hbadge" id="syncBadge">● 保存待ち</span>
+  <div class="menu">
+    <button class="hbtn" id="btnBackup">データ保存・バックアップ ▾</button>
+    <div class="menu-list" id="mBackup">
+      <div class="cap">設定（マスタ）</div>
+      <button data-act="cfgExport">設定を書き出す（JSON）</button>
+      <button data-act="cfgImport">設定を読み込む</button>
+      <div class="sep"></div>
+      <div class="cap">取り込んだ取引データ</div>
+      <button data-act="dataExport">取引データを書き出す（JSON）</button>
+      <button data-act="dataImport">取引データを読み込む</button>
+    </div>
+  </div>
+  <button class="hbtn y" id="btnFreee">freee設定</button>
+  <span class="who">操作者:<input id="userName" placeholder="氏名"></span>
+  <button class="hbtn r" id="btnCfgReset2">初期データに戻す</button>
+</header>
+<nav id="nav"></nav>
+<div class="topbar no-print">
+  <label>対象月 <select id="ym"></select></label>
+  <span id="dlMsg"></span>
+</div>
+<input type="file" id="fileCfg" accept=".json" style="display:none">
+<input type="file" id="fileData" accept=".json" style="display:none">
+
+<main>
+
+<!-- ダッシュボード -->
+<section class="panel active" id="dashboard">
+  <div class="card" id="firstRun" style="border-left:5px solid var(--or)">
+  <h2>はじめにお読みください</h2>
+  <div class="note or" style="margin-top:0">
+    <b>この公開版には、データが一切入っていません。</b>
+    取引先・単価・運賃などは、このパソコンのブラウザの中だけに保存されます。
+    インターネット上には出ませんし、他のパソコンからも見えません。
+  </div>
+  <p style="font-size:13px;margin:10px 0">使いはじめる方法は2つあります。</p>
+  <table>
+    <thead><tr><th style="width:26%">方法</th><th>手順</th></tr></thead>
+    <tbody>
+      <tr><td><b>① 設定ファイルを読み込む<br>（おすすめ）</b></td>
+        <td>社内で使っている設定ファイル（<code>仕入販売管理_設定_YYYYMMDD.json</code>）を、
+          画面上の<b>「データ保存・バックアップ」→「設定を読み込む」</b>から読み込みます。
+          取引先・単価・運賃・締め日が一度に入ります。</td></tr>
+      <tr><td><b>② 手で入力する</b></td>
+        <td><b>取引先マスタ → 単価マスタ → 運賃マスタ</b> の順に「＋新規」で登録します。
+          そのあと<b>データ取込</b>タブで、電子黒板の荷造りリストと生産者記録を貼り付けます。</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>この案内は、データを入れると自動で消えます。</b>
+  </div>
+</div>
+  <div class="kpis">
+    <div class="kpi sale"><div class="l">受注合計（税抜）</div><div class="v" id="kSale">-</div></div>
+    <div class="kpi buy"><div class="l">発注・買取合計（税抜）</div><div class="v" id="kBuy">-</div></div>
+    <div class="kpi gp"><div class="l">差引（受注−買取）</div><div class="v" id="kGp">-</div></div>
+    <div class="kpi"><div class="l">取引件数</div><div class="v" id="kCnt">-</div></div>
+    <div class="kpi"><div class="l">要確認</div><div class="v" id="kNg">-</div></div>
+  </div>
+  <div class="card"><h2>ステータス</h2><div class="flex" id="statusBox"></div></div>
+  <div class="card">
+    <h2>お客様別 受注</h2>
+    <div class="scroll" style="max-height:38vh">
+      <table id="tSale"><thead><tr>
+        <th>お客様（請求先）</th><th>請求基準・締め</th><th class="num">明細</th><th class="num">数量c/s</th>
+        <th class="num">税抜</th><th class="num">消費税8%</th><th class="num">税込</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>仕入先別 発注（生産者）</h2>
+    <div class="scroll" style="max-height:38vh">
+      <table id="tBuy"><thead><tr>
+        <th>仕入先（生産者）</th><th class="num">明細</th><th class="num">数量c/s</th><th class="num">数量kg</th>
+        <th class="num">買取額(税抜)</th><th class="num">単価未設定</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- 取引 -->
+<section class="panel" id="tx">
+  <div class="card">
+    <h2>取引 <span id="txCnt" class="cnt"></span> 受注＋発注</h2>
+    <p class="hint">💡 電子黒板の荷造りリストが「受注」、生産者記録が「発注」として取り込まれます。納品予定日を過ぎたものは納品✓済となり、請求タブに集計されます。</p>
+    <div class="flex">
+      <select id="txKind"><option value="all">全て</option><option value="sale">受注のみ</option><option value="buy">発注のみ</option></select>
+      <select id="txStatus"><option value="all">状態：全て</option><option value="created">納品予定</option>
+        <option value="delivered">納品✓済</option><option value="ng">要確認</option></select>
+      <input class="find" id="fTx" placeholder="絞り込み（取引先・品目）">
+    </div>
+    <div class="scroll">
+      <table id="tTx"><thead><tr>
+        <th>取引No.</th><th>取引日</th><th>区分</th><th>お客様(受注)</th><th>仕入先(発注)</th>
+        <th>産地</th><th>品目</th><th>納品予定日</th>
+        <th class="num">数量</th><th class="num">単価</th><th>送料区分</th><th>運送会社</th>
+        <th class="num">受注額</th><th class="num">発注額</th><th>状態</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- 納品 -->
+<section class="panel" id="deliv">
+  <div class="card">
+    <h2>納品 <span id="dvCnt" class="cnt"></span></h2>
+    <p class="hint">💡 取引タブの内容が納品予定として自動的に表示されます。全量そのままなら「納品✓(全量)」、一部だけ納品した場合は「明細ごとに入力」から納品数量を記録してください。</p>
+    <div class="flex">
+      <input class="find" id="fDv" placeholder="検索…" style="flex:1;min-width:260px">
+      <select id="dvStatus"><option value="all">全て表示</option><option value="created">納品予定</option>
+        <option value="delivered">納品✓済</option><option value="invoiced">請求済</option></select>
+    </div>
+    <div class="scroll">
+      <table id="tDv"><thead><tr>
+        <th>取引No.</th><th>取引日</th><th>お客様</th><th>産地</th><th>品目・数量</th>
+        <th class="num">金額</th><th>納品状態</th><th>納品日</th><th>納品書</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div id="dvList" style="display:none"></div>
+  <div class="doc" id="dvdoc" style="display:none"></div>
+  <div class="flex no-print" id="dvBack" style="display:none">
+    <button class="btn sub" id="btnDvBack">← 一覧に戻る</button>
+    <button class="btn" onclick="window.print()">印刷</button>
+  </div>
+</section>
+
+<!-- 請求 -->
+<section class="panel" id="invoicing">
+  <div class="card no-print">
+    <h2>月次請求プレビュー <span class="cnt" id="invMonth"></span></h2>
+    <div class="flex">
+      <label>対象月：<select id="invYm"></select></label>
+      <label>お客様：<select id="invCust"><option value="all">全て</option></select></label>
+    </div>
+    <p class="hint">💡 対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
+  </div>
+  <div id="invList" class="no-print"></div>
+  <div class="doc" id="inv" style="display:none"></div>
+  <div class="flex no-print" id="invBack" style="display:none">
+    <button class="btn sub" id="btnInvBack">← 一覧に戻る</button>
+    <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
+  </div>
+</section>
+
+<!-- 買取 -->
+<section class="panel" id="buying">
+  <div class="card no-print">
+    <h2>月次買取プレビュー <span class="cnt" id="buyMonth"></span></h2>
+    <div class="flex">
+      <label>対象月：<select id="buyYm"></select></label>
+      <label>生産者：<select id="buySei"><option value="all">全て</option></select></label>
+    </div>
+    <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。</p>
+  </div>
+  <div id="buyList" class="no-print"></div>
+  <div class="doc" id="buydoc" style="display:none"></div>
+  <div class="flex no-print" id="buyBack" style="display:none">
+    <button class="btn sub" id="btnBuyBack">← 一覧に戻る</button>
+    <button class="btn grn" onclick="window.print()">印刷 / PDF保存</button>
+  </div>
+</section>
+
+<!-- 取引先マスタ -->
+<section class="panel" id="partners">
+  <div class="card">
+    <h2>取引先マスタ <span class="cnt" id="cPar"></span><span class="sp"></span>
+      <button class="btn sm" data-add="partners">＋ 新規</button></h2>
+    <div class="note or">取引先の正式名称・住所・担当者・メールを登録します。<b>照合キー</b>には、請求一覧に出てくる呼び名（略称）を入れてください。請求書に住所・担当者が印字されます。</div>
+    <div class="flex"><input class="find" id="fPar" placeholder="絞り込み"></div>
+    <div class="scroll" style="max-height:56vh">
+      <table id="tPar"><thead><tr>
+        <th style="width:19%">取引先名（正式）</th><th style="width:11%">照合キー</th>
+        <th style="width:9%">郵便番号</th><th style="width:24%">住所</th>
+        <th style="width:9%">担当者</th><th style="width:21%">メール</th><th style="width:7%"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- 単価マスタ -->
+<section class="panel" id="prices">
+  <div class="card">
+    <h2>単価マスタ <span class="cnt" id="cPrice"></span> 期間別価格<span class="sp"></span>
+      <button class="btn sm" data-add="price">＋ 新規</button></h2>
+    <div class="flex">
+      <select id="fpTori"><option value="">全ての取引先</option></select>
+      <select id="fpKind"><option value="">全ての種別</option><option>販売</option><option>仕入</option><option>加工賃</option></select>
+      <input class="find" id="fPrice" placeholder="商品で絞り込み">
+    </div>
+    <div class="note" id="kaiNote"></div>
+    <div class="scroll" style="max-height:60vh">
+      <table id="tPrice"><thead><tr>
+        <th style="width:17%">取引先</th><th style="width:22%">商品</th>
+        <th style="width:8%" class="num">容量</th><th style="width:7%">産地</th>
+        <th style="width:7%">種別</th><th style="width:9%" class="num">単価</th>
+        <th style="width:7%">単位</th><th style="width:9%">送料区分</th>
+        <th style="width:13%">適用期間</th><th style="width:5%"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>取引先の対応表（黒板の呼び名 → 請求先・産地） <span class="cnt" id="cMap"></span><span class="sp"></span>
+      <button class="btn sm" data-add="map">＋ 新規</button></h2>
+    <div class="flex"><input class="find" id="fMap" placeholder="絞り込み"></div>
+    <div class="scroll" style="max-height:40vh">
+      <table id="tMap"><thead><tr>
+        <th style="width:22%">黒板の販売先</th><th style="width:13%">区分</th>
+        <th style="width:24%">→ 請求先（お客様）</th><th style="width:23%">→ 単価マスタの商品</th>
+        <th style="width:12%">産地</th><th style="width:6%"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</section>
+
+<!-- 運賃マスタ -->
+<section class="panel" id="freight">
+  <div class="card">
+    <h2>運賃マスタ <span class="cnt" id="cFre"></span> 販売先・規格ごと<span class="sp"></span>
+      <button class="btn sm" data-add="freight">＋ 新規</button></h2>
+    <div class="note or">単価マスタで<b>「送料別」</b>にした行だけ、ここの運賃が請求書に足されます。<b>「送料込み」</b>の行は運賃を足しません。</div>
+    <p class="hint">💡 条件は「〇c/s以上なら運賃いくら」という形で複数行つくれます。数量が大きい条件から順に当てはめます（例：100c/s以上＝無料、50c/s以上＝5,000円、条件なし＝8,000円）。</p>
+    <div class="flex">
+      <select id="ffTori"><option value="">全ての販売先</option></select>
+      <input class="find" id="fFre" placeholder="規格・運送会社で絞り込み">
+    </div>
+    <div class="scroll" style="max-height:60vh">
+      <table id="tFre"><thead><tr>
+        <th style="width:14%">販売先</th><th style="width:13%">規格・品目</th>
+        <th style="width:11%">運送会社</th><th style="width:9%" class="num">運賃(税抜)</th>
+        <th style="width:9%">単位</th><th style="width:12%">条件</th>
+        <th style="width:13%">店着リード／着曜日</th><th style="width:11%">備考</th>
+        <th style="width:12%">適用期間</th><th style="width:5%"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+    <datalist id="carriers">
+      <option>NKライン</option><option>アイゼンライン</option><option>福岡ソノリク</option>
+      <option>マルエイ出荷組合</option><option>ランテック</option><option>宅急便</option>
+      <option>エア・ウォーター</option><option>ファス</option><option>自社便</option>
+    </datalist>
+  </div>
+</section>
+
+<!-- 取込 -->
+<section class="panel" id="importing">
+  <div class="card">
+    <h2>① 受注を取り込む（電子黒板 → 荷造りリスト）</h2>
+    <div class="note">保管庫の <b>荷造りリスト</b> から <b>生産日〜荷造数kg</b> の範囲をコピーして貼り付け</div>
+    <textarea id="paste" placeholder="2026/9/4	2026/9/5	○○商店	洗い	10	100	1000"></textarea>
+    <div class="flex"><button class="btn" id="btnLoad">取り込む</button>
+      <button class="btn sub" id="btnReset">取り込んだ分を消す</button><span id="loadMsg"></span></div>
+  </div>
+  <div class="card">
+    <h2>② 発注を取り込む（電子黒板 → 生産者記録）</h2>
+    <div class="note">保管庫の <b>生産者記録</b> から <b>日付〜出来高kg</b> の範囲をコピーして貼り付け</div>
+    <textarea id="pasteB" placeholder="2026/9/4	AM	○○	洗い	10	8	80"></textarea>
+    <div class="flex"><button class="btn grn" id="btnLoadB">取り込む</button>
+      <button class="btn sub" id="btnResetB">取り込んだ分を消す</button><span id="loadMsgB"></span></div>
+  </div>
+</section>
+
+<!-- 設定 -->
+<section class="panel" id="settings">
+  <div class="card">
+    <h2>設定の保存・持ち出し</h2>
+    <div class="note or">マスタのマス目はクリックすれば書き換えられます。<b>変更は自動保存</b>（このパソコンのChrome）。別のパソコンで使うときは書き出し→読み込み。</div>
+    <div class="flex">
+      <button class="btn sub" id="btnExport">設定を書き出す</button>
+      <button class="btn sub" id="btnImportBtn">設定を読み込む</button>
+      <input type="file" id="btnImport" accept=".json" style="display:none">
+      <button class="btn dgr" id="btnCfgReset">最初の設定に戻す</button>
+      <span id="cfgMsg"></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>締め日設定 <span class="cnt">ここに無い請求先は「月末締め／納品日基準」</span><span class="sp"></span>
+      <button class="btn sm" data-add="shime">＋ 新規</button></h2>
+    <table id="tShime"><thead><tr>
+      <th style="width:32%">請求先</th><th style="width:18%">締め</th>
+      <th style="width:24%">請求基準日</th><th style="width:20%">備考</th><th style="width:6%"></th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
+    <h2>自社情報（請求書・納品書・買取書に印字されます）</h2>
+    <table><tbody>
+      <tr><td style="width:24%">会社名</td><td><input class="cell" id="coName" placeholder="株式会社○○"></td></tr>
+      <tr><td>住所</td><td><input class="cell" id="coAddr" placeholder="〒000-0000　○○県○○市…"></td></tr>
+      <tr><td>振込先</td><td><input class="cell" id="coBank" placeholder="【お振込先】○○銀行　○○支店　普通　0000000"></td></tr>
+      <tr><td>インボイス登録番号</td><td><input class="cell" id="coInv" placeholder="T1234567890123"></td></tr>
+    </tbody></table>
+    <div class="note">登録番号を入れると、請求書・買取書に印字されます（未入力のうちは注意書きが出ます）。</div>
+  </div>
+
+  <div class="card">
+    <h2>PDFの保存先（Googleドライブ）</h2>
+    <div class="note red">
+      <b>この機能を使うには、各アカウントで1回だけ準備が必要です。</b><br>
+      共有フォルダの <b>受発注システム試作 ／ GAS_ドライブ保存.txt</b> の中身を、それぞれのGoogleアカウントで
+      「Apps Script」に貼り付けてウェブアプリとして公開し、出てきたURL（末尾 /exec）を下に貼り付けてください。<br>
+      URLが空のときは、PDFはパソコンにダウンロードされるだけになります（ドライブには入りません）。
+    </div>
+    <table><thead><tr><th style="width:16%">帳票</th><th style="width:22%">保存先アカウント</th>
+      <th style="width:40%">GASウェブアプリURL（/exec）</th><th style="width:22%">保存先フォルダID（任意）</th></tr></thead>
+      <tbody>
+        <tr><td><b>納品書</b></td><td>納品書用のアカウント</td>
+          <td><input class="cell" id="dvGas" placeholder="https://script.google.com/macros/s/.../exec"></td>
+          <td><input class="cell" id="dvFolder" placeholder="空欄ならマイドライブ直下"></td></tr>
+        <tr><td><b>請求書</b></td><td>請求書用のアカウント</td>
+          <td><input class="cell" id="invGas" placeholder="https://script.google.com/macros/s/.../exec"></td>
+          <td><input class="cell" id="invFolder" placeholder="空欄ならマイドライブ直下"></td></tr>
+      </tbody></table>
+    
+  </div>
+
+  <div class="card">
+    <h2>freee連携設定</h2>
+    <div class="flex">
+      <label style="min-width:150px">アクセストークン</label>
+      <input class="cell" id="freeeToken" style="max-width:420px" placeholder="freee for Developers → マイアプリ → アクセストークン発行">
+    </div>
+    <div class="flex">
+      <label style="min-width:150px">事業所ID（company_id）</label>
+      <input class="cell n" id="freeeCompany" style="max-width:180px" placeholder="12345678">
+    </div>
+    <div class="note red"><b>freeeへの発行は、まだつないでいません。</b>
+      トークンと事業所IDをいただければ、請求書の自動発行までつなぎます。<br>
+      なお<b>納品書はfreeeに発行の仕組みがない可能性があります</b>（請求書・見積書は対応）。
+      freee側で納品書が作れるかを先に確認してください。</div>
+  </div>
+
+  <div class="card">
+    <h2>消費税率</h2>
+    <div class="flex">
+      <label>商品（蓮根）<input class="cell n" id="taxFood" style="width:70px" value="8"> ％</label>
+      <label style="margin-left:20px">送料<input class="cell n" id="taxFreight" style="width:70px" value="10"> ％</label>
+    </div>
+    <div class="note">蓮根は食品なので軽減税率8%、送料は運送サービスなので標準税率10%を初期値にしています。請求書では分けて計算します。</div>
+  </div>
+  <div class="card">
+    <h2>請求・買取の対象外にする名前</h2>
+    <div class="flex" id="shanaiBox"></div>
+    <div class="flex"><input class="find" id="shanaiNew" placeholder="追加する名前">
+      <button class="btn sub sm" id="btnShanai">＋ 追加</button></div>
+  </div>
+  </section>
+
+</main>
+
+<script>
+const DATA = {"price": [], "map": [], "shime": [], "shanai": [], "kaitori": [], "partners": [], "prod": [], "sample": [], "tmv3": []};
+const TAX = 0.08;
+const CFG_KEY="krs_cfg_v2", ROW_KEY="krs_rows", ROWB_KEY="krs_rows_buy";
+const COMPANY_DEFAULT={name:"",addr:"",bank:"",invoiceNo:""};
+const TABS=[["dashboard","ダッシュボード"],["tx","取引 (受注＋発注)"],["deliv","納品"],
+  ["invoicing","請求"],["buying","買取 (生産者)"],["partners","取引先マスタ"],
+  ["prices","単価マスタ"],["freight","運賃マスタ"],["importing","データ取込"],["settings","設定"]];
+const PFROM="2026-04-01", PTO="2027-03-31";
+
+const N=s=>String(s==null?"":s).normalize("NFKC").replace(/[\s\u3000]+/g,"");
+const KEYNAME=s=>N(s).replace(/株式会社|有限会社|\(株\)|（株）/g,"");
+const yen=n=>(n==null?"-":Math.round(n).toLocaleString("ja-JP"));
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+const p2=n=>String(n).padStart(2,"0");
+
+// 生産者の区分 → 買取単価
+function kaitoriTanka(kubun){
+  const k=N(kubun);
+  if(k==="収穫舟数") return null;
+  if(k==="C"||k==="S") return 100;
+  return 250;   // 洗い・土・洗い半端・土半端 は M以上として扱う
+}
+function defaultCfg(){
+  const price=[];
+  DATA.price.forEach(p=>price.push({t:p.t,item:p.item,cap:p.cap,sanchi:"熊本",kind:"販売",
+    tanka:p.tanka,unit:"円/ケース",soryo:"送料込み",from:PFROM,to:PTO}));
+  DATA.kaitori.forEach(k=>price.push({t:k.seisansha,item:k.kubun,cap:k.size,sanchi:"熊本",
+    kind:k.kubun==="収穫舟数"?"対象外":"仕入",tanka:kaitoriTanka(k.kubun),unit:"円/kg",from:PFROM,to:PTO}));
+  const seen={},freight=[];
+  DATA.map.forEach(m=>{const k=m.tori+""+m.item;
+    if(m.tori&&!seen[k]){seen[k]=1;
+      freight.push({t:m.tori,item:m.item,carrier:"",tanka:null,unit:"円/ケース",
+        cond:"条件なし",condQty:null,ruleType:"日数",ruleVal:"",memo:"",from:PFROM,to:PTO});}});
+  return {
+    price:price, freight:freight, taxFood:8, taxFreight:10,
+    company:Object.assign({},COMPANY_DEFAULT),
+    dvGas:"", dvFolder:"", invGas:"", invFolder:"",
+    freeeToken:"", freeeCompany:"", userName:"",
+    map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,sanchi:"熊本"})),
+    shime:DATA.shime.map(s=>({tori:s.tori,shime:s.shime,kijun:s.kijun,memo:""})),
+    shanai:DATA.shanai.slice(),
+    partners:DATA.partners.map(p=>({name:p.name,key:KEYNAME(p.name),zip:p.zip,addr:p.addr,
+      person:p.person,mail:p.mail}))
+  };
+}
+let CFG=defaultCfg();
+const CO=()=>Object.assign({},COMPANY_DEFAULT,(CFG&&CFG.company)||{});
+try{const s=localStorage.getItem(CFG_KEY); if(s){const o=JSON.parse(s); if(o&&o.price&&o.map) CFG=Object.assign(defaultCfg(),o);}}catch(e){}
+let saveTimer=null;
+function saveCfg(msg){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{
+  try{localStorage.setItem(CFG_KEY,JSON.stringify(CFG));}catch(e){} setCfgMsg(msg||"保存しました");},350);}
+function setCfgMsg(t,k){const el=document.getElementById("cfgMsg");
+  el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":"b-ok")+'">'+esc(t)+'</span>';
+  clearTimeout(setCfgMsg._t); setCfgMsg._t=setTimeout(()=>el.innerHTML="",3000);}
+
+let MAPI={},SHIME={},SHANAI=new Set(),PAR={};
+function indexCfg(){
+  MAPI={};CFG.map.forEach(m=>{if(m.sell)MAPI[m.sell+"\u0001"+(m.kubun||"")]=m;});
+  SHIME={};CFG.shime.forEach(s=>{if(s.tori)SHIME[s.tori]=s;});
+  SHANAI=new Set(CFG.shanai);
+  PAR={};CFG.partners.forEach(p=>{if(p.key)PAR[KEYNAME(p.key)]=p;});
+}
+const shimeOf=t=>SHIME[t]||{shime:"月末",kijun:"着"};
+const kijunLabel=r=>r.kijun==="出し"?"出荷日":"納品日";
+function partnerOf(name){
+  const k=KEYNAME(name);
+  if(PAR[k]) return PAR[k];
+  const cand=CFG.partners.filter(p=>p.key&&(KEYNAME(p.key).includes(k)||k.includes(KEYNAME(p.key))));
+  if(!cand.length) return null;
+  // 名前の長さが一番近いものを選ぶ（略称が長い社名に誤って一致するのを防ぐ）
+  cand.sort((a,b)=>Math.abs(KEYNAME(a.key).length-k.length)-Math.abs(KEYNAME(b.key).length-k.length));
+  return cand[0];}
+function inTerm(p,d){
+  if(!d) return true;
+  const f=p.from?new Date(p.from):null, t=p.to?new Date(p.to):null;
+  if(f&&d<f) return false;
+  if(t&&d>t) return false;
+  return true;
+}
+function lookup(kind,tori,item,cap,d){
+  const t=N(tori),k=N(item); if(!t) return null;
+  let c=CFG.price.filter(p=>p.kind===kind&&N(p.t)===t);
+  if(!c.length) c=CFG.price.filter(p=>p.kind===kind&&N(p.t)&&N(p.t).startsWith(t.slice(0,8)));
+  if(!c.length) return null;
+  let c2=c.filter(p=>N(p.item)===k);
+  if(!c2.length&&k) c2=c.filter(p=>N(p.item).includes(k.slice(0,4)));
+  if(!c2.length) return null;
+  let c3=c2.filter(p=>cap!=null&&p.cap!=null&&Math.abs(parseFloat(p.cap)-cap)<0.01);
+  if(!c3.length) return null;
+  const c4=c3.filter(p=>inTerm(p,d));
+  const h=c4.length?c4[0]:null;
+  return (h&&h.tanka)?h:null;
+}
+function parseDate(s){const m=String(s).trim().match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
+function seikyuYM(tori,se,no){
+  const r=shimeOf(tori), b=(r.kijun==="出し")?se:no;
+  if(!b) return null;
+  if(r.shime!=="20日") return [b.getFullYear(),b.getMonth()+1];
+  if(b.getDate()<=20) return [b.getFullYear(),b.getMonth()+1];
+  let m=b.getMonth()+2,y=b.getFullYear(); if(m>12){m=1;y++;}
+  return [y,m];
+}
+const TF=()=>({food:(Number(CFG.taxFood)||8)/100, fre:(Number(CFG.taxFreight)||10)/100});
+function findFreight(tori,item,qty,kg,d){
+  const t=N(tori),k=N(item); if(!t) return null;
+  let c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)&&f.tanka!=null&&f.tanka!=="");
+  if(!c.length) return null;
+  c=c.filter(f=>!N(f.item)||N(f.item)===k||N(f.item).includes(k.slice(0,4)));
+  if(!c.length) return null;
+  const okc=c.filter(f=>{
+    const q=Number(f.condQty);
+    if(f.cond==="\u4ee5\u4e0a") return !isNaN(q)&&qty>=q;
+    if(f.cond==="\u672a\u6e80") return !isNaN(q)&&qty<q;
+    return true;});
+  if(!okc.length) return null;
+  okc.sort((a,b)=>(Number(b.condQty)||0)-(Number(a.condQty)||0));
+  return okc[0];
+}
+function freightAmt(f,qty,kg){
+  if(!f) return 0;
+  const t=Number(f.tanka)||0;
+  if(f.unit==="\u5186/kg") return t*(kg||0);
+  if(f.unit==="\u5186/\u4ef6") return t;
+  return t*(qty||0);
+}
+const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
+
+const OPS_KEY="krs_ops";
+let OPS={st:{},qty:{},doc:{},inv:{}};
+try{const o=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
+  OPS={st:o.st||{},qty:o.qty||{},doc:o.doc||{},inv:o.inv||{}};}catch(e){}
+function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){}}
+function dvStatus(t){
+  if(OPS.inv[t.customer+"|"+t.y+"-"+t.m]) return "invoiced";
+  const st=OPS.st[t.no];
+  if(st) return st;
+  return t.deliv<=TODAY?"delivered":"created";
+}
+let SRC=[],SRCB=[],TX=[];
+function build(sale,buy){
+  if(sale)SRC=sale; if(buy)SRCB=buy;
+  indexCfg(); TX=[];
+  const sq={},bq={};
+  SRC.forEach(r=>{
+    const se=parseDate(r.seisan), no=parseDate(r.nouhin)||parseDate(r.seisan);
+    if(!se) return;
+    let cs=parseFloat(r.cs); if(!(cs>0)) return;
+    const baseQty=cs;
+    const sh=SHANAI.has(r.tori);
+    const mp=MAPI[r.tori+"\u0001"+(r.kubun||"")];
+    const cap=parseFloat(r.nyusu);
+    const hit=(mp&&!sh)?lookup("販売",mp.tori,mp.item,cap,no):null;
+    const ym=(mp&&!sh)?seikyuYM(mp.tori,se,no):[no.getFullYear(),no.getMonth()+1];
+    const key=se.toDateString(); sq[key]=(sq[key]||0)+1;
+    const _no=txNo("S",se,sq[key]);
+    if(OPS.qty[_no]!=null) cs=OPS.qty[_no];
+    const kgTot=(cap||0)*cs;
+    const betsu=!!hit&&hit.soryo==="送料別";
+    const fr=betsu?findFreight(mp.tori,mp.item,cs,kgTot,no):null;
+    const frAmt=betsu?freightAmt(fr,cs,kgTot):0;
+    const shohin=hit?Number(hit.tanka)*cs:null;
+    TX.push({kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
+      customer:sh?"":(mp?mp.tori:""),supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
+      item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
+      qty:cs,unitLabel:"c/s",tanka:hit?Number(hit.tanka):null,
+      soryoKbn:hit?(hit.soryo||"送料込み"):"",carrier:fr?fr.carrier:"",
+      lead:fr?(fr.ruleType==="曜日"?(fr.ruleVal?("着 "+fr.ruleVal):""):(fr.ruleVal!==""?("+"+fr.ruleVal+"日"):"")):"",
+      shohin:shohin,freight:frAmt,
+      sale:(shohin!=null)?shohin+frAmt:null,buy:null,y:ym[0],m:ym[1],shanai:sh,
+      status:sh?"off":(no<=TODAY?"delivered":"created"),
+      why:sh?"対象外":!mp?"対応表に未登録":!hit?"単価マスタに該当なし"
+        :(betsu&&!fr)?"運賃マスタに該当なし":""});
+  });
+  SRCB.forEach(r=>{
+    const d=parseDate(r.date); if(!d) return;
+    const cs=parseFloat(r.cs)||0, kg=parseFloat(r.kg)||0;
+    const cap=parseFloat(r.size);
+    const sh=SHANAI.has(r.seisansha);
+    const hit=sh?null:lookup("仕入",r.seisansha,r.kubun,cap,d);
+    const off=sh||!hit;
+    const kin=hit?Number(hit.tanka)*(hit.unit==="円/kg"?kg:cs):null;
+    const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
+    const isOut=CFG.price.some(p=>p.kind==="対象外"&&N(p.t)===N(r.seisansha)&&N(p.item)===N(r.kubun));
+    TX.push({kind:"buy",no:txNo("P",d,bq[key]),date:d,deliv:d,customer:"",supplier:r.seisansha,
+      sanchi:"熊本",item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
+      cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:hit?Number(hit.tanka):null,
+      kunit:hit?hit.unit:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
+      shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
+      why:(sh||isOut)?"買取の対象外":!hit?"買取単価が未設定":""});
+  });
+  fillYM(); render();
+}
+function fillYM(){
+  const set=new Set(TX.filter(t=>!t.shanai).map(t=>t.y+"/"+t.m));
+  const arr=[...set].sort((a,b)=>{const[ay,am]=a.split("/").map(Number),[by,bm]=b.split("/").map(Number);
+    return ay-by||am-bm;});
+  ["ym","invYm","buyYm"].forEach(id=>{
+    const sel=document.getElementById(id), prev=sel.value; sel.innerHTML="";
+    arr.forEach(k=>{const[y,m]=k.split("/");const o=document.createElement("option");
+      o.value=k;o.textContent=y+"年"+p2(m)+"月";sel.appendChild(o);});
+    if(arr.includes(prev)) sel.value=prev;
+    else if(sel.options.length) sel.value=arr[arr.length-1];
+  });
+}
+function ymNow(){return (document.getElementById("ym").value||"0/0").split("/").map(Number);}
+function cur(){const[y,m]=ymNow();return TX.filter(t=>!t.shanai&&t.y===y&&t.m===m);}
+function curOf(id){const[y,m]=(document.getElementById(id).value||"0/0").split("/").map(Number);
+  return TX.filter(t=>!t.shanai&&t.y===y&&t.m===m);}
+
+function render(){
+  const c=cur();
+  const sale=c.filter(t=>t.kind==="sale"), buy=c.filter(t=>t.kind==="buy");
+  const sOk=sale.filter(t=>t.sale), bOk=buy.filter(t=>t.buy);
+  const sT=sOk.reduce((s,t)=>s+t.sale,0), bT=bOk.reduce((s,t)=>s+t.buy,0);
+  document.getElementById("kSale").textContent="¥"+yen(sT);
+  document.getElementById("kBuy").textContent=bT?"¥"+yen(bT):"未設定";
+  document.getElementById("kGp").textContent=bT?"¥"+yen(sT-bT):"—";
+  document.getElementById("kCnt").textContent=c.length;
+  const ng=c.filter(t=>t.why).length, kn=document.getElementById("kNg");
+  kn.textContent=ng; kn.style.color=ng?"#C62828":"var(--grn)";
+  const st={created:0,delivered:0,ng:0};
+  c.forEach(t=>{if(t.why)st.ng++;else st[t.status]=(st[t.status]||0)+1;});
+  document.getElementById("statusBox").innerHTML=
+    '<span class="badge b-wait" style="padding:6px 14px;font-size:13px">納品予定 '+st.created+' 件</span>'
+    +'<span class="badge b-ok" style="padding:6px 14px;font-size:13px">納品✓済 '+st.delivered+' 件</span>'
+    +'<span class="badge '+(st.ng?"b-ng":"b-gray")+'" style="padding:6px 14px;font-size:13px">要確認 '+st.ng+' 件</span>';
+
+  const tfd=TF(), aggS={};
+  sOk.forEach(t=>{const a=aggS[t.customer]||(aggS[t.customer]={c:0,q:0,k:0,sh:0,fr:0});
+    a.c++;a.q+=t.qty;a.k+=t.sale;a.sh+=(t.shohin||0);a.fr+=(t.freight||0);});
+  const tb=document.querySelector("#tSale tbody"); tb.innerHTML="";
+  Object.entries(aggS).sort((a,b)=>b[1].k-a[1].k).forEach(([k,v])=>{
+    const r=shimeOf(k),tr=document.createElement("tr");
+    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td><span class="badge '+(r.shime==="20日"?"b-wait":"b-sale")+'">'
+      +kijunLabel(r)+'／'+esc(r.shime)+'締め</span></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
+      +'</td><td class="num">'+yen(v.k)+(v.fr?'<br><span style="font-size:10px;color:#888">送料 '+yen(v.fr)+'</span>':'')
+      +'</td><td class="num">'+yen(v.sh*tfd.food+v.fr*tfd.fre)+'</td><td class="num"><b>'
+      +yen(v.k+v.sh*tfd.food+v.fr*tfd.fre)+'</b></td><td><button class="btn sm" data-inv="'+esc(k)+'">請求書</button></td>';
+    tb.appendChild(tr);});
+  const tt=document.createElement("tr"); tt.className="total";
+  const shT=sOk.reduce((s,t)=>s+(t.shohin||0),0), frT=sOk.reduce((s,t)=>s+(t.freight||0),0);
+  const taxT=shT*tfd.food+frT*tfd.fre;
+  tt.innerHTML='<td>合計</td><td></td><td class="num">'+sOk.length+'</td><td class="num">'
+    +yen(sOk.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+yen(sT)+'</td><td class="num">'
+    +yen(taxT)+'</td><td class="num">'+yen(sT+taxT)+'</td><td></td>';
+  tb.appendChild(tt);
+  tb.querySelectorAll("[data-inv]").forEach(b=>b.onclick=()=>{
+    document.querySelector('nav button[data-p="invoicing"]').click();
+    document.getElementById("invYm").value=document.getElementById("ym").value;
+    drawInvList(); showInv(b.dataset.inv);});
+
+  const aggB={};
+  buy.forEach(t=>{const a=aggB[t.supplier]||(aggB[t.supplier]={c:0,q:0,kg:0,k:0,ng:0});
+    a.c++;a.q+=t.qty;a.kg+=t.kg||0; if(t.buy)a.k+=t.buy; else a.ng++;});
+  const tbb=document.querySelector("#tBuy tbody"); tbb.innerHTML="";
+  Object.entries(aggB).sort((a,b)=>b[1].kg-a[1].kg).forEach(([k,v])=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
+      +'</td><td class="num">'+yen(v.kg)+'</td><td class="num">'
+      +(v.k?yen(v.k):'<span class="badge b-ng">未設定</span>')+'</td><td class="num">'
+      +(v.ng?'<span class="badge b-ng">'+v.ng+'件</span>':'—')
+      +'</td><td><button class="btn sm grn" data-buy="'+esc(k)+'">買取書</button></td>';
+    tbb.appendChild(tr);});
+  const tb2=document.createElement("tr"); tb2.className="total";
+  tb2.innerHTML='<td>合計</td><td class="num">'+buy.length+'</td><td class="num">'
+    +yen(buy.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+yen(buy.reduce((s,t)=>s+(t.kg||0),0))
+    +'</td><td class="num">'+(bT?yen(bT):"—")+'</td><td></td><td></td>';
+  tbb.appendChild(tb2);
+  tbb.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>{
+    document.querySelector('nav button[data-p="buying"]').click();
+    document.getElementById("buyYm").value=document.getElementById("ym").value;
+    drawBuyList(); showBuy(b.dataset.buy);});
+
+  drawTx(); drawDv(); drawInvList(); drawBuyList();
+}
+const fmt=d=>d?(d.getMonth()+1)+"/"+d.getDate():"";
+const fmtY=d=>d?d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate():"";
+function stBadge(t){
+  if(t.why) return '<span class="badge b-ng">'+esc(t.why)+'</span>';
+  if(t.status==="off") return '<span class="badge b-gray">対象外</span>';
+  if(t.status==="delivered") return '<span class="badge b-ok">納品✓済</span>';
+  return '<span class="badge b-wait">納品予定</span>';
+}
+function drawTx(){
+  const q=N(document.getElementById("fTx").value);
+  const kind=document.getElementById("txKind").value, stf=document.getElementById("txStatus").value;
+  const tb=document.querySelector("#tTx tbody"); tb.innerHTML=""; let n=0;
+  TX.slice().sort((a,b)=>b.date-a.date).forEach(t=>{
+    if(kind!=="all"&&t.kind!==kind) return;
+    if(stf==="ng"&&!t.why) return;
+    if(stf!=="all"&&stf!=="ng"&&(t.why||t.status!==stf)) return;
+    if(q&&!N([t.customer,t.supplier,t.item,t.no].join("")).includes(q)) return;
+    n++; const tr=document.createElement("tr");
+    tr.innerHTML='<td style="font-family:Consolas,monospace">'+t.no+'</td><td>'+fmt(t.date)
+      +'</td><td><span class="badge '+(t.kind==="sale"?"b-sale":"b-buy")+'">'
+      +(t.kind==="sale"?"受注":"発注")+'</span></td><td>'+esc(t.customer||"—")+'</td><td>'
+      +esc(t.supplier||"—")+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+'</td><td>'+fmt(t.deliv)
+      +'</td><td class="num">'+yen(t.qty)+(t.kind==="buy"&&t.kg?' <span style="color:#999">('+yen(t.kg)+'kg)</span>':'')
+      +'</td><td class="num">'+(t.tanka!=null?yen(t.tanka):"—")+'</td>'
+      +'<td>'+(t.soryoKbn?'<span class="badge '+(t.soryoKbn==="送料別"?"b-wait":"b-gray")+'">'+esc(t.soryoKbn)+'</span>':'—')+'</td>'
+      +'<td>'+esc(t.carrier||"—")+(t.lead?' <span style="font-size:10px;color:#888">'+esc(t.lead)+'</span>':'')+'</td>'
+      +'<td class="num">'+(t.sale?yen(t.sale):"—")+(t.freight?'<br><span style="font-size:10px;color:#888">送料 '+yen(t.freight)+'</span>':'')
+      +'</td><td class="num">'+(t.buy?yen(t.buy):"—")+'</td><td>'+stBadge(t)+'</td>';
+    tb.appendChild(tr);});
+  document.getElementById("txCnt").textContent="("+n+"件)";
+}
+function dvKey(t){return t.no;}
+function drawDv(){
+  const q=N(document.getElementById("fDv").value), stf=document.getElementById("dvStatus").value;
+  const tb=document.querySelector("#tDv tbody"); tb.innerHTML=""; let n=0;
+  TX.filter(t=>t.kind==="sale"&&!t.shanai&&t.customer)
+    .sort((a,b)=>b.deliv-a.deliv||(a.no<b.no?1:-1)).forEach(t=>{
+    const st=dvStatus(t);
+    if(stf!=="all"&&st!==stf) return;
+    if(q&&!N([t.customer,t.item,t.no,t.sanchi].join("")).includes(q)) return;
+    n++;
+    const p=partnerOf(t.customer), doc=OPS.doc[t.no];
+    const lock=(st==="invoiced");
+    const badge=st==="invoiced"?'<span class="badge b-sale">請求済</span>'
+      :st==="delivered"?'<span class="badge b-ok">納品✓済</span>'
+      :'<span class="badge b-wait">納品予定</span>';
+    const qtyTxt=esc(t.item)+' '+(t.cap||"")+'kg <b>'+yen(t.qty)+'</b>c/s'
+      +(st==="created"?' <span style="color:#888">（納品 '+yen(OPS.qty[t.no]!=null?OPS.qty[t.no]:0)+'）</span>':'')
+      +(t.freight?'<br><span style="color:#777">送料 '+esc(t.carrier||"")+'向け 1c/s</span>':'');
+    const docCell=doc
+      ?'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
+       +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
+       +'<button data-freee="dv" data-key="'+esc(t.no)+'">納品書(freee)</button>'
+       +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
+       +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>'
+       +'<br><a href="#" data-reissue="'+esc(t.no)+'" style="font-size:11px;color:var(--or)">発行済PDF</a>'
+      :'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
+       +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
+       +'<button data-freee="dv" data-key="'+esc(t.no)+'">納品書(freee)</button>'
+       +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
+       +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>';
+    const act=lock?'<span style="color:#999;font-size:11px">請求済のため変更不可</span>'
+      :'<button class="edit" data-meisai="'+esc(t.no)+'">明細ごとに入力</button> '
+       +(st==="delivered"
+         ?'<button class="del" data-undv="'+esc(t.no)+'">取消</button>'
+         :'<button class="btn sm grn" data-dv="'+esc(t.no)+'">納品✓(全量)</button>');
+    const tr=document.createElement("tr");
+    tr.innerHTML='<td style="font-family:Consolas,monospace">'+t.no+'</td><td>'+fmtY(t.date)+'</td>'
+      +'<td>'+esc(p?p.name:t.customer)+'</td><td>'+esc(t.sanchi)+'</td><td>'+qtyTxt+'</td>'
+      +'<td class="num">¥'+yen(t.sale||0)+'</td><td>'+badge+'</td>'
+      +'<td>'+(st==="created"?"-":fmtY(t.deliv))+'</td>'
+      +'<td style="position:relative">'+docCell+'</td><td style="white-space:nowrap">'+act+'</td>';
+    tb.appendChild(tr);});
+  document.getElementById("dvCnt").textContent="("+n+"件)";
+  tb.querySelectorAll("[data-dvdoc]").forEach(b=>b.onclick=()=>showDv(b.dataset.dvdoc));
+  tb.querySelectorAll("[data-dv]").forEach(b=>b.onclick=()=>{
+    OPS.st[b.dataset.dv]="delivered"; saveOps(); build();});
+  tb.querySelectorAll("[data-undv]").forEach(b=>b.onclick=()=>{
+    OPS.st[b.dataset.undv]="created"; saveOps(); build();});
+  tb.querySelectorAll("[data-meisai]").forEach(b=>b.onclick=()=>{
+    const no=b.dataset.meisai, t=TX.find(x=>x.no===no); if(!t) return;
+    const cur=OPS.qty[no]!=null?OPS.qty[no]:t.baseQty;
+    const v=prompt("納品した数量（c/s）を入力してください。\n取引の数量：" + t.baseQty + " c/s", cur);
+    if(v===null) return;
+    const num=parseFloat(String(v).replace(/,/g,""));
+    if(isNaN(num)||num<0){alert("数字を入れてください");return;}
+    if(num>=t.baseQty){delete OPS.qty[no];}else{OPS.qty[no]=num;}
+    OPS.st[no]="delivered"; saveOps(); build();});
+  tb.querySelectorAll("[data-reissue]").forEach(a=>a.onclick=e=>{
+    e.preventDefault();
+    const d=OPS.doc[a.dataset.reissue];
+    if(d&&d.url) window.open(d.url,"_blank");
+    else{ showDv(a.dataset.reissue); dlMsg("前回：" + (d?d.at:"") + " に発行済み。もう一度PDFを作る場合は「納品書を発行」から。","wait"); }});
+}
+function showDv(no){
+  const t=TX.find(x=>x.kind==="sale"&&x.no===no); if(!t) return;
+  const p=partnerOf(t.customer);
+  const ad=p?'<span class="ad">〒'+esc(p.zip)+'　'+esc(p.addr)+(p.person?'　'+esc(p.person)+' 様':'')+'</span>'
+           :'<span class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</span>';
+  const rows=[{item:esc(t.item)+' '+(t.cap||"")+'kg',qty:yen(t.qty)+'c/s',
+    tanka:t.tanka!=null?'¥'+yen(t.tanka):'—',kin:t.shohin?'¥'+yen(t.shohin):'—'}];
+  if(t.freight) rows.push({item:'送料 '+esc(t.carrier||"")+'向け',qty:'1c/s',tanka:'—',kin:'¥'+yen(t.freight)});
+  document.getElementById("dvdoc").innerHTML=
+    '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
+    +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">取引No.：'
+    +t.no+'<br>取引日：'+fmtY(t.date)+'<br>納品日：'+fmtY(t.deliv)+'<br>産地：'+esc(t.sanchi)
+    +(t.carrier?'<br>運送：'+esc(t.carrier)+(t.lead?'（'+esc(t.lead)+'）':''):'')+'</div></div>'
+    +'<div class="doc-title">納品書</div><div class="doc-to">'+esc(p?p.name:t.customer)+'　御中'+ad+'</div>'
+    +'<p style="font-size:12.5px;color:#666;margin-top:14px">下記の通り納品いたしました。</p>'
+    +'<table><thead><tr><th>品目・規格</th><th class="num">数量</th>'
+    +'<th class="num">単価</th><th class="num">金額(税抜)</th></tr></thead><tbody>'
+    +rows.map(r=>'<tr><td>'+r.item+'</td><td class="num">'+r.qty+'</td><td class="num">'+r.tanka
+      +'</td><td class="num">'+r.kin+'</td></tr>').join("")
+    +'</tbody></table><div class="doc-foot"><table>'
+    +'<tr class="total"><td>合計（税抜）</td><td class="num">¥'+yen(t.sale||0)+'</td></tr></table></div>'
+    +'<div class="bank">※ この納品書は数量のご確認用です。ご請求は締め日ごとの請求書にてお願いいたします。</div>';
+  document.querySelector("#deliv .card").style.display="none";
+  document.getElementById("dvdoc").style.display="";
+  document.getElementById("dvBack").style.display="";
+  window.scrollTo(0,0);
+}
+function termText(k,y,m){
+  const r=shimeOf(k);
+  if(r.shime==="20日"){
+    let py=y,pm=m-1; if(pm<1){pm=12;py--;}
+    return py+"-"+p2(pm)+"-21〜"+y+"-"+p2(m)+"-20";
+  }
+  return y+"-"+p2(m)+"-01〜"+y+"-"+p2(m)+"-"+new Date(y,m,0).getDate();
+}
+function drawInvList(){
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale);
+  const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  document.getElementById("invMonth").textContent="("+y+"-"+p2(m)+"分)";
+  const agg={};
+  rows.forEach(t=>{(agg[t.customer]||(agg[t.customer]=[])).push(t);});
+  const sel=document.getElementById("invCust"), keep=sel.value;
+  sel.innerHTML='<option value="all">全て</option>';
+  Object.keys(agg).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=k;sel.appendChild(o);});
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  const only=sel.value;
+  const box=document.getElementById("invList"); box.innerHTML="";
+  Object.entries(agg).sort((a,b)=>b[1].reduce((s,t)=>s+t.sale,0)-a[1].reduce((s,t)=>s+t.sale,0))
+   .forEach(([k,list])=>{
+    if(only!=="all"&&only!==k) return;
+    const r=shimeOf(k), p=partnerOf(k), tf=TF();
+    const shohin=list.reduce((s,t)=>s+(t.shohin||0),0);
+    const soryo=list.reduce((s,t)=>s+(t.freight||0),0);
+    const tax=shohin*tf.food+soryo*tf.fre;
+    const sub=shohin+soryo, hasF=soryo>0;
+    const d=document.createElement("div"); d.className="prev";
+    d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
+      +'<div class="cond">[請求基準: '+kijunLabel(r)+' ／ '+esc(r.shime)+'締め ／ 期間: '+termText(k,y,m)+']'
+      +(hasF?' <span class="badge b-wait">送料別</span>':' <span class="badge b-gray">送料込み</span>')+'</div></div>'
+      +'<div class="sp"></div><div class="amt">'
+      +(hasF?'商品: ¥'+yen(shohin)+'　送料: ¥'+yen(soryo)+'　':'')
+      +'税抜: <b>¥'+yen(sub)+'</b>　'
+      +'<span style="font-size:11px">消費税: ¥'+yen(tax)+'</span>　税込: <span class="big">¥'
+      +yen(sub+tax)+'</span></div>'
+      +'<div class="menu"><button class="btn" data-menu="inv-'+esc(k)+'">請求書発行 ▾</button>'
+      +'<div class="menu-list" id="m-inv-'+esc(k)+'">'
+      +'<button data-freee="inv" data-key="'+esc(k)+'">請求書(freee)</button>'
+      +'<button data-pdf="inv" data-key="'+esc(k)+'">請求書PDF</button>'
+      +'<div class="sep"></div><button data-doc="'+esc(k)+'">画面で確認する</button></div></div></div>'
+      +'<table><thead><tr><th>取引日</th><th>取引No.</th><th>産地</th><th>品目</th>'
+      +'<th class="num">請求数量</th><th class="num">商品金額</th>'
+      +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
+      +'<th class="num">請求金額</th></tr></thead><tbody>'
+      +list.sort((a,b)=>a.deliv-b.deliv).map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
+        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg</td>'
+        +'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
+        +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
+        +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
+      +'</tbody></table>';
+    box.appendChild(d);
+  });
+  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に請求対象がありません。</p></div>';
+  box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showInv(b.dataset.doc));
+}
+function drawBuyList(){
+  const rows=curOf("buyYm").filter(t=>t.kind==="buy");
+  const[y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
+  document.getElementById("buyMonth").textContent="("+y+"-"+p2(m)+"分)";
+  const agg={};
+  rows.forEach(t=>{(agg[t.supplier]||(agg[t.supplier]=[])).push(t);});
+  const sel=document.getElementById("buySei"), keep=sel.value;
+  sel.innerHTML='<option value="all">全て</option>';
+  Object.keys(agg).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=k;sel.appendChild(o);});
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  const only=sel.value;
+  const box=document.getElementById("buyList"); box.innerHTML="";
+  Object.entries(agg).sort((a,b)=>b[1].reduce((s,t)=>s+(t.buy||0),0)-a[1].reduce((s,t)=>s+(t.buy||0),0))
+   .forEach(([k,list])=>{
+    if(only!=="all"&&only!==k) return;
+    const sub=list.reduce((s,t)=>s+(t.buy||0),0);
+    const miss=list.filter(t=>!t.buy).length;
+    const d=document.createElement("div"); d.className="prev";
+    d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(k)+'　様 - '+list.length+'明細</div>'
+      +'<div class="cond">[買取基準: 記録日 ／ 月末締め ／ 期間: '+y+'-'+p2(m)+'-01〜'+y+'-'+p2(m)+'-'
+      +new Date(y,m,0).getDate()+']'+(miss?' <span class="badge b-ng">単価未設定 '+miss+'件</span>':'')+'</div></div>'
+      +'<div class="sp"></div><div class="amt">税抜: <b>¥'+yen(sub)+'</b>　'
+      +'<span style="font-size:11px">消費税: ¥'+yen(sub*TAX)+'</span>　税込: <span class="big">¥'
+      +yen(sub*(1+TAX))+'</span></div>'
+      +'<button class="btn grn" data-doc="'+esc(k)+'">買取書PDF発行</button></div>'
+      +'<table><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
+      +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th>'
+      +'<th class="num">買取金額</th></tr></thead><tbody>'
+      +list.sort((a,b)=>a.date-b.date).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'+t.no+'</td><td>'
+        +esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
+        +'</td><td class="num">'+yen(t.kg)+'</td><td class="num">'
+        +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
+        +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
+      +'</tbody></table>';
+    box.appendChild(d);
+  });
+  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に買取対象がありません。</p></div>';
+  box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showBuy(b.dataset.doc));
+}
+function showInv(k){
+  const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&t.sale).sort((a,b)=>a.deliv-b.deliv);
+  const r=shimeOf(k), p=partnerOf(k), tf=TF();
+  const shohin=rows.reduce((s,t)=>s+(t.shohin||0),0);
+  const soryo=rows.reduce((s,t)=>s+(t.freight||0),0);
+  const taxF=shohin*tf.food, taxS=soryo*tf.fre;
+  const sub=shohin+soryo, hasF=soryo>0;
+  const ad=p?'<span class="ad">〒'+esc(p.zip)+'　'+esc(p.addr)+(p.person?'　'+esc(p.person)+' 様':'')+'</span>'
+           :'<span class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</span>';
+  document.getElementById("inv").innerHTML=
+    '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
+    +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">請求日：'
+    +y+'年'+m+'月末日<br>対象期間：'+termText(k,y,m)+'<br>請求基準：'+kijunLabel(r)+'（'+esc(r.shime)+'締め）</div></div>'
+    +'<div class="doc-title">請求書</div><div class="doc-to">'+esc(p?p.name:k)+'　御中'+ad+'</div>'
+    +'<div><div class="doc-total"><div class="l">ご請求金額（税込）</div><div class="v">¥ '+yen(sub+taxF+taxS)
+    +'</div></div></div><p style="font-size:12.5px;color:#666">下記の通りご請求申し上げます。</p>'
+    +'<table><thead><tr><th>取引日</th><th>取引No.</th><th>産地</th><th>品目</th>'
+    +'<th class="num">請求数量</th><th class="num">単価</th><th class="num">商品金額</th>'
+    +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
+    +'<th class="num">請求金額</th></tr></thead><tbody>'
+    +rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'
+      +t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg</td><td class="num">'
+      +yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.tanka)+'</td><td class="num">¥'+yen(t.shohin)+'</td>'
+      +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
+      +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
+    +'</tbody></table><div class="doc-foot"><table>'
+    +'<tr><td>商品 小計（税抜）</td><td class="num">¥'+yen(shohin)+'</td></tr>'
+    +'<tr><td>消費税（'+(tf.food*100)+'%）</td><td class="num">¥'+yen(taxF)+'</td></tr>'
+    +(hasF?'<tr><td>送料 小計（税抜）</td><td class="num">¥'+yen(soryo)+'</td></tr>'
+      +'<tr><td>消費税（'+(tf.fre*100)+'%）</td><td class="num">¥'+yen(taxS)+'</td></tr>':'')
+    +'<tr class="total"><td>合計請求額（税込）</td><td class="num">¥'+yen(sub+taxF+taxS)+'</td></tr></table></div>'
+    +'<div class="bank">'+esc(CO().bank)
+    +(CO().invoiceNo?'<br>登録番号：'+esc(CO().invoiceNo)
+      :'<br><span style="color:#C62828">※ 登録番号（インボイス）は未設定です。設定タブの「自社情報」で登録できます。</span>')
+    +'</div>';
+  document.getElementById("invList").style.display="none";
+  document.getElementById("inv").style.display="";
+  document.getElementById("invBack").style.display="";
+  window.scrollTo(0,0);
+}
+function showBuy(k){
+  const[y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
+  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k).sort((a,b)=>a.date-b.date);
+  const priced=rows.filter(t=>t.buy), sub=priced.reduce((s,t)=>s+t.buy,0);
+  const miss=rows.length-priced.length;
+  document.getElementById("buydoc").innerHTML=
+    '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
+    +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">発行日：'
+    +y+'年'+m+'月末日<br>対象期間：'+y+'-'+p2(m)+'-01〜'+y+'-'+p2(m)+'-'+new Date(y,m,0).getDate()
+    +'<br>買取基準：記録日（月末締め）</div></div>'
+    +'<div class="doc-title">買取書</div><div class="doc-to">'+esc(k)+'　様</div>'
+    +'<div><div class="doc-total b"><div class="l">お買取金額（税込）</div><div class="v">¥ '+yen(sub*(1+TAX))+'</div></div></div>'
+    +(miss?'<div class="note red">'+miss+' 件は買取単価が未設定のため金額に含まれていません。「単価マスタ」で種別＝仕入の行を確認してください。</div>':'')
+    +'<p style="font-size:12.5px;color:#666">下記の通りお買い取りいたしました。</p>'
+    +'<table class="buy"><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
+    +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th><th class="num">買取金額</th></tr></thead><tbody>'
+    +rows.map(t=>'<tr><td>'+fmtY(t.date)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'+t.no
+      +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
+      +'</td><td class="num">'+yen(t.kg)+'</td><td class="num">'
+      +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
+      +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
+    +'</tbody></table><div class="doc-foot"><table class="buy"><tr><td>小計（税抜）</td><td class="num">¥'
+    +yen(sub)+'</td></tr><tr><td>消費税（8%）</td><td class="num">¥'+yen(sub*TAX)+'</td></tr>'
+    +'<tr class="total"><td>合計（税込）</td><td class="num">¥'+yen(sub*(1+TAX))+'</td></tr></table></div>'
+    +'<div class="bank">この買取書の内容は、後日ご確認をお願いいたします。'
+    +(CO().invoiceNo?'<br>当社 登録番号：'+esc(CO().invoiceNo):'')
+    +'<br><span style="color:#C62828">※ 仕入明細書として使う場合、生産者様の登録番号（インボイス）の記載とご確認が要件になります。</span></div>';
+  document.getElementById("buyList").style.display="none";
+  document.getElementById("buydoc").style.display="";
+  document.getElementById("buyBack").style.display="";
+  window.scrollTo(0,0);
+}
+document.getElementById("btnInvBack").onclick=()=>{
+  document.getElementById("invList").style.display="";
+  document.getElementById("inv").style.display="none";
+  document.getElementById("invBack").style.display="none";};
+document.getElementById("btnBuyBack").onclick=()=>{
+  document.getElementById("buyList").style.display="";
+  document.getElementById("buydoc").style.display="none";
+  document.getElementById("buyBack").style.display="none";};
+
+// ===== マスタ編集 =====
+function cell(t,i,k,v,num,need){
+  return '<input class="cell'+(num?" n":"")+(need?" need":"")+'" data-t="'+t+'" data-i="'+i+'" data-k="'+k+'" value="'+esc(v==null?"":v)+'">';}
+const delBtn=(t,i)=>'<button class="del" data-del="'+t+'" data-i="'+i+'">削除</button>';
+const selc=(t,i,k,v,o)=>'<select class="cell" data-t="'+t+'" data-i="'+i+'" data-k="'+k+'">'
+  +o.map(x=>'<option'+(v===x?' selected':'')+'>'+x+'</option>').join("")+'</select>';
+function drawShime(){
+  const tb=document.querySelector("#tShime tbody"); tb.innerHTML="";
+  CFG.shime.forEach((s,i)=>{const tr=document.createElement("tr");
+    tr.innerHTML='<td>'+cell("shime",i,"tori",s.tori)+'</td><td>'+selc("shime",i,"shime",s.shime,["月末","20日"])
+      +'</td><td>'+selc("shime",i,"kijun",s.kijun,["着","出し"])+'</td><td>'+cell("shime",i,"memo",s.memo)
+      +'</td><td>'+delBtn("shime",i)+'</td>'; tb.appendChild(tr);});
+  bind();
+}
+function drawPrice(){
+  const q=N(document.getElementById("fPrice").value);
+  const ft=document.getElementById("fpTori").value, fk=document.getElementById("fpKind").value;
+  const tb=document.querySelector("#tPrice tbody"); tb.innerHTML=""; let sh=0,need=0;
+  CFG.price.forEach((p,i)=>{
+    if(p.kind==="仕入"&&(p.tanka==null||p.tanka==="")) need++;
+    if(ft&&p.t!==ft) return;
+    if(fk&&p.kind!==fk) return;
+    if(q&&!N([p.t,p.item].join("")).includes(q)) return;
+    sh++; const tr=document.createElement("tr"); if(p._new){tr.className="new";delete p._new;}
+    const bl=p.kind==="仕入"&&(p.tanka==null||p.tanka==="");
+    tr.innerHTML='<td>'+cell("price",i,"t",p.t)+'</td><td>'+cell("price",i,"item",p.item)+'</td>'
+      +'<td>'+cell("price",i,"cap",p.cap,true)+'</td><td>'+selc("price",i,"sanchi",p.sanchi||"熊本",["熊本","広島"])+'</td>'
+      +'<td>'+selc("price",i,"kind",p.kind,["販売","仕入","加工賃","対象外"])+'</td>'
+      +'<td>'+cell("price",i,"tanka",p.tanka,true,bl)+'</td>'
+      +'<td>'+selc("price",i,"unit",p.unit,["円/ケース","円/kg"])+'</td>'
+      +'<td>'+(p.kind==="販売"?selc("price",i,"soryo",p.soryo||"送料込み",["送料込み","送料別"]):"—")+'</td>'
+      +'<td style="white-space:nowrap;font-size:11px">'+cell("price",i,"from",p.from)+'〜'+cell("price",i,"to",p.to)+'</td>'
+      +'<td>'+delBtn("price",i)+'</td>';
+    tb.appendChild(tr);});
+  document.getElementById("cPrice").textContent="("+CFG.price.length+"行)"+(sh!==CFG.price.length?" ／ "+sh+"行を表示中":"");
+  document.getElementById("kaiNote").innerHTML=need
+    ?'<b>買取単価が未設定の行が '+need+' 件あります</b>（黄色いマス）。'
+    :'<b>買取単価は設定済みです。</b>買取書が発行できます。';
+  const sel=document.getElementById("fpTori"), keep=sel.value;
+  sel.innerHTML='<option value="">全ての取引先</option>';
+  [...new Set(CFG.price.map(p=>p.t).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja")).forEach(t=>{
+    const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o);});
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  bind();
+}
+function drawFreight(){
+  const q=N(document.getElementById("fFre").value), ft=document.getElementById("ffTori").value;
+  const tb=document.querySelector("#tFre tbody"); tb.innerHTML=""; let sh=0;
+  CFG.freight.forEach((f,i)=>{
+    if(ft&&f.t!==ft) return;
+    if(q&&!N([f.item,f.carrier,f.memo].join("")).includes(q)) return;
+    sh++; const tr=document.createElement("tr"); if(f._new){tr.className="new";delete f._new;}
+    const need=(f.tanka==null||f.tanka==="");
+    tr.innerHTML='<td>'+cell("freight",i,"t",f.t)+'</td><td>'+cell("freight",i,"item",f.item)+'</td>'
+      +'<td><input class="cell" list="carriers" data-t="freight" data-i="'+i+'" data-k="carrier" value="'+esc(f.carrier||"")+'"></td>'
+      +'<td>'+cell("freight",i,"tanka",f.tanka,true,need)+'</td>'
+      +'<td>'+selc("freight",i,"unit",f.unit,["円/ケース","円/kg","円/件"])+'</td>'
+      +'<td style="white-space:nowrap">'+selc("freight",i,"cond",f.cond,["条件なし","以上","未満"])
+        +'<span style="display:inline-flex;gap:3px;align-items:center;margin-top:3px">'
+        +cell("freight",i,"condQty",f.condQty,true)+'<span style="font-size:11px;color:#888">c/s</span></span></td>'
+      +'<td style="white-space:nowrap">'+selc("freight",i,"ruleType",f.ruleType,["日数","曜日"])
+        +'<span style="display:inline-block;margin-top:3px">'
+        +(f.ruleType==="曜日"?selc("freight",i,"ruleVal",f.ruleVal,["","月","火","水","木","金","土","日"])
+          :cell("freight",i,"ruleVal",f.ruleVal,true))+'</span></td>'
+      +'<td>'+cell("freight",i,"memo",f.memo)+'</td>'
+      +'<td style="white-space:nowrap;font-size:11px">'+cell("freight",i,"from",f.from)+'〜'+cell("freight",i,"to",f.to)+'</td>'
+      +'<td>'+delBtn("freight",i)+'</td>';
+    tb.appendChild(tr);});
+  document.getElementById("cFre").textContent="("+CFG.freight.length+"行)"+(sh!==CFG.freight.length?" ／ "+sh+"行を表示中":"");
+  const sel=document.getElementById("ffTori"), keep=sel.value;
+  sel.innerHTML='<option value="">全ての販売先</option>';
+  [...new Set(CFG.freight.map(f=>f.t).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja")).forEach(t=>{
+    const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o);});
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  bind();
+}
+function drawMap(){
+  const q=N(document.getElementById("fMap").value);
+  const tb=document.querySelector("#tMap tbody"); tb.innerHTML=""; let sh=0;
+  CFG.map.forEach((m,i)=>{
+    if(q&&!N([m.sell,m.kubun,m.tori,m.item].join("")).includes(q)) return;
+    sh++; const tr=document.createElement("tr"); if(m._new){tr.className="new";delete m._new;}
+    tr.innerHTML='<td>'+cell("map",i,"sell",m.sell)+'</td><td>'+cell("map",i,"kubun",m.kubun)+'</td><td>'
+      +cell("map",i,"tori",m.tori)+'</td><td>'+cell("map",i,"item",m.item)+'</td><td>'
+      +selc("map",i,"sanchi",m.sanchi||"熊本",["熊本","広島"])+'</td><td>'+delBtn("map",i)+'</td>';
+    tb.appendChild(tr);});
+  document.getElementById("cMap").textContent="("+CFG.map.length+"行)"+(sh!==CFG.map.length?" ／ "+sh+"行を表示中":"");
+  bind();
+}
+function drawPar(){
+  const q=N(document.getElementById("fPar").value);
+  const tb=document.querySelector("#tPar tbody"); tb.innerHTML=""; let sh=0;
+  CFG.partners.forEach((p,i)=>{
+    if(q&&!N([p.name,p.key,p.addr].join("")).includes(q)) return;
+    sh++; const tr=document.createElement("tr"); if(p._new){tr.className="new";delete p._new;}
+    tr.innerHTML='<td>'+cell("partners",i,"name",p.name)+'</td><td>'+cell("partners",i,"key",p.key)
+      +'</td><td>'+cell("partners",i,"zip",p.zip)+'</td><td>'+cell("partners",i,"addr",p.addr)
+      +'</td><td>'+cell("partners",i,"person",p.person)+'</td><td>'+cell("partners",i,"mail",p.mail)
+      +'</td><td>'+delBtn("partners",i)+'</td>'; tb.appendChild(tr);});
+  document.getElementById("cPar").textContent="("+CFG.partners.length+"行)"+(sh!==CFG.partners.length?" ／ "+sh+"行を表示中":"");
+  bind();
+}
+function drawShanai(){
+  const box=document.getElementById("shanaiBox");
+  box.innerHTML=CFG.shanai.map((s,i)=>'<span class="badge b-wait" style="padding:5px 10px;font-size:12.5px">'
+    +esc(s)+' <a href="#" data-rm="'+i+'" style="color:#C62828;text-decoration:none">×</a></span>').join(" ");
+  box.querySelectorAll("[data-rm]").forEach(a=>a.onclick=e=>{e.preventDefault();
+    CFG.shanai.splice(+a.dataset.rm,1); drawShanai(); saveCfg("削除しました"); build();});
+}
+function bind(){
+  document.querySelectorAll("input.cell,select.cell").forEach(el=>{
+    if(el._b) return; el._b=1;
+    el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
+      const t=el.dataset.t,i=+el.dataset.i,k=el.dataset.k; let v=el.value;
+      if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))){
+        v=v.trim()===""?null:parseFloat(v.replace(/,/g,"")); if(v!==null&&isNaN(v)) return;}
+      CFG[t][i][k]=v; saveCfg(); build();
+      if(t==="freight"&&k==="ruleType") drawFreight();
+      if(t==="price"&&k==="kind") drawPrice();
+      if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
+    });});
+}
+function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();
+  document.getElementById("taxFood").value=CFG.taxFood;
+  document.getElementById("taxFreight").value=CFG.taxFreight;
+  ["dvGas","dvFolder","invGas","invFolder","freeeToken","freeeCompany","userName"].forEach(k=>{
+    const el=document.getElementById(k); if(el) el.value=CFG[k]||"";});
+  const c=CO();
+  [["coName","name"],["coAddr","addr"],["coBank","bank"],["coInv","invoiceNo"]].forEach(([id,k])=>{
+    const el=document.getElementById(id); if(el) el.value=c[k]||"";});}
+document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
+  const t=b.dataset.add;
+  if(t==="shime") CFG.shime.push({tori:"",shime:"月末",kijun:"着",memo:""});
+  if(t==="map") CFG.map.unshift({sell:"",kubun:"",tori:"",item:"",sanchi:"熊本",_new:1});
+  if(t==="price") CFG.price.unshift({t:"",item:"",cap:null,sanchi:"熊本",kind:"販売",tanka:null,
+    unit:"円/ケース",from:PFROM,to:PTO,_new:1});
+  if(t==="partners") CFG.partners.unshift({name:"",key:"",zip:"",addr:"",person:"",mail:"",_new:1});
+  if(t==="freight") CFG.freight.unshift({t:"",item:"",carrier:"",tanka:null,unit:"円/ケース",
+    cond:"条件なし",condQty:null,ruleType:"日数",ruleVal:"",memo:"",from:PFROM,to:PTO,_new:1});
+  drawAll(); saveCfg("行を追加しました"); build();});
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-del]"); if(!b) return;
+  CFG[b.dataset.del].splice(+b.dataset.i,1); drawAll(); saveCfg("削除しました"); build();});
+["fMap","fPar","fPrice"].forEach(id=>{
+  document.getElementById(id).oninput={fMap:drawMap,fPar:drawPar,fPrice:drawPrice}[id];});
+["fpTori","fpKind"].forEach(id=>document.getElementById(id).onchange=drawPrice);
+document.getElementById("fFre").oninput=drawFreight;
+document.getElementById("ffTori").onchange=drawFreight;
+["taxFood","taxFreight"].forEach(id=>document.getElementById(id).oninput=e=>{
+  const v=parseFloat(e.target.value); if(isNaN(v)) return;
+  CFG[id]=v; saveCfg("税率を変更しました"); build();});
+["fTx","txKind","txStatus"].forEach(id=>{const el=document.getElementById(id);
+  el[el.tagName==="SELECT"?"onchange":"oninput"]=drawTx;});
+["fDv","dvStatus"].forEach(id=>{const el=document.getElementById(id);
+  el[el.tagName==="SELECT"?"onchange":"oninput"]=drawDv;});
+document.getElementById("btnShanai").onclick=()=>{
+  const el=document.getElementById("shanaiNew"),v=el.value.trim(); if(!v) return;
+  if(!CFG.shanai.includes(v)) CFG.shanai.push(v);
+  el.value=""; drawShanai(); saveCfg("追加しました"); build();};
+document.getElementById("btnExport").onclick=()=>{
+  const b=new Blob([JSON.stringify(CFG,null,2)],{type:"application/json"});
+  const a=document.createElement("a"),d=new Date();
+  a.href=URL.createObjectURL(b);
+  a.download="仕入販売管理_設定_"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+".json";
+  a.click(); URL.revokeObjectURL(a.href); setCfgMsg("設定ファイルを保存しました");};
+document.getElementById("btnImportBtn").onclick=()=>document.getElementById("btnImport").click();
+document.getElementById("btnImport").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{try{const o=JSON.parse(rd.result); if(!o.price||!o.map) throw 0;
+    CFG=Object.assign(defaultCfg(),o); drawAll(); saveCfg("設定を読み込みました"); build();}
+    catch(err){setCfgMsg("読み込めませんでした","ng");}};
+  rd.readAsText(f); e.target.value="";};
+document.getElementById("btnCfgReset").onclick=()=>{
+  if(!confirm("編集した設定をすべて捨てて、最初の状態に戻します。よろしいですか？")) return;
+  CFG=defaultCfg(); drawAll(); saveCfg("最初の設定に戻しました"); build();};
+
+// ===== 取込 =====
+function parsePaste(txt,cols){
+  const out=[];
+  txt.split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return;
+    let c=line.split("\t"); if(c.length<4) c=line.split(",");
+    c=c.map(x=>x.trim().replace(/^"|"$/g,""));
+    const i=c.findIndex(x=>/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(x));
+    if(i<0) return;
+    const seg=c.slice(i); if(seg.length<cols.length-1) return;
+    const o={}; cols.forEach((k,j)=>o[k]=seg[j]||""); out.push(o);});
+  return out;}
+document.getElementById("btnLoad").onclick=()=>{
+  const rows=parsePaste(document.getElementById("paste").value,["seisan","nouhin","tori","kubun","nyusu","cs","kg"]);
+  const m=document.getElementById("loadMsg");
+  if(!rows.length){m.innerHTML='<span class="badge b-ng">読み取れる行がありませんでした</span>';return;}
+  try{localStorage.setItem(ROW_KEY,JSON.stringify(rows));}catch(e){}
+  build(rows,null); m.innerHTML='<span class="badge b-ok">'+rows.length+' 件を取り込みました</span>';};
+document.getElementById("btnReset").onclick=()=>{
+  try{localStorage.removeItem(ROW_KEY);}catch(e){}
+  document.getElementById("paste").value=""; build(DATA.sample,null);
+  document.getElementById("loadMsg").innerHTML='<span class="badge b-sale">サンプルに戻しました</span>';};
+document.getElementById("btnLoadB").onclick=()=>{
+  const rows=parsePaste(document.getElementById("pasteB").value,["date","ampm","seisansha","kubun","size","cs","kg"]);
+  const m=document.getElementById("loadMsgB");
+  if(!rows.length){m.innerHTML='<span class="badge b-ng">読み取れる行がありませんでした</span>';return;}
+  try{localStorage.setItem(ROWB_KEY,JSON.stringify(rows));}catch(e){}
+  build(null,rows); m.innerHTML='<span class="badge b-ok">'+rows.length+' 件を取り込みました</span>';};
+document.getElementById("btnResetB").onclick=()=>{
+  try{localStorage.removeItem(ROWB_KEY);}catch(e){}
+  document.getElementById("pasteB").value=""; build(null,DATA.prod);
+  document.getElementById("loadMsgB").innerHTML='<span class="badge b-buy">サンプルに戻しました</span>';};
+
+// ===== PDF・ドライブ保存 =====
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if([...document.scripts].some(x=>x.src===src)) return res();
+    const s=document.createElement("script"); s.src=src; s.onload=res;
+    s.onerror=()=>rej(new Error("読み込み失敗: "+src)); document.head.appendChild(s);});
+}
+function dlMsg(t,k){
+  const el=document.getElementById("dlMsg");
+  el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":k==="wait"?"b-wait":"b-ok")+'">'+esc(t)+'</span>';
+  clearTimeout(dlMsg._t); if(k!=="wait") dlMsg._t=setTimeout(()=>el.innerHTML="",6000);
+}
+function nowStr(){const d=new Date();
+  return d.getFullYear()+"/"+p2(d.getMonth()+1)+"/"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes());}
+async function makePdf(elId, filename, kind){
+  const el=document.getElementById(elId);
+  if(!el||el.style.display==="none"){ dlMsg("先に「画面で確認する」で帳票を表示してください","ng"); return {ok:false}; }
+  dlMsg("PDFを作成中…","wait");
+  try{
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  }catch(e){ dlMsg("PDF部品の読み込みに失敗（インターネット接続を確認してください）","ng"); return {ok:false}; }
+  const canvas=await html2canvas(el,{scale:2,backgroundColor:"#ffffff",useCORS:true});
+  const jsPDF=window.jspdf.jsPDF;
+  const pdf=new jsPDF("p","mm","a4");
+  const pw=210, ph=297, mg=8, w=pw-mg*2;
+  const h=canvas.height*w/canvas.width;
+  const img=canvas.toDataURL("image/jpeg",0.94);
+  let left=h, pos=0;
+  pdf.addImage(img,"JPEG",mg,mg,w,h);
+  left-=(ph-mg*2);
+  while(left>0){ pos-= (ph-mg*2); pdf.addPage(); pdf.addImage(img,"JPEG",mg,pos+mg,w,h); left-=(ph-mg*2); }
+  pdf.save(filename);
+  const url=(kind==="inv"?CFG.invGas:CFG.dvGas)||"";
+  const folder=(kind==="inv"?CFG.invFolder:CFG.dvFolder)||"";
+  if(!url){ dlMsg("PDFを保存しました（ドライブ未設定のためパソコンのみ）","wait"); return {ok:true}; }
+  dlMsg("ドライブへ保存中…","wait");
+  try{
+    const b64=pdf.output("datauristring").split(",")[1];
+    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({action:"savePdf",filename:filename,folderId:folder,
+        by:CFG.userName||"",data:b64})});
+    const j=await r.json();
+    if(j&&j.ok){ dlMsg("ドライブに保存しました："+(j.name||filename),"ok"); return j; }
+    dlMsg("ドライブ保存に失敗しました"+(j&&j.error?("："+j.error):""),"ng"); return {ok:false};
+  }catch(e){ dlMsg("ドライブ保存に失敗しました（URLと公開設定を確認してください）","ng"); return {ok:false}; }
+}
+function freeeNotReady(what){
+  if(!CFG.freeeToken||!CFG.freeeCompany){
+    alert(what+"をfreeeで発行するには、設定タブの「freee連携設定」に\nアクセストークンと事業所IDを入れてください。");
+  }else{
+    alert("freeeへの発行は、まだつないでいません。\nトークンをお預かりしたうえで接続作業を行います。");
+  }
+  document.querySelector('nav button[data-p="settings"]').click();
+}
+// 発行メニュー
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-menu]");
+  document.querySelectorAll(".menu-list.on").forEach(m=>{
+    if(!b||m.id!=="m-"+b.dataset.menu) m.classList.remove("on");});
+  if(b){ const m=document.getElementById("m-"+b.dataset.menu); if(m) m.classList.toggle("on"); return; }
+  const mb=e.target.closest("#btnBackup");
+  if(mb){ document.getElementById("mBackup").classList.toggle("on"); return; }
+  if(!e.target.closest(".menu-list")) document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+});
+document.addEventListener("click",e=>{
+  const p=e.target.closest("[data-pdf]");
+  if(p){
+    const k=p.dataset.key;
+    if(p.dataset.pdf==="inv"){ showInv(k);
+      const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+      makePdf("inv","請求書_"+k+"_"+y+p2(m)+".pdf","inv").then(r=>{
+        OPS.inv[k+"|"+y+"-"+m]={at:nowStr(),url:(r&&r.url)||""}; saveOps(); build();});
+    }else{ showDv(k);
+      makePdf("dvdoc","納品書_"+k+".pdf","dv").then(r=>{
+        OPS.doc[k]={at:nowStr(),url:(r&&r.url)||""}; saveOps(); build();});}
+    return;
+  }
+  const f=e.target.closest("[data-freee]");
+  if(f) freeeNotReady(f.dataset.freee==="inv"?"請求書":"納品書");
+});
+document.getElementById("btnDvBack").onclick=()=>{
+  document.querySelector("#deliv .card").style.display="";
+  document.getElementById("dvdoc").style.display="none";
+  document.getElementById("dvBack").style.display="none";};
+
+// ヘッダーの操作
+document.getElementById("btnFreee").onclick=()=>{
+  document.querySelector('nav button[data-p="settings"]').click();
+  document.getElementById("freeeToken").focus();};
+document.getElementById("btnCfgReset2").onclick=()=>document.getElementById("btnCfgReset").click();
+document.getElementById("userName").oninput=e=>{CFG.userName=e.target.value;saveCfg("操作者を記録しました");};
+document.getElementById("mBackup").addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  const a=b.dataset.act;
+  if(a==="cfgExport") document.getElementById("btnExport").click();
+  if(a==="cfgImport") document.getElementById("btnImport").click();
+  if(a==="dataExport"){
+    const blob=new Blob([JSON.stringify({sale:SRC,buy:SRCB},null,2)],{type:"application/json"});
+    const el=document.createElement("a"),d=new Date();
+    el.href=URL.createObjectURL(blob);
+    el.download="取引データ_"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+".json";
+    el.click(); URL.revokeObjectURL(el.href); dlMsg("取引データを書き出しました");}
+  if(a==="dataImport") document.getElementById("fileData").click();
+  document.getElementById("mBackup").classList.remove("on");
+});
+document.getElementById("fileData").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{try{const o=JSON.parse(rd.result);
+    if(o.sale) {try{localStorage.setItem(ROW_KEY,JSON.stringify(o.sale));}catch(x){}}
+    if(o.buy) {try{localStorage.setItem(ROWB_KEY,JSON.stringify(o.buy));}catch(x){}}
+    build(o.sale||null,o.buy||null); dlMsg("取引データを読み込みました");}
+    catch(err){dlMsg("読み込めませんでした","ng");}};
+  rd.readAsText(f); e.target.value="";};
+
+// 保存先・freeeの入力
+[["coName","name"],["coAddr","addr"],["coBank","bank"],["coInv","invoiceNo"]].forEach(([id,key])=>{
+  const el=document.getElementById(id);
+  el.oninput=()=>{CFG.company=Object.assign({},CO()); CFG.company[key]=el.value; saveCfg(); build();};
+});
+[["dvGas","dvGas"],["dvFolder","dvFolder"],["invGas","invGas"],["invFolder","invFolder"],
+ ["freeeToken","freeeToken"],["freeeCompany","freeeCompany"]].forEach(([id,key])=>{
+  const el=document.getElementById(id);
+  el.oninput=()=>{CFG[key]=el.value.trim();saveCfg();};
+});
+
+// ===== タブ =====
+const nav=document.getElementById("nav");
+TABS.forEach(([id,label],i)=>{
+  const b=document.createElement("button");
+  b.textContent=label; b.dataset.p=id; if(i===0) b.className="active";
+  b.onclick=()=>{document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active"); document.getElementById(id).classList.add("active");};
+  nav.appendChild(b);});
+document.getElementById("ym").onchange=render;
+document.getElementById("invYm").onchange=drawInvList;
+document.getElementById("invCust").onchange=drawInvList;
+document.getElementById("buyYm").onchange=drawBuyList;
+document.getElementById("buySei").onchange=drawBuyList;
+
+// ===== 起動 =====
+let iA=DATA.sample,iB=DATA.prod;
+try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
+    const b=localStorage.getItem(ROWB_KEY); if(b) iB=JSON.parse(b);}catch(e){}
+document.getElementById("verLabel").textContent=new Date().toISOString().slice(0,10)+" 版";
+try{document.getElementById("syncBadge").textContent=
+  localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
+  document.getElementById("syncBadge").textContent="● 保存できない環境です";}
+drawAll(); build(iA,iB);
+(function(){
+  const fr=document.getElementById("firstRun");
+  if(!fr) return;
+  const has=(CFG.price&&CFG.price.length)||(CFG.partners&&CFG.partners.length)||SRC.length||SRCB.length;
+  fr.style.display=has?"none":"";
+  const _b=build;
+  window.build=function(a,b){_b(a,b);
+    const h=(CFG.price&&CFG.price.length)||(CFG.partners&&CFG.partners.length)||SRC.length||SRCB.length;
+    fr.style.display=h?"none":"";};
+})();
+</script>
+</body>
+</html>
