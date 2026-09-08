@@ -455,7 +455,16 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
           <td><input class="cell" id="invGas" placeholder="https://script.google.com/macros/s/.../exec"></td>
           <td><input class="cell" id="invFolder" placeholder="空欄ならマイドライブ直下"></td></tr>
       </tbody></table>
-    
+    <div class="flex">
+      <label>PDFをパソコンにも保存する</label>
+      <select id="alsoDownload" style="max-width:140px"><option>しない</option><option>する</option></select>
+      <span style="font-size:11.5px;color:#777">「しない」＝ドライブにだけ保存します（ダウンロードされません）</span>
+    </div>
+    <div class="note">
+      <b>パソコンのファイル（デスクトップのHTML）から開いて使うと、ドライブへの保存結果が画面で確認できないことがあります。</b>
+      保存自体はされますが、確実に確認したい場合は公開版のURLからお使いください。<br>
+      <span style="font-size:11.5px">https://kawakamirennkonkeiri-source.github.io/renkon-hanbai-app/</span>
+    </div>
   </div>
 
   <div class="card">
@@ -530,7 +539,7 @@ function defaultCfg(){
   return {
     price:price, freight:freight, taxFood:8, taxFreight:10,
     company:Object.assign({},COMPANY_DEFAULT),
-    dvGas:"", dvFolder:"", invGas:"", invFolder:"",
+    dvGas:"", dvFolder:"", invGas:"", invFolder:"", alsoDownload:"しない",
     freeeToken:"", freeeCompany:"", userName:"",
     map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,sanchi:"熊本"})),
     shime:DATA.shime.map(s=>({tori:s.tori,shime:s.shime,kijun:s.kijun,memo:""})),
@@ -1196,6 +1205,8 @@ function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();dra
   document.getElementById("taxFreight").value=CFG.taxFreight;
   ["dvGas","dvFolder","invGas","invFolder","freeeToken","freeeCompany","userName"].forEach(k=>{
     const el=document.getElementById(k); if(el) el.value=CFG[k]||"";});
+  const ad=document.getElementById("alsoDownload");
+  if(ad) ad.value=CFG.alsoDownload||"しない";
   const c=CO();
   [["coName","name"],["coAddr","addr"],["coBank","bank"],["coInv","invoiceNo"]].forEach(([id,k])=>{
     const el=document.getElementById(id); if(el) el.value=c[k]||"";});}
@@ -1217,6 +1228,8 @@ document.addEventListener("click",e=>{
 ["fpTori","fpKind"].forEach(id=>document.getElementById(id).onchange=drawPrice);
 document.getElementById("fFre").oninput=drawFreight;
 document.getElementById("ffTori").onchange=drawFreight;
+document.getElementById("alsoDownload").onchange=e=>{
+  CFG.alsoDownload=e.target.value; saveCfg("設定を変更しました");};
 ["taxFood","taxFreight"].forEach(id=>document.getElementById(id).oninput=e=>{
   const v=parseFloat(e.target.value); if(isNaN(v)) return;
   CFG[id]=v; saveCfg("税率を変更しました"); build();});
@@ -1310,20 +1323,43 @@ async function makePdf(elId, filename, kind){
   pdf.addImage(img,"JPEG",mg,mg,w,h);
   left-=(ph-mg*2);
   while(left>0){ pos-= (ph-mg*2); pdf.addPage(); pdf.addImage(img,"JPEG",mg,pos+mg,w,h); left-=(ph-mg*2); }
-  pdf.save(filename);
+
   const url=(kind==="inv"?CFG.invGas:CFG.dvGas)||"";
   const folder=(kind==="inv"?CFG.invFolder:CFG.dvFolder)||"";
-  if(!url){ dlMsg("PDFを保存しました（ドライブ未設定のためパソコンのみ）","wait"); return {ok:true}; }
+  const alsoDl=(CFG.alsoDownload==="する");
+
+  // ドライブのURLが未設定のときだけ、パソコンに保存する
+  if(!url){
+    pdf.save(filename);
+    dlMsg("ドライブのURLが未設定のため、パソコンに保存しました（設定タブで登録してください）","ng");
+    return {ok:true, local:true};
+  }
+  if(alsoDl) pdf.save(filename);
+
   dlMsg("ドライブへ保存中…","wait");
+  const b64=pdf.output("datauristring").split(",")[1];
+  const body=JSON.stringify({action:"savePdf",filename:filename,folderId:folder,
+    by:CFG.userName||"",data:b64});
+  const opt={method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:body};
   try{
-    const b64=pdf.output("datauristring").split(",")[1];
-    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({action:"savePdf",filename:filename,folderId:folder,
-        by:CFG.userName||"",data:b64})});
+    const r=await fetch(url,opt);
     const j=await r.json();
     if(j&&j.ok){ dlMsg("ドライブに保存しました："+(j.name||filename),"ok"); return j; }
-    dlMsg("ドライブ保存に失敗しました"+(j&&j.error?("："+j.error):""),"ng"); return {ok:false};
-  }catch(e){ dlMsg("ドライブ保存に失敗しました（URLと公開設定を確認してください）","ng"); return {ok:false}; }
+    dlMsg("ドライブ保存に失敗しました"+(j&&j.error?("："+j.error):""),"ng");
+    return {ok:false};
+  }catch(e){
+    // パソコンのファイルから開いている場合、返事を受け取れないことがある。
+    // 送信自体はできるので no-cors で送り切る。
+    try{
+      await fetch(url,Object.assign({},opt,{mode:"no-cors"}));
+      dlMsg("ドライブへ送信しました（このパソコンでは結果を確認できません。ドライブをご確認ください）","wait");
+      return {ok:true, blind:true};
+    }catch(e2){
+      pdf.save(filename);
+      dlMsg("ドライブへ送れませんでした。パソコンに保存しました","ng");
+      return {ok:false};
+    }
+  }
 }
 function freeeNotReady(what){
   if(!CFG.freeeToken||!CFG.freeeCompany){
