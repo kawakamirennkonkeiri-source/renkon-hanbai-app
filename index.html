@@ -1308,12 +1308,23 @@ function nowStr(){const d=new Date();
 async function makePdf(elId, filename, kind){
   const el=document.getElementById(elId);
   if(!el||el.style.display==="none"){ dlMsg("先に「画面で確認する」で帳票を表示してください","ng"); return {ok:false}; }
+  // 帳票が入っているタブが裏だと画像にできないので、表に出しておく
+  const _panel=el.closest(".panel");
+  if(_panel&&!_panel.classList.contains("active")){
+    const _b=document.querySelector('nav button[data-p="'+_panel.id+'"]');
+    if(_b) _b.click();
+    await new Promise(r=>setTimeout(r,300));
+  }
   dlMsg("PDFを作成中…","wait");
   try{
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
   }catch(e){ dlMsg("PDF部品の読み込みに失敗（インターネット接続を確認してください）","ng"); return {ok:false}; }
   const canvas=await html2canvas(el,{scale:2,backgroundColor:"#ffffff",useCORS:true});
+  if(!canvas.width||!canvas.height){
+    dlMsg("帳票を画像にできませんでした。帳票が画面に出ている状態でもう一度お試しください","ng");
+    return {ok:false};
+  }
   const jsPDF=window.jspdf.jsPDF;
   const pdf=new jsPDF("p","mm","a4");
   const pw=210, ph=297, mg=8, w=pw-mg*2;
