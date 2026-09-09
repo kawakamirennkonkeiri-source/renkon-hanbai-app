@@ -282,10 +282,19 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">💡 対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
   </div>
   <div id="invList" class="no-print"></div>
+  <div class="card no-print" id="issuedCard">
+    <h2>この月の発行済請求書 <span class="cnt" id="issuedCnt"></span></h2>
+    <div class="scroll" style="max-height:40vh">
+      <table id="tIssued"><thead><tr>
+        <th>請求書No.</th><th>請求先</th><th>対象月</th><th>請求日</th><th>入金期日</th>
+        <th class="num">請求額(税込)</th><th>発行者</th><th>PDF</th><th>状態</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
   <div class="doc" id="inv" style="display:none"></div>
   <div class="flex no-print" id="invBack" style="display:none">
     <button class="btn sub" id="btnInvBack">← 一覧に戻る</button>
-    <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
+    <button class="btn" onclick="window.print()">画面から印刷</button>
   </div>
 </section>
 
@@ -312,13 +321,14 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="card">
     <h2>取引先マスタ <span class="cnt" id="cPar"></span><span class="sp"></span>
       <button class="btn sm" data-add="partners">＋ 新規</button></h2>
-    <div class="note or">取引先の正式名称・住所・担当者・メールを登録します。<b>照合キー</b>には、請求一覧に出てくる呼び名（略称）を入れてください。請求書に住所・担当者が印字されます。</div>
+    <div class="note or"><b>支払</b>＝入金までの月数（0＝当月・1＝翌月・2＝翌々月）、<b>支払日</b>＝「月末」か日付の数字。請求書の「お支払期日」に使います。<br>取引先の正式名称・住所・担当者・メールを登録します。<b>照合キー</b>には、請求一覧に出てくる呼び名（略称）を入れてください。請求書に住所・担当者が印字されます。</div>
     <div class="flex"><input class="find" id="fPar" placeholder="絞り込み"></div>
     <div class="scroll" style="max-height:56vh">
       <table id="tPar"><thead><tr>
         <th style="width:19%">取引先名（正式）</th><th style="width:11%">照合キー</th>
-        <th style="width:9%">郵便番号</th><th style="width:24%">住所</th>
-        <th style="width:9%">担当者</th><th style="width:21%">メール</th><th style="width:7%"></th>
+        <th style="width:8%">郵便番号</th><th style="width:19%">住所</th>
+        <th style="width:8%">担当者</th><th style="width:15%">メール</th>
+        <th style="width:9%">支払</th><th style="width:8%">支払日</th><th style="width:5%"></th>
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
@@ -545,7 +555,7 @@ function defaultCfg(){
     shime:DATA.shime.map(s=>({tori:s.tori,shime:s.shime,kijun:s.kijun,memo:""})),
     shanai:DATA.shanai.slice(),
     partners:DATA.partners.map(p=>({name:p.name,key:KEYNAME(p.name),zip:p.zip,addr:p.addr,
-      person:p.person,mail:p.mail}))
+      person:p.person,mail:p.mail,paymentMonthOffset:1,paymentDay:"月末"}))
   };
 }
 let CFG=defaultCfg();
@@ -632,12 +642,13 @@ function freightAmt(f,qty,kg){
 const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
 
 const OPS_KEY="krs_ops";
-let OPS={st:{},qty:{},doc:{},inv:{}};
+let OPS={st:{},qty:{},doc:{},invLines:{},invoices:[]};
 try{const o=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
-  OPS={st:o.st||{},qty:o.qty||{},doc:o.doc||{},inv:o.inv||{}};}catch(e){}
+  OPS={st:o.st||{},qty:o.qty||{},doc:o.doc||{},
+       invLines:o.invLines||{},invoices:o.invoices||[]};}catch(e){}
 function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){}}
 function dvStatus(t){
-  if(OPS.inv[t.customer+"|"+t.y+"-"+t.m]) return "invoiced";
+  if(OPS.invLines[t.no]) return "invoiced";
   const st=OPS.st[t.no];
   if(st) return st;
   return t.deliv<=TODAY?"delivered":"created";
@@ -909,7 +920,7 @@ function termText(k,y,m){
   return y+"-"+p2(m)+"-01〜"+y+"-"+p2(m)+"-"+new Date(y,m,0).getDate();
 }
 function drawInvList(){
-  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale);
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale&&!OPS.invLines[t.no]);
   const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   document.getElementById("invMonth").textContent="("+y+"-"+p2(m)+"分)";
   const agg={};
@@ -954,8 +965,10 @@ function drawInvList(){
       +'</tbody></table>';
     box.appendChild(d);
   });
-  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に請求対象がありません。</p></div>';
+  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">'
+    +'この月に、まだ請求していない明細はありません。（下の「この月の発行済請求書」をご覧ください）</p></div>';
   box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showInv(b.dataset.doc));
+  drawIssuedInvoices();
 }
 function drawBuyList(){
   const rows=curOf("buyYm").filter(t=>t.kind==="buy");
@@ -1176,6 +1189,8 @@ function drawPar(){
     tr.innerHTML='<td>'+cell("partners",i,"name",p.name)+'</td><td>'+cell("partners",i,"key",p.key)
       +'</td><td>'+cell("partners",i,"zip",p.zip)+'</td><td>'+cell("partners",i,"addr",p.addr)
       +'</td><td>'+cell("partners",i,"person",p.person)+'</td><td>'+cell("partners",i,"mail",p.mail)
+      +'</td><td>'+selc("partners",i,"paymentMonthOffset",String(p.paymentMonthOffset??1),["0","1","2"])
+      +'</td><td>'+cell("partners",i,"paymentDay",p.paymentDay||"月末")
       +'</td><td>'+delBtn("partners",i)+'</td>'; tb.appendChild(tr);});
   document.getElementById("cPar").textContent="("+CFG.partners.length+"行)"+(sh!==CFG.partners.length?" ／ "+sh+"行を表示中":"");
   bind();
@@ -1216,7 +1231,7 @@ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
   if(t==="map") CFG.map.unshift({sell:"",kubun:"",tori:"",item:"",sanchi:"熊本",_new:1});
   if(t==="price") CFG.price.unshift({t:"",item:"",cap:null,sanchi:"熊本",kind:"販売",tanka:null,
     unit:"円/ケース",from:PFROM,to:PTO,_new:1});
-  if(t==="partners") CFG.partners.unshift({name:"",key:"",zip:"",addr:"",person:"",mail:"",_new:1});
+  if(t==="partners") CFG.partners.unshift({name:"",key:"",zip:"",addr:"",person:"",mail:"",paymentMonthOffset:1,paymentDay:"月末",_new:1});
   if(t==="freight") CFG.freight.unshift({t:"",item:"",carrier:"",tanka:null,unit:"円/ケース",
     cond:"条件なし",condQty:null,ruleType:"日数",ruleVal:"",memo:"",from:PFROM,to:PTO,_new:1});
   drawAll(); saveCfg("行を追加しました"); build();});
@@ -1291,95 +1306,266 @@ document.getElementById("btnResetB").onclick=()=>{
   document.getElementById("pasteB").value=""; build(null,DATA.prod);
   document.getElementById("loadMsgB").innerHTML='<span class="badge b-buy">サンプルに戻しました</span>';};
 
-// ===== PDF・ドライブ保存 =====
-function loadScript(src){
-  return new Promise((res,rej)=>{
-    if([...document.scripts].some(x=>x.src===src)) return res();
-    const s=document.createElement("script"); s.src=src; s.onload=res;
-    s.onerror=()=>rej(new Error("読み込み失敗: "+src)); document.head.appendChild(s);});
-}
+// ===== 帳票HTML・PDF保存（GASでPDF化） =====
 function dlMsg(t,k){
   const el=document.getElementById("dlMsg");
   el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":k==="wait"?"b-wait":"b-ok")+'">'+esc(t)+'</span>';
-  clearTimeout(dlMsg._t); if(k!=="wait") dlMsg._t=setTimeout(()=>el.innerHTML="",6000);
+  clearTimeout(dlMsg._t); if(k!=="wait") dlMsg._t=setTimeout(()=>el.innerHTML="",8000);
 }
-function nowStr(){const d=new Date();
-  return d.getFullYear()+"/"+p2(d.getMonth()+1)+"/"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes());}
-async function makePdf(elId, filename, kind){
-  const el=document.getElementById(elId);
-  if(!el||el.style.display==="none"){ dlMsg("先に「画面で確認する」で帳票を表示してください","ng"); return {ok:false}; }
-  // 帳票が入っているタブが裏だと画像にできないので、表に出しておく
-  const _panel=el.closest(".panel");
-  if(_panel&&!_panel.classList.contains("active")){
-    const _b=document.querySelector('nav button[data-p="'+_panel.id+'"]');
-    if(_b) _b.click();
-    await new Promise(r=>setTimeout(r,300));
-  }
-  dlMsg("PDFを作成中…","wait");
-  try{
-    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
-    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-  }catch(e){ dlMsg("PDF部品の読み込みに失敗（インターネット接続を確認してください）","ng"); return {ok:false}; }
-  const canvas=await html2canvas(el,{scale:2,backgroundColor:"#ffffff",useCORS:true});
-  if(!canvas.width||!canvas.height){
-    dlMsg("帳票を画像にできませんでした。帳票が画面に出ている状態でもう一度お試しください","ng");
-    return {ok:false};
-  }
-  const jsPDF=window.jspdf.jsPDF;
-  const pdf=new jsPDF("p","mm","a4");
-  const pw=210, ph=297, mg=8, w=pw-mg*2;
-  const h=canvas.height*w/canvas.width;
-  const img=canvas.toDataURL("image/jpeg",0.94);
-  let left=h, pos=0;
-  pdf.addImage(img,"JPEG",mg,mg,w,h);
-  left-=(ph-mg*2);
-  while(left>0){ pos-= (ph-mg*2); pdf.addPage(); pdf.addImage(img,"JPEG",mg,pos+mg,w,h); left-=(ph-mg*2); }
+const esc2 = s => String(s==null?"":s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const lastDayOf = (y,m) => new Date(y, m, 0).getDate();
+const ymd = (y,m,d) => y+"-"+p2(m)+"-"+p2(d);
+function regNoOf(){
+  const r=(CO().invoiceNo||"").trim();
+  if(!r) return "";
+  return /^[Tt]/.test(r) ? r : "T"+r;
+}
+// 入金期日（取引先の支払サイト）
+function calcDueDate(p, issueDateStr){
+  const off = Number((p && p.paymentMonthOffset) ?? 1);
+  const day = (p && p.paymentDay) || "月末";
+  const [iy,im] = issueDateStr.split("-").map(Number);
+  let ty=iy, tm=(im-1)+off;
+  while(tm<0){ tm+=12; ty-=1; }
+  while(tm>11){ tm-=12; ty+=1; }
+  const d = (day==="月末"||day===""||day==null) ? lastDayOf(ty, tm+1) : Number(day);
+  return ymd(ty, tm+1, d);
+}
+const DOC_CSS = `@page{size:A4 portrait;margin:0}
+body{margin:0;padding:18mm 15mm;font-family:"Yu Gothic","Meiryo",sans-serif;font-size:11pt;color:#000}
+.ttl{text-align:center;font-size:20pt;font-weight:bold;letter-spacing:.6em;text-indent:.6em;margin:0 0 10mm}
+.top{display:flex;justify-content:space-between;gap:10mm}
+.to{flex:1}
+.to .nm{font-size:14pt;font-weight:bold;border-bottom:1.2pt solid #000;padding-bottom:2mm;display:block}
+.to .ad{font-size:9pt;margin-top:2mm;line-height:1.6}
+.me{width:62mm;font-size:9pt;line-height:1.7;text-align:left}
+.me .nm{font-size:11pt;font-weight:bold}
+.meta{font-size:9.5pt;line-height:1.8;margin-top:3mm}
+.box{border:1.2pt solid #000;padding:4mm 5mm;margin:6mm 0}
+.box .lbl{font-size:9pt}
+.box .amt{font-size:17pt;font-weight:bold;letter-spacing:.03em}
+.box .sub{font-size:9pt;margin-top:2mm;line-height:1.7}
+h2{font-size:10pt;margin:6mm 0 2mm;border-bottom:.8pt solid #000;padding-bottom:1mm}
+table{width:100%;border-collapse:collapse;font-size:9pt}
+th{background:#eee;border:.6pt solid #666;padding:1.6mm 2mm;text-align:left;font-weight:bold}
+td{border:.6pt solid #999;padding:1.4mm 2mm}
+td.n,th.n{text-align:right}
+.sum{margin-top:4mm;display:flex;justify-content:flex-end}
+.sum table{width:78mm}
+.sum td{border:0;border-bottom:.5pt solid #ccc;padding:1.4mm 2mm}
+.sum tr.t td{border-top:1.2pt solid #000;border-bottom:0;font-weight:bold;font-size:11pt;padding-top:2mm}
+.note{margin-top:5mm;font-size:8.5pt;line-height:1.7}`;
 
+function docHead(title){
+  return '<!doctype html><html lang="ja"><head><meta charset="UTF-8"><title>'+esc2(title)
+    +'</title><style>'+DOC_CSS+'</style></head><body>';
+}
+function meBlock(){
+  const c=CO(), r=regNoOf();
+  return '<div class="me"><div class="nm">'+esc2(c.name)+'</div>'
+    +(c.addr?'<div>'+esc2(c.addr)+'</div>':'')
+    +(r?'<div>登録番号：'+esc2(r)+'</div>':'')+'</div>';
+}
+function sumTable(shohin, taxF, soryo, taxS, total){
+  const tf=TF();
+  let h='<div class="sum"><table>';
+  h+='<tr><td>小計（8%対象）</td><td class="n">'+yen(shohin)+' 円</td></tr>';
+  h+='<tr><td>消費税（'+(tf.food*100)+'%）</td><td class="n">'+yen(taxF)+' 円</td></tr>';
+  if(soryo){
+    h+='<tr><td>小計（10%対象）</td><td class="n">'+yen(soryo)+' 円</td></tr>';
+    h+='<tr><td>消費税（'+(tf.fre*100)+'%）</td><td class="n">'+yen(taxS)+' 円</td></tr>';
+  }
+  h+='<tr class="t"><td>合計</td><td class="n">'+yen(total)+' 円</td></tr>';
+  return h+'</table></div>';
+}
+// 請求書HTML
+function buildInvoiceHtml(inv){
+  const p=inv.partner||{};
+  const rows=inv.lines.map(l=>'<tr><td>'+esc2(l.tekiyo)+'</td><td class="n">'+yen(l.qty)+'</td>'
+    +'<td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
+  return docHead("請求書 "+inv.invoiceNo)
+    +'<div class="ttl">請 求 書</div><div class="top"><div class="to">'
+    +'<span class="nm">'+esc2(p.name||inv.customer)+'　御中</span>'
+    +(p.zip||p.addr?'<div class="ad">〒'+esc2(p.zip||"")+'　'+esc2(p.addr||"")
+      +(p.person?'　'+esc2(p.person)+' 様':'')+'</div>':'')
+    +'<div class="meta">件名：'+esc2(inv.targetMonth)+' 分 ご請求<br>'
+    +'請求書番号：'+esc2(inv.invoiceNo)+'<br>請求日：'+esc2(inv.issueDate)+'<br>'
+    +'請求基準：'+esc2(inv.basisLabel)+'</div></div>'+meBlock()+'</div>'
+    +'<div class="box"><div class="lbl">ご請求金額（税込）</div>'
+    +'<div class="amt">￥ '+yen(inv.total)+' －</div>'
+    +'<div class="sub">お支払期日：'+esc2(inv.dueDate)+'<br>'+esc2(CO().bank||"")+'</div></div>'
+    +'<h2>内訳</h2><table><thead><tr><th>摘要</th><th class="n">数量</th><th>単位</th>'
+    +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +sumTable(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total)
+    +'<div class="note">※印は軽減税率対象です。</div></body></html>';
+}
+// 納品書HTML
+function buildDeliveryNoteHtml(doc){
+  const p=doc.partner||{};
+  const rows=doc.lines.map(l=>'<tr><td>'+esc2(l.tekiyo)+'</td><td class="n">'+yen(l.qty)+'</td>'
+    +'<td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
+  return docHead("納品書 "+doc.docNo)
+    +'<div class="ttl">納 品 書</div><div class="top"><div class="to">'
+    +'<span class="nm">'+esc2(p.name||doc.customer)+'　御中</span>'
+    +(p.zip||p.addr?'<div class="ad">〒'+esc2(p.zip||"")+'　'+esc2(p.addr||"")
+      +(p.person?'　'+esc2(p.person)+' 様':'')+'</div>':'')
+    +'<div class="meta">納品書番号：'+esc2(doc.docNo)+'<br>取引No.：'+esc2(doc.txNo)+'<br>'
+    +'納品日：'+esc2(doc.delivDate)+'<br>産地：'+esc2(doc.sanchi||"")
+    +(doc.carrier?'<br>運送：'+esc2(doc.carrier):'')+'</div></div>'+meBlock()+'</div>'
+    +'<div class="box"><div class="lbl">納品金額（税込）</div>'
+    +'<div class="amt">￥ '+yen(doc.total)+' －</div></div>'
+    +'<h2>内訳</h2><table><thead><tr><th>摘要</th><th class="n">数量</th><th>単位</th>'
+    +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +sumTable(doc.shohin, doc.taxF, doc.soryo, doc.taxS, doc.total)
+    +'<div class="note">※印は軽減税率対象です。<br>'
+    +'この納品書は請求書ではありません。ご請求は別途、月次の請求書にてご案内いたします。</div></body></html>';
+}
+// GASへ送ってPDF化・保存（Content-Typeは付けない：CORSのプリフライトを避ける）
+async function gasSavePdf(kind, fileName, subFolder, html){
   const url=(kind==="inv"?CFG.invGas:CFG.dvGas)||"";
-  const folder=(kind==="inv"?CFG.invFolder:CFG.dvFolder)||"";
-  const alsoDl=(CFG.alsoDownload==="する");
-
-  // ドライブのURLが未設定のときだけ、パソコンに保存する
-  if(!url){
-    pdf.save(filename);
-    dlMsg("ドライブのURLが未設定のため、パソコンに保存しました（設定タブで登録してください）","ng");
-    return {ok:true, local:true};
-  }
-  if(alsoDl) pdf.save(filename);
-
-  dlMsg("ドライブへ保存中…","wait");
-  const b64=pdf.output("datauristring").split(",")[1];
-  const body=JSON.stringify({action:"savePdf",filename:filename,folderId:folder,
-    by:CFG.userName||"",data:b64});
-  const opt={method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:body};
-  try{
-    const r=await fetch(url,opt);
-    const j=await r.json();
-    if(j&&j.ok){ dlMsg("ドライブに保存しました："+(j.name||filename),"ok"); return j; }
-    dlMsg("ドライブ保存に失敗しました"+(j&&j.error?("："+j.error):""),"ng");
-    return {ok:false};
-  }catch(e){
-    // パソコンのファイルから開いている場合、返事を受け取れないことがある。
-    // 送信自体はできるので no-cors で送り切る。
-    try{
-      await fetch(url,Object.assign({},opt,{mode:"no-cors"}));
-      dlMsg("ドライブへ送信しました（このパソコンでは結果を確認できません。ドライブをご確認ください）","wait");
-      return {ok:true, blind:true};
-    }catch(e2){
-      pdf.save(filename);
-      dlMsg("ドライブへ送れませんでした。パソコンに保存しました","ng");
-      return {ok:false};
-    }
-  }
+  if(!url) throw new Error("ドライブのURLが未設定です（設定タブで登録してください）");
+  const body=JSON.stringify({action:"saveInvoicePdf", fileName:fileName, subFolder:subFolder,
+    html:html, rootFolder:(kind==="inv"?"請求書PDF":"納品書PDF"), by:CFG.userName||""});
+  const r=await fetch(url,{method:"POST", body:body});
+  const j=await r.json();
+  if(!j||!j.ok) throw new Error((j&&j.error)||"PDFの保存に失敗しました");
+  return j.result||j;
 }
 function freeeNotReady(what){
   if(!CFG.freeeToken||!CFG.freeeCompany){
     alert(what+"をfreeeで発行するには、設定タブの「freee連携設定」に\nアクセストークンと事業所IDを入れてください。");
+    document.querySelector('nav button[data-p="settings"]').click();
   }else{
     alert("freeeへの発行は、まだつないでいません。\nトークンをお預かりしたうえで接続作業を行います。");
   }
-  document.querySelector('nav button[data-p="settings"]').click();
 }
+// 請求書の番号
+function nextInvoiceNo(y,m){
+  const pre="INV-"+y+p2(m)+"-";
+  let n=0;
+  OPS.invoices.forEach(i=>{ if(i.invoiceNo&&i.invoiceNo.indexOf(pre)===0){
+    const v=parseInt(i.invoiceNo.slice(pre.length),10); if(v>n) n=v; }});
+  return pre+String(n+1).padStart(3,"0");
+}
+// 請求書を発行する（PDF保存 → 成功したら請求済みにする）
+async function issueInvoice(custKey){
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  const r=shimeOf(custKey), p=partnerOf(custKey), tf=TF();
+  // 発行の直前に、いまの状態から請求行を作り直す
+  const rows=TX.filter(t=>t.kind==="sale"&&!t.shanai&&t.customer===custKey
+      &&t.y===y&&t.m===m&&t.sale&&!OPS.invLines[t.no])
+    .sort((a,b)=>a.deliv-b.deliv);
+  if(!rows.length){ alert("請求できる明細がありません。\n（すでに全て請求済みの可能性があります）"); return; }
+  const lines=[];
+  rows.forEach(t=>{
+    const d=(r.kijun==="出し")?t.date:t.deliv;
+    lines.push({txNo:t.no, tekiyo:(d.getMonth()+1)+"月"+d.getDate()+"日　"+t.item+" "+(t.cap||"")+"kg　"
+        +(t.sanchi||"")+"産 ※", qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin, kind:"shohin"});
+    if(t.freight) lines.push({txNo:t.no, tekiyo:"運賃 ("+t.no+")"+(t.carrier?"　"+t.carrier:""),
+        qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
+  });
+  const shohin=rows.reduce((a,t)=>a+(t.shohin||0),0);
+  const soryo=rows.reduce((a,t)=>a+(t.freight||0),0);
+  const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
+  const total=shohin+soryo+taxF+taxS;
+  const issueDate=(r.shime==="20日")?ymd(y,m,20):ymd(y,m,lastDayOf(y,m));
+  const inv={ id:"iv"+Date.now(), invoiceNo:nextInvoiceNo(y,m), customer:custKey,
+    partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:custKey},
+    targetMonth:y+"-"+p2(m), issueDate:issueDate, dueDate:calcDueDate(p,issueDate),
+    basisLabel:kijunLabel(r)+"／"+r.shime+"締め",
+    lines:lines, shohin:shohin, soryo:soryo, taxF:taxF, taxS:taxS, total:total,
+    issuedAt:nowStr(), issuedBy:CFG.userName||"", status:"issued", pdfUrl:"", pdfName:"" };
+
+  dlMsg("請求書PDFを作成しています…","wait");
+  let res;
+  try{
+    const fname=(p?p.name:custKey)+"_"+inv.targetMonth+"_"+inv.invoiceNo;
+    res=await gasSavePdf("inv", fname, inv.targetMonth, buildInvoiceHtml(inv));
+  }catch(e){
+    dlMsg("PDFを保存できませんでした："+e.message+"（請求済みにはしていません）","ng");
+    return;
+  }
+  // PDFが保存できたときだけ「請求済み」にする
+  inv.pdfUrl=res.url||""; inv.pdfName=res.name||"";
+  OPS.invoices.push(inv);
+  rows.forEach(t=>{ OPS.invLines[t.no]=inv.id; });
+  saveOps(); build();
+  document.getElementById("inv").style.display="none";
+  document.getElementById("invBack").style.display="none";
+  document.getElementById("invList").style.display="";
+  drawIssuedInvoices();
+  const c=document.getElementById("issuedCard");
+  if(c) c.scrollIntoView({behavior:"smooth", block:"start"});
+  dlMsg("請求書を発行しました："+inv.invoiceNo+"（ドライブに保存済み）","ok");
+}
+// 納品書を発行する（請求には一切触らない）
+async function issueDeliveryNote(txNo){
+  const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
+  if(!t){ alert("対象の取引が見つかりません"); return; }
+  const p=partnerOf(t.customer), tf=TF();
+  const lines=[{txNo:t.no, tekiyo:t.item+" "+(t.cap||"")+"kg　"+(t.sanchi||"")+"産 ※",
+    qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin}];
+  if(t.freight) lines.push({txNo:t.no, tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
+    qty:1, unit:"式", tanka:t.freight, amount:t.freight});
+  const shohin=t.shohin||0, soryo=t.freight||0;
+  const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
+  const doc={ docNo:"DN-"+t.no, txNo:t.no, customer:t.customer,
+    partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:t.customer},
+    delivDate:ymd(t.deliv.getFullYear(),t.deliv.getMonth()+1,t.deliv.getDate()),
+    sanchi:t.sanchi, carrier:t.carrier, lines:lines,
+    shohin:shohin, soryo:soryo, taxF:taxF, taxS:taxS, total:shohin+soryo+taxF+taxS,
+    issuedAt:nowStr(), issuedBy:CFG.userName||"" };
+  dlMsg("納品書PDFを作成しています…","wait");
+  try{
+    const fname=(p?p.name:t.customer)+"_"+doc.docNo+"_納品書";
+    const sub=doc.delivDate.slice(0,7);
+    const res=await gasSavePdf("dv", fname, sub, buildDeliveryNoteHtml(doc));
+    OPS.doc[t.no]={at:doc.issuedAt, url:res.url||"", name:res.name||"", docNo:doc.docNo};
+    saveOps(); build();
+    dlMsg("納品書を発行しました："+doc.docNo+"（ドライブに保存済み）","ok");
+  }catch(e){
+    dlMsg("PDFを保存できませんでした："+e.message,"ng");
+  }
+}
+// 発行済請求書の一覧
+function drawIssuedInvoices(){
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  const ym=y+"-"+p2(m);
+  const list=OPS.invoices.filter(i=>i.targetMonth===ym)
+    .sort((a,b)=>a.invoiceNo<b.invoiceNo?1:-1);
+  const tb=document.querySelector("#tIssued tbody"); tb.innerHTML="";
+  list.forEach(i=>{
+    const tr=document.createElement("tr");
+    const st=i.status==="cancelled"?'<span class="badge b-ng">取消済</span>'
+      :'<span class="badge b-ok">発行済</span>';
+    tr.innerHTML='<td style="font-family:Consolas,monospace">'+esc(i.invoiceNo)+'</td>'
+      +'<td>'+esc((i.partner&&i.partner.name)||i.customer)+'</td><td>'+esc(i.targetMonth)+'</td>'
+      +'<td>'+esc(i.issueDate)+'</td><td>'+esc(i.dueDate)+'</td>'
+      +'<td class="num">¥'+yen(i.total)+'</td><td>'+esc(i.issuedBy||"—")+'</td>'
+      +'<td>'+(i.pdfUrl?'<a href="'+esc(i.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
+      +'<td>'+st+'</td>'
+      +'<td>'+(i.status==="cancelled"?'':'<button class="del" data-cancelinv="'+esc(i.id)+'">取消</button>')+'</td>';
+    tb.appendChild(tr);
+  });
+  document.getElementById("issuedCnt").textContent="("+list.length+"件)";
+  tb.querySelectorAll("[data-cancelinv]").forEach(b=>b.onclick=()=>cancelInvoice(b.dataset.cancelinv));
+}
+// 請求の取消（請求済みを戻す。PDFとレコードは証憑として残す）
+function cancelInvoice(id){
+  const inv=OPS.invoices.find(i=>i.id===id); if(!inv) return;
+  if(!confirm("請求書 "+inv.invoiceNo+" を取り消します。\n"
+    +"・この請求書に含まれる明細は「未請求」に戻ります\n"
+    +"・請求書の記録とPDFは証憑として残します\n\nよろしいですか？")) return;
+  const reason=prompt("取消の理由（任意）","")||"";
+  inv.status="cancelled"; inv.cancelledAt=nowStr(); inv.cancelReason=reason;
+  inv.cancelledBy=CFG.userName||"";
+  Object.keys(OPS.invLines).forEach(k=>{ if(OPS.invLines[k]===id) delete OPS.invLines[k]; });
+  saveOps(); build(); drawIssuedInvoices();
+  dlMsg("請求書 "+inv.invoiceNo+" を取り消しました","wait");
+}
+
 // 発行メニュー
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-menu]");
@@ -1393,18 +1579,14 @@ document.addEventListener("click",e=>{
 document.addEventListener("click",e=>{
   const p=e.target.closest("[data-pdf]");
   if(p){
-    const k=p.dataset.key;
-    if(p.dataset.pdf==="inv"){ showInv(k);
-      const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
-      makePdf("inv","請求書_"+k+"_"+y+p2(m)+".pdf","inv").then(r=>{
-        OPS.inv[k+"|"+y+"-"+m]={at:nowStr(),url:(r&&r.url)||""}; saveOps(); build();});
-    }else{ showDv(k);
-      makePdf("dvdoc","納品書_"+k+".pdf","dv").then(r=>{
-        OPS.doc[k]={at:nowStr(),url:(r&&r.url)||""}; saveOps(); build();});}
+    document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+    if(p.dataset.pdf==="inv") issueInvoice(p.dataset.key);
+    else issueDeliveryNote(p.dataset.key);
     return;
   }
   const f=e.target.closest("[data-freee]");
-  if(f) freeeNotReady(f.dataset.freee==="inv"?"請求書":"納品書");
+  if(f){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+    freeeNotReady(f.dataset.freee==="inv"?"請求書":"納品書"); }
 });
 document.getElementById("btnDvBack").onclick=()=>{
   document.querySelector("#deliv .card").style.display="";
