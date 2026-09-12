@@ -96,6 +96,10 @@ input.cell:hover{border-color:#D5D5D8;background:#fff}
 input.cell:focus{border-color:var(--or);background:#fff;outline:none}
 input.cell.n{text-align:right;font-variant-numeric:tabular-nums}
 input.cell.need,select.cell.need,select#qtCust.need{background:#FFF4DB;border-color:#E0A800}
+.badge.click{cursor:pointer;border:1px solid transparent;user-select:none}
+.badge.click:hover{border-color:currentColor}
+.badge.click.on{outline:2px solid var(--or);outline-offset:1px}
+tr.hit td{background:#FFF9E6}
 .wd{display:flex;flex-wrap:wrap;gap:2px;margin-top:3px}
 .wd label{display:inline-flex;align-items:center;gap:1px;font-size:11px;border:1px solid #D5D5D8;
   border-radius:3px;padding:1px 3px;cursor:pointer;background:#fff;line-height:1.3}
@@ -290,7 +294,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <section class="panel" id="tx">
   <div class="card">
     <h2>取引 <span id="txCnt" class="cnt"></span> 受注＋発注</h2>
-    <p class="hint">💡 電子黒板の荷造りリストが「受注」、生産者記録が「発注」として取り込まれます。納品予定日を過ぎたものは納品✓済となり、請求タブに集計されます。</p>
+    <p class="hint">💡 電子黒板の荷造りリストが「受注」、生産者記録が「発注」として取り込まれます。納品予定日を過ぎたものは納品✓済となり、請求タブに集計されます。<br>
+      <b>収穫舟数はここには出しません</b>（買取の対象外で、取引ではないため）。数量はデータ取込タブで確認できます。</p>
     <div class="flex">
       <select id="txKind"><option value="all">全て</option><option value="sale">受注のみ</option><option value="buy">発注のみ</option></select>
       <select id="txStatus"><option value="all">状態：全て</option><option value="created">納品予定</option>
@@ -418,13 +423,15 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     </div>
   </div>
   <div class="card">
-    <h2>取引先の対応表（黒板の呼び名 → 請求先・産地） <span class="cnt" id="cMap"></span><span class="sp"></span>
+    <h2 id="mapCard">取引先の対応表（黒板の呼び名 → 請求先・産地） <span class="cnt" id="cMap"></span><span class="sp"></span>
       <button class="btn sm" data-add="map">＋ 新規</button></h2>
     <p class="hint">💡 <b>請求先</b>は「取引先マスタ」の<b>照合キー</b>から選びます。ここが請求書・納品書の<b>宛名</b>と<b>締め日</b>になります。<b>⚠ 未登録：〜</b>と黄色い行は、請求書に住所・担当者が入りません。<br>
       <b>単価マスタの取引先</b>は、単価表（営業課）に載っている呼び名です。<b>請求先とは別</b>なので、変えると単価が引けなくなります。<br>
-      黒板の販売先と請求先が違うときは、納品書・請求書の<b>件名</b>に黒板の販売先名が出ます。</p>
+      黒板の販売先と請求先が違うときは、納品書・請求書の<b>件名</b>に黒板の販売先名が出ます。<br>
+      見出しの<b>赤・黄色のバッジを押すと、その行だけが表示されます。</b>直すとバッジの件数が減り、
+      すべて直ると<span class="badge b-ok">エラーなし</span>に変わります。</p>
     <div class="flex"><input class="find" id="fMap" placeholder="絞り込み"></div>
-    <div class="scroll" style="max-height:40vh">
+    <div class="scroll" id="mapScroll" style="max-height:40vh">
       <table id="tMap"><thead><tr>
         <th style="width:16%">黒板の販売先</th><th style="width:10%">区分</th>
         <th style="width:23%">→ 請求先（取引先マスタ）</th>
@@ -602,6 +609,9 @@ const PFROM="2026-04-01", PTO="2027-03-31";
 const N=s=>String(s==null?"":s).normalize("NFKC").replace(/[\s\u3000]+/g,"");
 const KEYNAME=s=>N(s).replace(/株式会社|有限会社|\(株\)|（株）/g,"");
 const yen=n=>(n==null?"-":Math.round(n).toLocaleString("ja-JP"));
+// 生産者のkgは小数第1位まで出す（0.1kg単位で記録されるため）
+const kg1=n=>(n==null||n===""?"-":(Math.round(Number(n)*10)/10)
+  .toLocaleString("ja-JP",{minimumFractionDigits:1,maximumFractionDigits:1}));
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 const p2=n=>String(n).padStart(2,"0");
@@ -921,14 +931,14 @@ function render(){
   Object.entries(aggB).sort((a,b)=>b[1].kg-a[1].kg).forEach(([k,v])=>{
     const tr=document.createElement("tr");
     tr.innerHTML='<td><b>'+esc(k)+'</b></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
-      +'</td><td class="num">'+yen(v.kg)+'</td><td class="num">'
+      +'</td><td class="num">'+kg1(v.kg)+'</td><td class="num">'
       +(v.k?yen(v.k):'<span class="badge b-ng">未設定</span>')+'</td><td class="num">'
       +(v.ng?'<span class="badge b-ng">'+v.ng+'件</span>':'—')
       +'</td><td><button class="btn sm grn" data-buy="'+esc(k)+'">買取書</button></td>';
     tbb.appendChild(tr);});
   const tb2=document.createElement("tr"); tb2.className="total";
   tb2.innerHTML='<td>合計</td><td class="num">'+buy.length+'</td><td class="num">'
-    +yen(buy.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+yen(buy.reduce((s,t)=>s+(t.kg||0),0))
+    +yen(buy.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+kg1(buy.reduce((s,t)=>s+(t.kg||0),0))
     +'</td><td class="num">'+(bT?yen(bT):"—")+'</td><td></td><td></td>';
   tbb.appendChild(tb2);
   tbb.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>{
@@ -951,6 +961,7 @@ function drawTx(){
   const kind=document.getElementById("txKind").value, stf=document.getElementById("txStatus").value;
   const tb=document.querySelector("#tTx tbody"); tb.innerHTML=""; let n=0;
   TX.slice().sort((a,b)=>b.date-a.date).forEach(t=>{
+    if(N(t.kubun)===N("収穫舟数")) return;        // 収穫舟数は取引ではないので出さない
     if(kind!=="all"&&t.kind!==kind) return;
     if(stf==="ng"&&!t.why) return;
     if(stf!=="all"&&stf!=="ng"&&(t.why||t.status!==stf)) return;
@@ -961,7 +972,7 @@ function drawTx(){
       +(t.kind==="sale"?"受注":"発注")+'</span></td><td>'+esc(t.customer||"—")+'</td><td>'
       +esc(t.supplier||"—")+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+'</td><td>'+fmt(t.deliv)
       +(t.kind==="sale"&&t.delivSrc?'<br><span style="font-size:10px;color:#888">'+esc(t.delivSrc)+'</span>':"")
-      +'</td><td class="num">'+yen(t.qty)+(t.kind==="buy"&&t.kg?' <span style="color:#999">('+yen(t.kg)+'kg)</span>':'')
+      +'</td><td class="num">'+yen(t.qty)+(t.kind==="buy"&&t.kg?' <span style="color:#999">('+kg1(t.kg)+'kg)</span>':'')
       +'</td><td class="num">'+(t.tanka!=null?yen(t.tanka):"—")+'</td>'
       +'<td>'+(t.soryoKbn?'<span class="badge '+(t.soryoKbn==="送料別"?"b-wait":"b-gray")+'">'+esc(t.soryoKbn)+'</span>':'—')+'</td>'
       +'<td>'+esc(t.carrier||"—")
@@ -1154,7 +1165,7 @@ function drawBuyList(){
       +'<th class="num">買取金額</th></tr></thead><tbody>'
       +list.sort((a,b)=>a.date-b.date).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'+t.no+'</td><td>'
         +esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
-        +'</td><td class="num">'+yen(t.kg)+'</td><td class="num">'
+        +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
         +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
         +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
       +'</tbody></table>';
@@ -1224,7 +1235,7 @@ function showBuy(k){
     +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th><th class="num">買取金額</th></tr></thead><tbody>'
     +rows.map(t=>'<tr><td>'+fmtY(t.date)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'+t.no
       +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
-      +'</td><td class="num">'+yen(t.kg)+'</td><td class="num">'
+      +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
       +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
       +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
     +'</tbody></table><div class="doc-foot"><table class="buy"><tr><td>小計（税抜）</td><td class="num">¥'
@@ -1379,27 +1390,62 @@ function priceHas(tori){
   const t=N(tori); if(!t) return true;
   return CFG.price.some(p=>p.kind==="販売"&&N(p.t)===t);
 }
+// 対応表のエラー：行ごとの判定
+function mapErr(m){
+  const st=keyState(m.bill).st;
+  return { none:(st==="none"||st==="empty"), fuzzy:(st==="fuzzy"), price:!priceHas(m.tori) };
+}
+function mapCounts(){
+  const c={none:0,fuzzy:0,price:0};
+  CFG.map.forEach(m=>{const e=mapErr(m);
+    if(e.none)c.none++; if(e.fuzzy)c.fuzzy++; if(e.price)c.price++;});
+  return c;
+}
+let MAPF="", MAPSHOWN=null, MAPFIXED="";
+function drawMapBadges(){
+  const c=mapCounts(), el=document.getElementById("cMap");
+  if(MAPF&&!c[MAPF]){ MAPFIXED=MAPF; MAPF=""; }
+  const b=(k,cls,label,n)=>n?'<span class="badge '+cls+' click'+(MAPF===k?" on":"")
+    +'" data-mapf="'+k+'" title="押すと、その行だけを表示します">'+label+' '+n+'行</span> ':"";
+  el.innerHTML="("+CFG.map.length+"行)"
+    +(MAPSHOWN!=null&&MAPSHOWN!==CFG.map.length?" ／ "+MAPSHOWN+"行を表示中":"")+" "
+    +b("none","b-ng","要修正：取引先マスタに未登録",c.none)
+    +b("price","b-wait","要修正：単価マスタに無い呼び名",c.price)
+    +b("fuzzy","b-gray","確認：あいまい一致",c.fuzzy)
+    +(MAPF?' <a href="#" data-mapf="" style="font-size:11.5px;color:var(--or);text-decoration:none">✕ すべて表示</a>':"")
+    +((!c.none&&!c.price)?' <span class="badge b-ok">エラーなし</span>':"")
+    +(MAPFIXED?' <span class="badge b-ok">直りました</span>':"");
+  MAPFIXED="";
+  el.querySelectorAll("[data-mapf]").forEach(a=>a.onclick=e=>{
+    e.preventDefault();
+    const k=a.dataset.mapf;
+    MAPF=(MAPF===k)?"":k;
+    if(MAPF) document.getElementById("fMap").value="";   // 絞り込みと併用しない
+    drawMap();
+    const card=document.getElementById("mapCard");
+    if(card) card.scrollIntoView({behavior:"smooth",block:"start"});
+    const sc=document.getElementById("mapScroll");
+    if(sc) sc.scrollTop=0;
+  });
+}
 function drawMap(){
   const q=N(document.getElementById("fMap").value);
   const tb=document.querySelector("#tMap tbody"); tb.innerHTML=""; let sh=0;
   CFG.map.forEach((m,i)=>{
+    const e=mapErr(m);
+    if(MAPF&&!e[MAPF]) return;
     if(q&&!N([m.sell,m.kubun,m.bill,m.tori,m.item].join("")).includes(q)) return;
-    sh++; const tr=document.createElement("tr"); if(m._new){tr.className="new";delete m._new;}
+    sh++; const tr=document.createElement("tr");
+    if(m._new){tr.className="new";delete m._new;}
+    else if(MAPF) tr.className="hit";
     tr.innerHTML='<td>'+cell("map",i,"sell",m.sell)+'</td><td>'+cell("map",i,"kubun",m.kubun)+'</td>'
       +'<td>'+selKey("map",i,"bill",m.bill||"")+'</td>'
-      +'<td>'+cell("map",i,"tori",m.tori,false,!priceHas(m.tori))+'</td><td>'
+      +'<td>'+cell("map",i,"tori",m.tori,false,e.price)+'</td><td>'
       +cell("map",i,"item",m.item)+'</td><td>'
       +selc("map",i,"sanchi",m.sanchi||"熊本",["熊本","広島"])+'</td><td>'+delBtn("map",i)+'</td>';
     tb.appendChild(tr);});
-  const stc={empty:0,none:0,fuzzy:0};
-  CFG.map.forEach(m=>{const k=keyState(m.bill).st; stc[k]=(stc[k]||0)+1;});
-  const ng=stc.none+stc.empty;
-  document.getElementById("cMap").innerHTML="("+CFG.map.length+"行)"
-    +(sh!==CFG.map.length?" ／ "+sh+"行を表示中":"")
-    +(ng?' <span class="badge b-ng">取引先マスタに未登録 '+ng+'行</span>':"")
-    +(stc.fuzzy?' <span class="badge b-gray">あいまい一致 '+stc.fuzzy+'行</span>':"")
-    +(function(){const n=CFG.map.filter(m=>!priceHas(m.tori)).length;
-      return n?' <span class="badge b-wait">単価マスタに無い呼び名 '+n+'行</span>':"";})();
+  MAPSHOWN=sh;
+  drawMapBadges();
   bind();
 }
 function drawPar(){
@@ -1435,6 +1481,11 @@ function bind(){
       if(t==="freight"&&k==="ruleType") drawFreight();
       if(t==="price"&&k==="kind") drawPrice();
       if(t==="partners"&&k==="key") drawMap();
+      if(t==="map"){
+        if(el.tagName==="SELECT") drawMap();            // 請求先・産地は選んだ時点で作り直す
+        else{ if(k==="tori") el.classList.toggle("need",!priceHas(v)); drawMapBadges(); }
+      }
+      if(t==="price"&&(k==="t"||k==="kind")) drawMapBadges();
       if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
     });});
 }
