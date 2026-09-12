@@ -373,7 +373,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <label>対象月：<select id="buyYm"></select></label>
       <label>生産者：<select id="buySei"><option value="all">全て</option></select></label>
     </div>
-    <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。</p>
+    <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。<br>
+      <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数はデータ取込タブで確認できます。</p>
   </div>
   <div id="buyList" class="no-print"></div>
   <div class="doc" id="buydoc" style="display:none"></div>
@@ -426,7 +427,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <h2 id="mapCard">取引先の対応表（黒板の呼び名 → 請求先・産地） <span class="cnt" id="cMap"></span><span class="sp"></span>
       <button class="btn sm" data-add="map">＋ 新規</button></h2>
     <p class="hint">💡 <b>請求先</b>は「取引先マスタ」の<b>照合キー</b>から選びます。ここが請求書・納品書の<b>宛名</b>と<b>締め日</b>になります。<b>⚠ 未登録：〜</b>と黄色い行は、請求書に住所・担当者が入りません。<br>
-      <b>単価マスタの取引先</b>は、単価表（営業課）に載っている呼び名です。<b>請求先とは別</b>なので、変えると単価が引けなくなります。<br>
+      <b>単価マスタの取引先</b>は、単価マスタに載っている呼び名から選びます。<b>請求先とは別</b>で、こちらが単価を引くための名前です。<b>⚠ 単価マスタに無い：〜</b>と出ている行は単価が引けないので、正しい名前を選び直してください。<br>
       黒板の販売先と請求先が違うときは、納品書・請求書の<b>件名</b>に黒板の販売先名が出ます。<br>
       見出しの<b>赤・黄色のバッジを押すと、その行だけが表示されます。</b>直すとバッジの件数が減り、
       すべて直ると<span class="badge b-ok">エラーなし</span>に変わります。</p>
@@ -612,6 +613,9 @@ const yen=n=>(n==null?"-":Math.round(n).toLocaleString("ja-JP"));
 // 生産者のkgは小数第1位まで出す（0.1kg単位で記録されるため）
 const kg1=n=>(n==null||n===""?"-":(Math.round(Number(n)*10)/10)
   .toLocaleString("ja-JP",{minimumFractionDigits:1,maximumFractionDigits:1}));
+// 数量：0.5などの端数があるときだけ小数第1位を出す（半端・C・Sは0.5刻みで入る）
+const dec1=n=>(n==null||n===""?"-":(Math.round(Number(n)*10)/10)
+  .toLocaleString("ja-JP",{maximumFractionDigits:1}));
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 const p2=n=>String(n).padStart(2,"0");
@@ -878,9 +882,11 @@ function fillYM(){
   });
 }
 function ymNow(){return (document.getElementById("ym").value||"0/0").split("/").map(Number);}
-function cur(){const[y,m]=ymNow();return TX.filter(t=>!t.shanai&&t.y===y&&t.m===m);}
+// 収穫舟数は集計用の数字なので、取引・買取・ダッシュボードには出さない
+const isFune=t=>N(t.kubun)===N("収穫舟数");
+function cur(){const[y,m]=ymNow();return TX.filter(t=>!t.shanai&&!isFune(t)&&t.y===y&&t.m===m);}
 function curOf(id){const[y,m]=(document.getElementById(id).value||"0/0").split("/").map(Number);
-  return TX.filter(t=>!t.shanai&&t.y===y&&t.m===m);}
+  return TX.filter(t=>!t.shanai&&!isFune(t)&&t.y===y&&t.m===m);}
 
 function render(){
   const c=cur();
@@ -930,7 +936,7 @@ function render(){
   const tbb=document.querySelector("#tBuy tbody"); tbb.innerHTML="";
   Object.entries(aggB).sort((a,b)=>b[1].kg-a[1].kg).forEach(([k,v])=>{
     const tr=document.createElement("tr");
-    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
+    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td class="num">'+v.c+'</td><td class="num">'+dec1(v.q)
       +'</td><td class="num">'+kg1(v.kg)+'</td><td class="num">'
       +(v.k?yen(v.k):'<span class="badge b-ng">未設定</span>')+'</td><td class="num">'
       +(v.ng?'<span class="badge b-ng">'+v.ng+'件</span>':'—')
@@ -938,7 +944,7 @@ function render(){
     tbb.appendChild(tr);});
   const tb2=document.createElement("tr"); tb2.className="total";
   tb2.innerHTML='<td>合計</td><td class="num">'+buy.length+'</td><td class="num">'
-    +yen(buy.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+kg1(buy.reduce((s,t)=>s+(t.kg||0),0))
+    +dec1(buy.reduce((s,t)=>s+t.qty,0))+'</td><td class="num">'+kg1(buy.reduce((s,t)=>s+(t.kg||0),0))
     +'</td><td class="num">'+(bT?yen(bT):"—")+'</td><td></td><td></td>';
   tbb.appendChild(tb2);
   tbb.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>{
@@ -961,7 +967,7 @@ function drawTx(){
   const kind=document.getElementById("txKind").value, stf=document.getElementById("txStatus").value;
   const tb=document.querySelector("#tTx tbody"); tb.innerHTML=""; let n=0;
   TX.slice().sort((a,b)=>b.date-a.date).forEach(t=>{
-    if(N(t.kubun)===N("収穫舟数")) return;        // 収穫舟数は取引ではないので出さない
+    if(isFune(t)) return;                        // 収穫舟数は取引ではないので出さない
     if(kind!=="all"&&t.kind!==kind) return;
     if(stf==="ng"&&!t.why) return;
     if(stf!=="all"&&stf!=="ng"&&(t.why||t.status!==stf)) return;
@@ -972,7 +978,7 @@ function drawTx(){
       +(t.kind==="sale"?"受注":"発注")+'</span></td><td>'+esc(t.customer||"—")+'</td><td>'
       +esc(t.supplier||"—")+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+'</td><td>'+fmt(t.deliv)
       +(t.kind==="sale"&&t.delivSrc?'<br><span style="font-size:10px;color:#888">'+esc(t.delivSrc)+'</span>':"")
-      +'</td><td class="num">'+yen(t.qty)+(t.kind==="buy"&&t.kg?' <span style="color:#999">('+kg1(t.kg)+'kg)</span>':'')
+      +'</td><td class="num">'+(t.kind==="buy"?dec1(t.qty):yen(t.qty))+(t.kind==="buy"&&t.kg?' <span style="color:#999">('+kg1(t.kg)+'kg)</span>':'')
       +'</td><td class="num">'+(t.tanka!=null?yen(t.tanka):"—")+'</td>'
       +'<td>'+(t.soryoKbn?'<span class="badge '+(t.soryoKbn==="送料別"?"b-wait":"b-gray")+'">'+esc(t.soryoKbn)+'</span>':'—')+'</td>'
       +'<td>'+esc(t.carrier||"—")
@@ -1164,7 +1170,7 @@ function drawBuyList(){
       +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th>'
       +'<th class="num">買取金額</th></tr></thead><tbody>'
       +list.sort((a,b)=>a.date-b.date).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'+t.no+'</td><td>'
-        +esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
+        +esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
         +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
         +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
         +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
@@ -1234,7 +1240,7 @@ function showBuy(k){
     +'<table class="buy"><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
     +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th><th class="num">買取金額</th></tr></thead><tbody>'
     +rows.map(t=>'<tr><td>'+fmtY(t.date)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'+t.no
-      +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+yen(t.qty)
+      +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
       +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
       +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
       +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
@@ -1282,6 +1288,23 @@ function selKey(t,i,k,v){
   h+='<option value=""'+(cur?"":" selected")+'>（未選択）</option>';
   if(s.st==="none") h+='<option value="'+esc(cur)+'" selected>⚠ 未登録：'+esc(cur)+'</option>';
   if(s.st==="fuzzy") h+='<option value="'+esc(cur)+'" selected>'+esc(cur)+'（→ '+esc(s.key)+'）</option>';
+  keys.forEach(x=>{h+='<option value="'+esc(x)+'"'+(cur===x?' selected':'')+'>'+esc(x)+'</option>';});
+  return h+'</select>';
+}
+// 単価マスタ（販売）に載っている取引先の呼び名を集める
+function priceKeys(){
+  return [...new Set(CFG.price.filter(p=>p.kind==="販売")
+    .map(p=>String(p.t||"").trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"ja"));
+}
+// 単価マスタの取引先を選ぶ。単価マスタに無い名前は⚠を付けて残す（勝手に消さない）
+function selTori(t,i,k,v){
+  const keys=priceKeys(), cur=String(v==null?"":v).trim();
+  const ng=!!cur&&!keys.includes(cur)&&!priceHas(cur);
+  let h='<select class="cell'+(ng?" need":"")+'" data-t="'+t+'" data-i="'+i+'" data-k="'+k+'">';
+  h+='<option value=""'+(cur?"":" selected")+'>（未選択）</option>';
+  if(cur&&!keys.includes(cur))
+    h+='<option value="'+esc(cur)+'" selected>'+(ng?"⚠ 単価マスタに無い：":"")+esc(cur)+'</option>';
   keys.forEach(x=>{h+='<option value="'+esc(x)+'"'+(cur===x?' selected':'')+'>'+esc(x)+'</option>';});
   return h+'</select>';
 }
@@ -1440,7 +1463,7 @@ function drawMap(){
     else if(MAPF) tr.className="hit";
     tr.innerHTML='<td>'+cell("map",i,"sell",m.sell)+'</td><td>'+cell("map",i,"kubun",m.kubun)+'</td>'
       +'<td>'+selKey("map",i,"bill",m.bill||"")+'</td>'
-      +'<td>'+cell("map",i,"tori",m.tori,false,e.price)+'</td><td>'
+      +'<td>'+selTori("map",i,"tori",m.tori)+'</td><td>'
       +cell("map",i,"item",m.item)+'</td><td>'
       +selc("map",i,"sanchi",m.sanchi||"熊本",["熊本","広島"])+'</td><td>'+delBtn("map",i)+'</td>';
     tb.appendChild(tr);});
@@ -1482,10 +1505,10 @@ function bind(){
       if(t==="price"&&k==="kind") drawPrice();
       if(t==="partners"&&k==="key") drawMap();
       if(t==="map"){
-        if(el.tagName==="SELECT") drawMap();            // 請求先・産地は選んだ時点で作り直す
-        else{ if(k==="tori") el.classList.toggle("need",!priceHas(v)); drawMapBadges(); }
+        if(el.tagName==="SELECT") drawMap();            // 請求先・単価マスタの取引先・産地
+        else drawMapBadges();
       }
-      if(t==="price"&&(k==="t"||k==="kind")) drawMapBadges();
+      if(t==="price"&&(k==="t"||k==="kind")) drawMap();  // 選べる名前が変わるので作り直す
       if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
     });});
 }
