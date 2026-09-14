@@ -175,6 +175,10 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="menu">
     <button class="hbtn" id="btnBackup">データ保存・バックアップ ▾</button>
     <div class="menu-list" id="mBackup">
+      <div class="cap">まるごと（おすすめ）</div>
+      <button data-act="fullExport"><b>すべてを書き出す（JSON）</b></button>
+      <button data-act="fullImport">すべてを読み込んで戻す</button>
+      <div class="sep"></div>
       <div class="cap">設定（マスタ）</div>
       <button data-act="cfgExport">設定を書き出す（JSON）</button>
       <button data-act="cfgImport">設定を読み込む</button>
@@ -194,6 +198,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <span id="dlMsg"></span>
 </div>
 <input type="file" id="fileCfg" accept=".json" style="display:none">
+<input type="file" id="fileFull" accept=".json" style="display:none">
 <input type="file" id="fileData" accept=".json" style="display:none">
 
 <main>
@@ -403,13 +408,24 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     </div>
     <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。<br>
       <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数はデータ取込タブで確認できます。<br>
-      数量・kg・単価、差し引きなどの追加行、備考は<b>「✎ この買取書を修正」</b>から直せます。</p>
+      数量・kg・単価、差し引きなどの追加行、備考は<b>「✎ この買取書を修正」</b>から直せます。<br>
+      <b>「買取書を発行（PDF保存）」</b>を押すと、請求書と同じドライブの「買取書PDF」フォルダに保存し、その明細は<b>発行済み</b>になって直せなくなります。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。</p>
   </div>
   <div id="buyList" class="no-print"></div>
+  <div class="card no-print" id="buyIssuedCard">
+    <h2>この月の発行済買取書 <span class="cnt" id="buyIssuedCnt"></span></h2>
+    <div class="scroll" style="max-height:40vh">
+      <table id="tBuyIssued"><thead><tr>
+        <th>買取書No.</th><th>生産者</th><th>対象月</th><th>発行日</th>
+        <th class="num">買取額(税込)</th><th>発行者</th><th>PDF</th><th>状態</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
   <div class="doc" id="buydoc" style="display:none"></div>
   <div class="flex no-print" id="buyBack" style="display:none">
     <button class="btn sub" id="btnBuyBack">← 一覧に戻る</button>
-    <button class="btn grn" onclick="window.print()">印刷 / PDF保存</button>
+    <button class="btn grn" id="btnBuyIssue">この内容で発行（PDF保存）</button>
+    <button class="btn sub" onclick="window.print()">画面から印刷</button>
   </div>
 </section>
 
@@ -622,6 +638,15 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="flex"><input class="find" id="shanaiNew" placeholder="追加する名前">
       <button class="btn sub sm" id="btnShanai">＋ 追加</button></div>
   </div>
+  <div class="card">
+    <h2>バックアップ</h2>
+    <div class="note or" style="margin-top:0">データは<b>このパソコンのブラウザの中だけ</b>に保存されています。ブラウザの履歴削除・パソコンの故障で消えます。<br>
+      請求書・買取書を発行したとき、修正を入れたときは、画面右上の<b>「データ保存・バックアップ」→「すべてを書き出す」</b>で控えを取ってください。
+      設定・取引データ・修正・発行済みの請求書／納品書／買取書／見積書が<b>1つのファイル</b>に入ります。</div>
+    <div class="flex"><button class="btn" id="btnFullExport">すべてを書き出す</button>
+      <button class="btn sub" id="btnFullImport">すべてを読み込んで戻す</button>
+      <span id="backupInfo" style="font-size:12px;color:#666"></span></div>
+  </div>
   </section>
 
 </main>
@@ -825,13 +850,15 @@ const OPS_KEY="krs_ops";
 // adj  ：取引ごとの手修正（数量・単価・品名・送料・納品日・kg・備考）
 // extra：請求書／買取書ごとの追加行（値引き・調整など） キー＝"inv|請求先|YYYY-MM" / "buy|生産者|YYYY-MM"
 // head ：請求書／買取書ごとの件名・備考
-let OPS={st:{},qty:{},doc:{},invLines:{},invoices:[],quotes:[],adj:{},extra:{},head:{}};
+let OPS={st:{},qty:{},doc:{},invLines:{},invoices:[],quotes:[],adj:{},extra:{},head:{},buyDocs:[],buyLines:{}};
 try{const o=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
   OPS={st:o.st||{},qty:o.qty||{},doc:o.doc||{},
        invLines:o.invLines||{},invoices:o.invoices||[],quotes:o.quotes||[],
-       adj:o.adj||{},extra:o.extra||{},head:o.head||{}};}catch(e){}
+       adj:o.adj||{},extra:o.extra||{},head:o.head||{},
+       buyDocs:o.buyDocs||[],buyLines:o.buyLines||{}};}catch(e){}
 if(!OPS.quotes) OPS.quotes=[];
-["adj","extra","head"].forEach(k=>{ if(!OPS[k]) OPS[k]={}; });
+["adj","extra","head","buyLines"].forEach(k=>{ if(!OPS[k]) OPS[k]={}; });
+if(!OPS.buyDocs) OPS.buyDocs=[];
 const docKey=(type,who,y,m)=>type+"|"+who+"|"+y+"-"+p2(m);
 const numOr=(v,d)=>(v==null||v===""||isNaN(Number(v)))?d:Number(v);
 function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){}}
@@ -1138,6 +1165,10 @@ const edBadge=t=>t&&t.edited?' <span class="badge ed" title="手で修正した�
 // 取引1件の修正（受注・発注どちらも）
 function openTxEditor(no, after){
   const t=TX.find(x=>x.no===no); if(!t) return;
+  if(t.kind==="buy"&&OPS.buyLines[no]){
+    alert("この取引は買取書を発行済みのため修正できません。\n\n直す場合は、買取タブの「この月の発行済買取書」で\n該当の買取書を取り消してから修正し、もう一度発行してください。");
+    return;
+  }
   if(t.kind==="sale"&&OPS.invLines[no]){
     alert("この取引は請求済みのため修正できません。\n\n直す場合は、請求タブの「この月の発行済請求書」で\n該当の請求書を取り消してから修正し、もう一度発行してください。");
     return;
@@ -1347,14 +1378,24 @@ function buyExtraRowsHtml(ex){
     +' <span class="badge ed">追加</span></td><td class="num">'+dec1(e.qty)+esc(e.unit)+'</td><td></td>'
     +'<td class="num">¥'+yen(e.tanka)+'</td><td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
 }
+// 買取書：まだ発行していない明細
+function buyOpenRows(k,ymSel){
+  return curOf(ymSel||"buyYm").filter(t=>t.kind==="buy"&&t.supplier===k&&!OPS.buyLines[t.no]).sort((a,b)=>a.date-b.date);
+}
+function buyTotals(rows,ex){
+  const sub=rows.reduce((s,t)=>s+(t.buy||0),0)+(ex||[]).reduce((a,e)=>a+e.amount,0);
+  const tax=Math.floor(sub*TAX);
+  return {sub, tax, total:sub+tax};
+}
 // 買取書の修正
 function openBuyEditor(k){
   const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
   const key=docKey("buy",k,y,m);
-  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k).sort((a,b)=>a.date-b.date);
-  if(!rows.length){ alert("この月に、この生産者の買取明細がありません。"); return; }
+  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k&&!OPS.buyLines[t.no]).sort((a,b)=>a.date-b.date);
+  if(!rows.length){ alert("この月に、まだ買取書を発行していない明細がありません。\n発行済みの買取書を直すときは「この月の発行済買取書」の「取消して修正」を使います。"); return; }
   const hd=OPS.head[key]||{}, ex=(OPS.extra[key]||[]).map(e=>Object.assign({},e));
-  let h='<h3>買取書の修正　'+esc(k)+' 様<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span></h3>'
+  let h='<h3>買取書の修正　'+esc(k)+' 様<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span>'
+    +(hd.fromNo?'<span class="badge b-wait">'+esc(hd.fromNo)+' の出し直し</span>':'')+'</h3>'
     +'<div class="sub">空欄にした項目はマスタ・電子黒板の値に戻ります。<b>数量とkgを0にすると、その明細の金額は0になります</b>。<br>'
     +'差し引きは「追加する行」に<b>マイナスの単価</b>で入れます。</div>'
     +'<div class="scroll" style="max-height:42vh"><table><thead><tr>'
@@ -1435,7 +1476,7 @@ function openBuyEditor(k){
       else delete OPS.adj[no];
     });
     const mo=md.querySelector("#by_memo").value.trim();
-    const nh=Object.assign({},hd); delete nh.memo; if(mo) nh.memo=mo;
+    const nh=Object.assign({},hd); delete nh.memo; if(mo) nh.memo=mo;   // fromNo はそのまま残す
     if(Object.keys(nh).length) OPS.head[key]=nh; else delete OPS.head[key];
     if(exOut.length) OPS.extra[key]=exOut; else delete OPS.extra[key];
     saveOps(); closeModal(); build();
@@ -1600,7 +1641,7 @@ function drawInvList(){
   drawIssuedInvoices();
 }
 function drawBuyList(){
-  const rows=curOf("buyYm").filter(t=>t.kind==="buy");
+  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&!OPS.buyLines[t.no]);
   const[y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
   document.getElementById("buyMonth").textContent="("+y+"-"+p2(m)+"分)";
   const agg={};
@@ -1615,20 +1656,22 @@ function drawBuyList(){
    .forEach(([k,list])=>{
     if(only!=="all"&&only!==k) return;
     const ex=buyExtras(k,y,m), hd=OPS.head[docKey("buy",k,y,m)]||{};
-    const sub=list.reduce((s,t)=>s+(t.buy||0),0)+ex.reduce((a,e)=>a+e.amount,0);
-    const miss=list.filter(t=>!t.buy).length;
+    const bt=buyTotals(list,ex), sub=bt.sub;
+    const miss=list.filter(t=>t.tanka==null).length;
     const d=document.createElement("div"); d.className="prev";
     d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(k)+'　様 - '+list.length+'明細</div>'
       +'<div class="cond">[買取基準: 記録日 ／ 月末締め ／ 期間: '+y+'-'+p2(m)+'-01〜'+y+'-'+p2(m)+'-'
       +new Date(y,m,0).getDate()+']'+(miss?' <span class="badge b-ng">単価未設定 '+miss+'件</span>':'')
       +(ex.length?' <span class="badge ed">追加行 '+ex.length+'</span>':'')
       +(hd.memo?' <span class="badge ed">備考あり</span>':'')
-      +(list.some(t=>t.edited)?' <span class="badge ed">修正あり '+list.filter(t=>t.edited).length+'件</span>':'')+'</div></div>'
+      +(list.some(t=>t.edited)?' <span class="badge ed">修正あり '+list.filter(t=>t.edited).length+'件</span>':'')
+      +(hd.fromNo?' <span class="badge b-wait">'+esc(hd.fromNo)+' の出し直し</span>':'')+'</div></div>'
       +'<div class="sp"></div><div class="amt">税抜: <b>¥'+yen(sub)+'</b>　'
-      +'<span style="font-size:11px">消費税: ¥'+yen(sub*TAX)+'</span>　税込: <span class="big">¥'
-      +yen(sub*(1+TAX))+'</span></div>'
+      +'<span style="font-size:11px">消費税: ¥'+yen(bt.tax)+'</span>　税込: <span class="big">¥'
+      +yen(bt.total)+'</span></div>'
       +'<button class="btn sub" data-buyedit="'+esc(k)+'">✎ この買取書を修正</button>'
-      +'<button class="btn grn" data-doc="'+esc(k)+'">買取書PDF発行</button></div>'
+      +'<button class="btn sub" data-doc="'+esc(k)+'">画面で確認する</button>'
+      +'<button class="btn grn" data-pdf="buy" data-key="'+esc(k)+'">買取書を発行（PDF保存）</button></div>'
       +'<table><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
       +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th>'
       +'<th class="num">買取金額</th></tr></thead><tbody>'
@@ -1641,8 +1684,9 @@ function drawBuyList(){
       +'</tbody></table>';
     box.appendChild(d);
   });
-  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に買取対象がありません。</p></div>';
+  if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に、まだ買取書を発行していない明細はありません。（下の「この月の発行済買取書」をご覧ください）</p></div>';
   box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showBuy(b.dataset.doc));
+  drawIssuedBuyDocs();
   box.querySelectorAll("[data-buyedit]").forEach(b=>b.onclick=()=>openBuyEditor(b.dataset.buyedit));
 }
 function showInv(k){
@@ -1690,19 +1734,22 @@ function showInv(k){
   document.getElementById("invBack").style.display="";
   window.scrollTo(0,0);
 }
+let BUYSHOWN="";
 function showBuy(k){
+  BUYSHOWN=k;
   const[y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
-  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k).sort((a,b)=>a.date-b.date);
+  // 発行するときと同じ明細（未発行だけ）を出す
+  const rows=buyOpenRows(k);
   const ex=buyExtras(k,y,m), hd=OPS.head[docKey("buy",k,y,m)]||{};
-  const priced=rows.filter(t=>t.buy), sub=priced.reduce((s,t)=>s+t.buy,0)+ex.reduce((a,e)=>a+e.amount,0);
-  const miss=rows.length-priced.length;
+  const bt=buyTotals(rows,ex), sub=bt.sub;
+  const miss=rows.filter(t=>t.tanka==null).length;
   document.getElementById("buydoc").innerHTML=
     '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
     +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">発行日：'
     +y+'年'+m+'月末日<br>対象期間：'+y+'-'+p2(m)+'-01〜'+y+'-'+p2(m)+'-'+new Date(y,m,0).getDate()
     +'<br>買取基準：記録日（月末締め）</div></div>'
     +'<div class="doc-title">買取書</div><div class="doc-to">'+esc(k)+'　様</div>'
-    +'<div><div class="doc-total b"><div class="l">お買取金額（税込）</div><div class="v">¥ '+yen(sub*(1+TAX))+'</div></div></div>'
+    +'<div><div class="doc-total b"><div class="l">お買取金額（税込）</div><div class="v">¥ '+yen(bt.total)+'</div></div></div>'
     +(miss?'<div class="note red">'+miss+' 件は買取単価が未設定のため金額に含まれていません。「単価マスタ」で種別＝仕入の行を確認してください。</div>':'')
     +'<p style="font-size:12.5px;color:#666">下記の通りお買い取りいたしました。</p>'
     +'<table class="buy"><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
@@ -1714,8 +1761,8 @@ function showBuy(k){
       +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
     +buyExtraRowsHtml(ex)
     +'</tbody></table><div class="doc-foot"><table class="buy"><tr><td>小計（税抜）</td><td class="num">¥'
-    +yen(sub)+'</td></tr><tr><td>消費税（8%）</td><td class="num">¥'+yen(sub*TAX)+'</td></tr>'
-    +'<tr class="total"><td>合計（税込）</td><td class="num">¥'+yen(sub*(1+TAX))+'</td></tr></table></div>'
+    +yen(sub)+'</td></tr><tr><td>消費税（8%）</td><td class="num">¥'+yen(bt.tax)+'</td></tr>'
+    +'<tr class="total"><td>合計（税込）</td><td class="num">¥'+yen(bt.total)+'</td></tr></table></div>'
     +(hd.memo?'<div class="note" style="margin-top:14px">'+esc(hd.memo).replace(/\n/g,"<br>")+'</div>':'')
     +'<div class="bank">この買取書の内容は、後日ご確認をお願いいたします。'
     +(CO().invoiceNo?'<br>当社 登録番号：'+esc(CO().invoiceNo):'')
@@ -1729,6 +1776,7 @@ document.getElementById("btnInvBack").onclick=()=>{
   document.getElementById("invList").style.display="";
   document.getElementById("inv").style.display="none";
   document.getElementById("invBack").style.display="none";};
+document.getElementById("btnBuyIssue").onclick=()=>{ if(BUYSHOWN) issueBuyDoc(BUYSHOWN); };
 document.getElementById("btnBuyBack").onclick=()=>{
   document.getElementById("buyList").style.display="";
   document.getElementById("buydoc").style.display="none";
@@ -2554,6 +2602,129 @@ async function issueDeliveryNote(txNo){
     dlMsg("PDFを保存できませんでした："+e.message,"ng");
   }
 }
+// 買取書の番号
+function nextBuyNo(y,m){
+  const pre="BUY-"+y+p2(m)+"-";
+  let n=0;
+  OPS.buyDocs.forEach(b=>{ if(b.docNo&&b.docNo.indexOf(pre)===0){
+    const v=parseInt(b.docNo.slice(pre.length),10); if(v>n) n=v; }});
+  return pre+String(n+1).padStart(3,"0");
+}
+// 買取書HTML（PDF用）
+function buildBuyHtml(doc){
+  const rows=doc.lines.map(l=>'<tr><td>'+esc2(l.date)+'</td><td>'+esc2(l.kubun)+'</td>'
+    +'<td class="n">'+esc2(l.cap?l.cap+"kg":"")+'</td><td class="n">'+dec1(l.qty)+'</td>'
+    +'<td class="n">'+kg1(l.kg)+'</td><td class="n">'+yen(l.tanka)+'<span style="font-size:7.5pt"> '+esc2(l.kunit)+'</span></td>'
+    +'<td class="n">'+yen(l.amount)+'</td></tr>').join("")
+    +(doc.extraLines||[]).map(e=>'<tr><td></td><td colspan="2">'+esc2(e.tekiyo)+'</td><td class="n">'+dec1(e.qty)+'</td>'
+    +'<td>'+esc2(e.unit)+'</td><td class="n">'+yen(e.tanka)+'</td><td class="n">'+yen(Math.round(e.qty*e.tanka))+'</td></tr>').join("");
+  const r=regNoOf();
+  return docHead("買取書 "+doc.docNo)
+    +'<div class="ttl">買 取 書</div><div class="top"><div class="to">'
+    +'<span class="nm">'+esc2(doc.supplier)+'　様</span>'
+    +'<div class="meta">買取書番号：'+esc2(doc.docNo)+'<br>発行日：'+esc2(doc.issueDate)+'<br>'
+    +'対象期間：'+esc2(doc.period)+'<br>買取基準：記録日（月末締め）</div></div>'+meBlock()+'</div>'
+    +'<div class="box"><div class="lbl">お買取金額（税込）</div>'
+    +'<div class="amt">￥ '+yen(doc.total)+' －</div></div>'
+    +'<h2>内訳</h2><table><thead><tr><th style="width:16mm">記録日</th><th>区分</th><th class="n">サイズ</th>'
+    +'<th class="n">数量c/s</th><th class="n">数量kg</th><th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div class="sum"><table><tr><td>小計（8%対象）</td><td class="n">'+yen(doc.sub)+' 円</td></tr>'
+    +'<tr><td>消費税（8%）</td><td class="n">'+yen(doc.tax)+' 円</td></tr>'
+    +'<tr class="t"><td>合計</td><td class="n">'+yen(doc.total)+' 円</td></tr></table></div>'
+    +'<div class="note">'+(doc.memo?esc2(doc.memo).replace(/\n/g,"<br>")+'<br>':'')
+    +'この買取書の内容は、後日ご確認をお願いいたします。'
+    +(r?'':'<br>※ 仕入明細書として使う場合、生産者様の登録番号（インボイス）の記載とご確認が要件になります。')
+    +'</div></body></html>';
+}
+// 買取書を発行する（PDF保存 → 成功したら発行済みにする）
+async function issueBuyDoc(k){
+  const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
+  // 発行の直前に、いまの状態から明細を作り直す
+  const rows=buyOpenRows(k);
+  if(!rows.length){ alert("発行できる明細がありません。\n（すでに全て発行済みの可能性があります）"); return; }
+  const miss=rows.filter(t=>t.tanka==null);
+  if(miss.length){
+    alert("買取単価が入っていない明細が "+miss.length+" 件あるため、発行できません。\n\n"
+      +"・単価マスタの種別＝仕入に単価を入れる\n・または「✎ この買取書を修正」でその明細に単価を入れる\n\nのどちらかをしてから発行してください。\n\n"
+      +miss.slice(0,5).map(t=>t.no+"　"+t.kubun+" "+(t.cap||"")+"kg").join("\n")+(miss.length>5?"\n…ほか":""));
+    return;
+  }
+  const key=docKey("buy",k,y,m), ex=buyExtras(k,y,m), hd=OPS.head[key]||{};
+  const bt=buyTotals(rows,ex);
+  const doc={ id:"bd"+Date.now(), docNo:nextBuyNo(y,m), supplier:k, targetMonth:y+"-"+p2(m),
+    issueDate:ymd(y,m,lastDayOf(y,m)), period:ymd(y,m,1)+"〜"+ymd(y,m,lastDayOf(y,m)),
+    lines:rows.map(t=>({txNo:t.no, date:(t.date.getMonth()+1)+"/"+t.date.getDate(), kubun:t.kubun, cap:t.cap||null,
+      qty:t.qty, kg:t.kg, tanka:t.tanka, kunit:t.kunit, amount:t.buy||0})),
+    extraLines:ex.map(e=>({tekiyo:e.tekiyo,qty:e.qty,unit:e.unit,tanka:e.tanka})),
+    memo:hd.memo||"", headSaved:{memo:hd.memo||""}, originalDocNo:hd.fromNo||"",
+    sub:bt.sub, tax:bt.tax, total:bt.total,
+    issuedAt:nowStr(), issuedBy:CFG.userName||"", status:"issued", pdfUrl:"", pdfName:"" };
+  dlMsg("買取書PDFを作成しています…","wait");
+  let res;
+  try{
+    res=await gasSavePdf("inv", k+"_"+doc.targetMonth+"_"+doc.docNo, doc.targetMonth, buildBuyHtml(doc), "買取書PDF");
+  }catch(e){
+    dlMsg("PDFを保存できませんでした："+e.message+"（発行済みにはしていません）","ng");
+    return;
+  }
+  // PDFが保存できたときだけ発行済みにする
+  doc.pdfUrl=res.url||""; doc.pdfName=res.name||"";
+  OPS.buyDocs.push(doc);
+  rows.forEach(t=>{ OPS.buyLines[t.no]=doc.id; });
+  delete OPS.extra[key]; delete OPS.head[key];          // 次の買取書に二重に載らないよう消す
+  saveOps(); build();
+  document.getElementById("buydoc").style.display="none";
+  document.getElementById("buyBack").style.display="none";
+  document.getElementById("buyList").style.display="";
+  drawBuyList();
+  const c=document.getElementById("buyIssuedCard"); if(c) c.scrollIntoView({behavior:"smooth",block:"start"});
+  dlMsg("買取書を発行しました："+doc.docNo+"（ドライブに保存済み）","ok");
+}
+function drawIssuedBuyDocs(){
+  const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
+  const ym=y+"-"+p2(m);
+  const list=OPS.buyDocs.filter(b=>b.targetMonth===ym).sort((a,b)=>a.docNo<b.docNo?1:-1);
+  const tb=document.querySelector("#tBuyIssued tbody"); if(!tb) return; tb.innerHTML="";
+  list.forEach(b=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML='<td style="font-family:Consolas,monospace">'+esc(b.docNo)
+      +(b.originalDocNo?'<br><span style="font-size:10px;color:#888;font-family:inherit">'+esc(b.originalDocNo)+' の出し直し</span>':'')+'</td>'
+      +'<td>'+esc(b.supplier)+'</td><td>'+esc(b.targetMonth)+'</td><td>'+esc(b.issueDate)+'</td>'
+      +'<td class="num">¥'+yen(b.total)+'</td><td>'+esc(b.issuedBy||"—")+'</td>'
+      +'<td>'+(b.pdfUrl?'<a href="'+esc(b.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
+      +'<td>'+(b.status==="cancelled"?'<span class="badge b-ng">取消済</span>':'<span class="badge b-ok">発行済</span>')+'</td>'
+      +'<td style="white-space:nowrap">'+(b.status==="cancelled"?'':'<button class="edit" data-fixbuy="'+esc(b.id)+'">取消して修正</button> '
+        +'<button class="del" data-cancelbuy="'+esc(b.id)+'">取消</button>')+'</td>';
+    tb.appendChild(tr);
+  });
+  document.getElementById("buyIssuedCnt").textContent="("+list.length+"件)";
+  tb.querySelectorAll("[data-cancelbuy]").forEach(b=>b.onclick=()=>cancelBuyDoc(b.dataset.cancelbuy));
+  tb.querySelectorAll("[data-fixbuy]").forEach(b=>b.onclick=()=>{
+    const d=OPS.buyDocs.find(x=>x.id===b.dataset.fixbuy); if(!d) return;
+    if(!cancelBuyDoc(d.id)) return;
+    const [yy,mm]=d.targetMonth.split("-").map(Number);
+    document.getElementById("buyYm").value=yy+"/"+mm; drawBuyList();
+    openBuyEditor(d.supplier);
+  });
+}
+// 買取書の取消（明細を未発行に戻す。PDFと記録は証憑として残す）
+function cancelBuyDoc(id){
+  const d=OPS.buyDocs.find(b=>b.id===id); if(!d||d.status==="cancelled") return false;
+  if(!confirm("買取書 "+d.docNo+" を取り消します。\n"
+    +"・この買取書に含まれる明細は「未発行」に戻ります\n"
+    +"・買取書の記録とPDFは証憑として残します\n\nよろしいですか？")) return false;
+  const reason=prompt("取消の理由（任意）","")||"";
+  d.status="cancelled"; d.cancelledAt=nowStr(); d.cancelReason=reason; d.cancelledBy=CFG.userName||"";
+  Object.keys(OPS.buyLines).forEach(k=>{ if(OPS.buyLines[k]===id) delete OPS.buyLines[k]; });
+  const ek="buy|"+d.supplier+"|"+d.targetMonth;
+  if((d.extraLines||[]).length&&!(OPS.extra[ek]||[]).length) OPS.extra[ek]=d.extraLines.map(e=>Object.assign({},e));
+  const hs=Object.assign({},OPS.head[ek]||{});
+  if(d.headSaved&&d.headSaved.memo&&!hs.memo) hs.memo=d.headSaved.memo;
+  hs.fromNo=d.docNo; OPS.head[ek]=hs;
+  saveOps(); build(); drawBuyList();
+  dlMsg("買取書 "+d.docNo+" を取り消しました","wait");
+  return true;
+}
 // 発行済請求書の一覧
 function drawIssuedInvoices(){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
@@ -2624,6 +2795,7 @@ document.addEventListener("click",e=>{
     document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
     if(p.dataset.pdf==="inv") issueInvoice(p.dataset.key);
     else if(p.dataset.pdf==="qt") issueQuote();
+    else if(p.dataset.pdf==="buy") issueBuyDoc(p.dataset.key);
     else issueDeliveryNote(p.dataset.key);
     return;
   }
@@ -2647,8 +2819,10 @@ document.getElementById("mBackup").addEventListener("click",e=>{
   const a=b.dataset.act;
   if(a==="cfgExport") document.getElementById("btnExport").click();
   if(a==="cfgImport") document.getElementById("btnImport").click();
+  if(a==="fullExport") fullExport();
+  if(a==="fullImport") document.getElementById("fileFull").click();
   if(a==="dataExport"){
-    const blob=new Blob([JSON.stringify({sale:SRC,buy:SRCB},null,2)],{type:"application/json"});
+    const blob=new Blob([JSON.stringify({sale:SRC,buy:SRCB,ops:OPS},null,2)],{type:"application/json"});
     const el=document.createElement("a"),d=new Date();
     el.href=URL.createObjectURL(blob);
     el.download="取引データ_"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+".json";
@@ -2656,11 +2830,86 @@ document.getElementById("mBackup").addEventListener("click",e=>{
   if(a==="dataImport") document.getElementById("fileData").click();
   document.getElementById("mBackup").classList.remove("on");
 });
+// ===== まるごとバックアップ =====
+const FULL_KIND="krs_full_backup";
+function opsSummary(o){
+  o=o||{};
+  const inv=(o.invoices||[]), bd=(o.buyDocs||[]);
+  return "・発行済み請求書 "+inv.filter(i=>i.status!=="cancelled").length+"件（取消 "+inv.filter(i=>i.status==="cancelled").length+"件）\n"
+    +"・発行済み買取書 "+bd.filter(b=>b.status!=="cancelled").length+"件（取消 "+bd.filter(b=>b.status==="cancelled").length+"件）\n"
+    +"・発行済み納品書 "+Object.keys(o.doc||{}).length+"件／見積書 "+(o.quotes||[]).length+"件\n"
+    +"・手で修正した取引 "+Object.keys(o.adj||{}).length+"件／追加行のある帳票 "+Object.keys(o.extra||{}).length+"件";
+}
+function fullData(){
+  return {kind:FULL_KIND, version:1, exportedAt:nowStr(), exportedBy:CFG.userName||"",
+    cfg:CFG, sale:SRC, buy:SRCB, ops:OPS, quote:QT};
+}
+function downloadJson(obj,name){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const el=document.createElement("a");
+  el.href=URL.createObjectURL(blob); el.download=name; el.click();
+  setTimeout(()=>URL.revokeObjectURL(el.href),1000);
+}
+const stamp=()=>{const d=new Date();
+  return d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"_"+p2(d.getHours())+p2(d.getMinutes());};
+let LAST_FULL="";
+function fullExport(){
+  downloadJson(fullData(),"仕入販売管理_まるごと_"+stamp()+".json");
+  LAST_FULL=nowStr();
+  try{localStorage.setItem("krs_last_full_backup",LAST_FULL);}catch(e){}
+  drawBackupInfo();
+  dlMsg("すべてを書き出しました（設定・取引データ・修正・発行記録）","ok");
+}
+// 読み込んだ ops を、足りない項目を補った形にそろえる
+function normOps(o){
+  o=o||{};
+  return {st:o.st||{},qty:o.qty||{},doc:o.doc||{},invLines:o.invLines||{},invoices:o.invoices||[],
+    quotes:o.quotes||[],adj:o.adj||{},extra:o.extra||{},head:o.head||{},
+    buyDocs:o.buyDocs||[],buyLines:o.buyLines||{}};
+}
+document.getElementById("fileFull").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{
+    let o;
+    try{ o=JSON.parse(rd.result); }catch(err){ dlMsg("読み込めませんでした（JSONではありません）","ng"); return; }
+    if(!o||o.kind!==FULL_KIND||!o.cfg||!o.ops){
+      alert("このファイルは「すべてを書き出す」で作ったファイルではありません。\n設定だけ・取引データだけのファイルは、それぞれの「読み込む」から戻してください。");
+      return;
+    }
+    if(!confirm("バックアップ（"+(o.exportedAt||"日時不明")+" 書き出し）で、いまの内容を置き換えます。\n\n"
+      +"【ファイルの中身】\n"+opsSummary(o.ops)+"\n・受注 "+(o.sale||[]).length+"行／生産者記録 "+(o.buy||[]).length+"行\n\n"
+      +"【いまの内容】\n"+opsSummary(OPS)+"\n\n"
+      +"置き換える前に、いまの内容を自動で書き出しておきます。よろしいですか？")) return;
+    downloadJson(fullData(),"仕入販売管理_読込前の控え_"+stamp()+".json");
+    CFG=Object.assign(defaultCfg(),o.cfg);
+    OPS=normOps(o.ops);
+    if(o.quote&&o.quote.lines) QT=o.quote;
+    try{
+      localStorage.setItem(ROW_KEY,JSON.stringify(o.sale||[]));
+      localStorage.setItem(ROWB_KEY,JSON.stringify(o.buy||[]));
+    }catch(x){}
+    saveCfg("バックアップから戻しました"); saveOps(); qtSave();
+    drawAll(); build(o.sale||[],o.buy||[]);
+    dlMsg("バックアップから戻しました（"+(o.exportedAt||"")+" 時点）","ok");
+  };
+  rd.readAsText(f); e.target.value="";
+};
+function drawBackupInfo(){
+  const el=document.getElementById("backupInfo"); if(!el) return;
+  let last=LAST_FULL; try{ last=localStorage.getItem("krs_last_full_backup")||LAST_FULL; }catch(e){}
+  const n=OPS.invoices.length+OPS.buyDocs.length+Object.keys(OPS.adj).length+Object.keys(OPS.extra).length;
+  el.innerHTML=last
+    ?'最後に「すべてを書き出す」をした日時：<b>'+esc(last)+'</b>'
+    :(n?'<span style="color:#C62828"><b>まだ一度も「すべてを書き出す」をしていません。</b></span>':'まだ一度も「すべてを書き出す」をしていません。');
+}
 document.getElementById("fileData").onchange=e=>{
   const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
   rd.onload=()=>{try{const o=JSON.parse(rd.result);
     if(o.sale) {try{localStorage.setItem(ROW_KEY,JSON.stringify(o.sale));}catch(x){}}
     if(o.buy) {try{localStorage.setItem(ROWB_KEY,JSON.stringify(o.buy));}catch(x){}}
+    if(o.ops&&confirm("このファイルには、修正内容と発行記録も入っています。\n\n"+opsSummary(o.ops)
+      +"\n\nこれも戻しますか？（「キャンセル」なら取引データだけ読み込み、いまの発行記録はそのまま）")){
+      OPS=normOps(o.ops); saveOps(); }
     build(o.sale||null,o.buy||null); dlMsg("取引データを読み込みました");}
     catch(err){dlMsg("読み込めませんでした","ng");}};
   rd.readAsText(f); e.target.value="";};
@@ -2687,6 +2936,8 @@ TABS.forEach(([id,label],i)=>{
     document.getElementById("ymBox").style.display=(id==="dashboard")?"":"none";};
   nav.appendChild(b);});
 document.getElementById("ym").onchange=render;
+document.getElementById("btnFullExport").onclick=fullExport;
+document.getElementById("btnFullImport").onclick=()=>document.getElementById("fileFull").click();
 document.getElementById("kpiNg").onclick=showNg;
 document.getElementById("ngClose").onclick=()=>{ document.getElementById("ngCard").style.display="none"; };
 document.getElementById("invYm").onchange=drawInvList;
@@ -2712,7 +2963,7 @@ drawAll(); build(iA,iB);
   window.build=function(a,b){_b(a,b);
     const h=(CFG.price&&CFG.price.length)||(CFG.partners&&CFG.partners.length)||SRC.length||SRCB.length;
     fr.style.display=h?"none":"";};
-})();
+})(); drawBackupInfo();
 </script>
 </body>
 </html>
