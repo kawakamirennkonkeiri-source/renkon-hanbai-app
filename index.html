@@ -1916,6 +1916,20 @@ document.addEventListener("change",e=>{
   CFG.freight[i].ruleVal=sel.join(",");
   saveCfg("着曜日を変更しました"); build();
 });
+// 運送会社の候補：画面の基本リスト（#carriers）＋運賃マスタで使っている名前
+function carrierNames(){
+  const base=[...document.querySelectorAll("#carriers option")].map(o=>o.value.trim()).filter(Boolean);
+  const used=CFG.freight.map(f=>String(f.carrier||"").trim()).filter(x=>x&&!base.includes(x));
+  return base.concat([...new Set(used)].sort((a,b)=>a.localeCompare(b,"ja")));
+}
+function selCarrier(i,f){
+  const cur=String(f.carrier||"").trim(), names=carrierNames();
+  let h='<select class="cell" data-t="freight" data-i="'+i+'" data-k="carrier">';
+  h+='<option value=""'+(cur?"":" selected")+'>（選ぶ）</option>';
+  names.forEach(x=>{h+='<option value="'+esc(x)+'"'+(cur===x?" selected":"")+'>'+esc(x)+'</option>';});
+  h+='<option value="__new__">＋ 新しい運送会社を入れる…</option>';
+  return h+'</select>';
+}
 function drawFreight(){
   const q=N(document.getElementById("fFre").value), ft=document.getElementById("ffTori").value;
   const tb=document.querySelector("#tFre tbody"); tb.innerHTML=""; let sh=0;
@@ -1926,7 +1940,7 @@ function drawFreight(){
     const need=(f.tanka==null||f.tanka==="");
     tr.innerHTML='<td>'+cell("freight",i,"t",f.t)+'</td><td>'+cell("freight",i,"item",f.item)+'</td>'
       +'<td>'+selc("freight",i,"hai",f.hai||"自社",["自社","取引先"])+'</td>'
-      +'<td><input class="cell" list="carriers" data-t="freight" data-i="'+i+'" data-k="carrier" value="'+esc(f.carrier||"")+'"></td>'
+      +'<td>'+selCarrier(i,f)+'</td>'
       +'<td>'+cell("freight",i,"tanka",f.tanka,true,need)+'</td>'
       +'<td>'+selc("freight",i,"unit",f.unit,["円/ケース","円/kg","円/件"])+'</td>'
       +'<td style="white-space:nowrap">'+selc("freight",i,"cond",f.cond,["条件なし","以上","未満"])
@@ -2040,10 +2054,15 @@ function bind(){
         if(nm===null||!nm.trim()){ drawPrice(); return; }
         v=nm.trim();
       }
+      if(t==="freight"&&k==="carrier"&&v==="__new__"){
+        const nm=prompt("運送会社の名前を入れてください。","");
+        if(nm===null||!nm.trim()){ drawFreight(); return; }
+        v=nm.trim();
+      }
       if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))){
         v=v.trim()===""?null:parseFloat(v.replace(/,/g,"")); if(v!==null&&isNaN(v)) return;}
       CFG[t][i][k]=v; saveCfg(); build();
-      if(t==="freight"&&k==="ruleType") drawFreight();
+      if(t==="freight"&&(k==="ruleType"||k==="carrier")) drawFreight();   // 新しい運送会社を他の行の候補にも出す
       if(t==="price"&&(k==="kind"||k==="t")) drawPrice();
       if(t==="partners"&&k==="key") drawMap();
       if(t==="map"){
