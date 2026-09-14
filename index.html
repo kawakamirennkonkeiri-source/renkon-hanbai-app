@@ -108,6 +108,25 @@ tr.hit td{background:#FFF9E6}
 select.cell{width:100%;padding:3px 5px;border:1px solid #D5D5D8;border-radius:3px;
   font-size:12.5px;font-family:inherit;background:#fff}
 tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{background:transparent}}
+.kpi.click{cursor:pointer}.kpi.click:hover{border-color:var(--or);box-shadow:0 0 0 1px var(--or)}
+/* 編集ダイアログ */
+.mdl-bg{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:100;display:flex;
+  align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+.mdl{background:#fff;border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.25);width:min(980px,100%);
+  padding:18px 20px}
+.mdl h3{font-size:16px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mdl .sub{font-size:12px;color:#777;margin-bottom:12px;line-height:1.7}
+.mdl .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px}
+.mdl .grid label{display:flex;flex-direction:column;gap:3px;font-size:12px}
+.mdl .grid input,.mdl .grid select,.mdl textarea{padding:6px 8px;border:1px solid #D5D5D8;border-radius:4px;
+  font-family:inherit;font-size:13px}
+.mdl .was{font-size:10.5px;color:#999}
+.mdl .foot{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.mdl .foot .sp{flex:1}
+.mdl table input,.mdl table select{width:100%;padding:4px 6px;border:1px solid #D5D5D8;border-radius:3px;
+  font-family:inherit;font-size:12.5px}
+.mdl table input.n{text-align:right}
+.badge.ed{background:#EDE7F6;color:#5E35B1}
 /* 請求プレビューカード */
 .prev{border:1px solid #E3E3E5;border-radius:5px;margin-bottom:14px;background:#fff}
 .prev-h{padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -210,9 +229,16 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="kpi buy"><div class="l">発注・買取合計（税抜）</div><div class="v" id="kBuy">-</div></div>
     <div class="kpi gp"><div class="l">差引（受注−買取）</div><div class="v" id="kGp">-</div></div>
     <div class="kpi"><div class="l">取引件数</div><div class="v" id="kCnt">-</div></div>
-    <div class="kpi"><div class="l">要確認</div><div class="v" id="kNg">-</div></div>
+    <div class="kpi click" id="kpiNg" title="押すと、要確認の一覧を出します"><div class="l">要確認 <span style="font-size:10.5px;color:var(--or)">▸ 押すと一覧</span></div><div class="v" id="kNg">-</div></div>
   </div>
   <div class="card"><h2>ステータス</h2><div class="flex" id="statusBox"></div></div>
+  <div class="card" id="ngCard" style="display:none">
+    <h2>要確認の一覧 <span class="cnt" id="ngCnt"></span><span class="sp"></span>
+      <button class="btn sm sub" id="ngClose">閉じる</button></h2>
+    <p class="hint">💡 <b>「直す場所へ」</b>を押すと、その原因を直すマスタの行へ移動します。マスタを直すと、同じ原因の取引がまとめて直ります。<br>
+      <b>「この取引だけ手で入れる」</b>は、マスタは変えずにその1件だけ単価や送料を入れます（納品タブの「✎ 修正」と同じです）。</p>
+    <div id="ngBody"></div>
+  </div>
   <div class="card">
     <h2>お客様別 受注</h2>
     <div class="scroll" style="max-height:38vh">
@@ -317,7 +343,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <section class="panel" id="deliv">
   <div class="card">
     <h2>納品 <span id="dvCnt" class="cnt"></span></h2>
-    <p class="hint">💡 取引タブの内容が納品予定として自動的に表示されます。全量そのままなら「納品✓(全量)」、一部だけ納品した場合は「明細ごとに入力」から納品数量を記録してください。</p>
+    <p class="hint">💡 取引タブの内容が納品予定として自動的に表示されます。全量そのままなら「納品✓(全量)」を押します。<br>
+      数量・単価・品名・送料・納品日を直すときは<b>「✎ 修正」</b>から。直した取引には<span class="badge ed">修正あり</span>が付き、請求書にもそのまま反映されます。<b>請求済みの取引は直せません</b>（請求書を取り消してから直します）。</p>
     <div class="flex">
       <input class="find" id="fDv" placeholder="検索…" style="flex:1;min-width:260px">
       <select id="dvStatus"><option value="all">全て表示</option><option value="created">納品予定</option>
@@ -346,7 +373,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <label>対象月：<select id="invYm"></select></label>
       <label>お客様：<select id="invCust"><option value="all">全て</option></select></label>
     </div>
-    <p class="hint">💡 対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
+    <p class="hint">💡 <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
+      対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
   </div>
   <div id="invList" class="no-print"></div>
   <div class="card no-print" id="issuedCard">
@@ -374,7 +402,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <label>生産者：<select id="buySei"><option value="all">全て</option></select></label>
     </div>
     <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。<br>
-      <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数はデータ取込タブで確認できます。</p>
+      <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数はデータ取込タブで確認できます。<br>
+      数量・kg・単価、差し引きなどの追加行、備考は<b>「✎ この買取書を修正」</b>から直せます。</p>
   </div>
   <div id="buyList" class="no-print"></div>
   <div class="doc" id="buydoc" style="display:none"></div>
@@ -793,11 +822,18 @@ function freightAmt(f,qty,kg){
 const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
 
 const OPS_KEY="krs_ops";
-let OPS={st:{},qty:{},doc:{},invLines:{},invoices:[],quotes:[]};
+// adj  ：取引ごとの手修正（数量・単価・品名・送料・納品日・kg・備考）
+// extra：請求書／買取書ごとの追加行（値引き・調整など） キー＝"inv|請求先|YYYY-MM" / "buy|生産者|YYYY-MM"
+// head ：請求書／買取書ごとの件名・備考
+let OPS={st:{},qty:{},doc:{},invLines:{},invoices:[],quotes:[],adj:{},extra:{},head:{}};
 try{const o=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
   OPS={st:o.st||{},qty:o.qty||{},doc:o.doc||{},
-       invLines:o.invLines||{},invoices:o.invoices||[],quotes:o.quotes||[]};}catch(e){}
+       invLines:o.invLines||{},invoices:o.invoices||[],quotes:o.quotes||[],
+       adj:o.adj||{},extra:o.extra||{},head:o.head||{}};}catch(e){}
 if(!OPS.quotes) OPS.quotes=[];
+["adj","extra","head"].forEach(k=>{ if(!OPS[k]) OPS[k]={}; });
+const docKey=(type,who,y,m)=>type+"|"+who+"|"+y+"-"+p2(m);
+const numOr=(v,d)=>(v==null||v===""||isNaN(Number(v)))?d:Number(v);
 function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){}}
 function dvStatus(t){
   if(OPS.invLines[t.no]) return "invoiced";
@@ -821,25 +857,29 @@ function build(sale,buy){
     const key=se.toDateString(); sq[key]=(sq[key]||0)+1;
     const _no=txNo("S",se,sq[key]);
     if(OPS.qty[_no]!=null) cs=OPS.qty[_no];
+    const aj=OPS.adj[_no]||null;
+    if(aj&&aj.qty!=null) cs=Number(aj.qty);
     const kgTot=(cap||0)*cs;
     // 店着日＝出荷日＋運賃マスタのリード（初期は黒板の納品日を優先／設定で切替）
     const lead=(mp&&!sh)?findLead(mp.tori,mp.item,se):null;
     const frow=(mp&&!sh)?findFreightRow(mp.tori,mp.item,se):null;
     const boardNo=parseDate(r.nouhin), calcNo=arrivalDate(se,lead);
-    const no=(CFG.delivRule==="lead")?(calcNo||boardNo||se):(boardNo||calcNo||se);
-    const noSrc=(no===calcNo)?"リードで計算":(no===boardNo)?"黒板の納品日":"出荷日と同じ";
+    const adjNo=(aj&&aj.deliv)?parseDate(aj.deliv):null;
+    const no=adjNo||((CFG.delivRule==="lead")?(calcNo||boardNo||se):(boardNo||calcNo||se));
+    const noSrc=adjNo?"手で修正":(no===calcNo)?"リードで計算":(no===boardNo)?"黒板の納品日":"出荷日と同じ";
     const hit=(mp&&!sh)?lookup("販売",mp.tori,mp.item,cap,no):null;
     const bill=mp?(mp.bill||mp.tori):"";
     const ym=(mp&&!sh)?seikyuYM(bill,se,no):[no.getFullYear(),no.getMonth()+1];
     const betsu=!!hit&&hit.soryo==="送料別";
     const fr=betsu?findFreight(mp.tori,mp.item,cs,kgTot,se):null;
-    const frAmt=betsu?freightAmt(fr,cs,kgTot):0;
-    const shohin=hit?Number(hit.tanka)*cs:null;
+    const frAmt=(aj&&aj.freight!=null)?Number(aj.freight):(betsu?freightAmt(fr,cs,kgTot):0);
+    const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
+    const shohin=tk!=null?tk*cs:null;
     TX.push({kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
       customer:sh?"":bill,priceKey:mp?mp.tori:"",supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
-      priceItem:(hit?hit.item:(mp?mp.item:"")),
-      qty:cs,unitLabel:"c/s",tanka:hit?Number(hit.tanka):null,
+      priceItem:(aj&&aj.item)?aj.item:(hit?hit.item:(mp?mp.item:"")),
+      qty:cs,unitLabel:"c/s",tanka:tk,edited:!!aj,memo:aj?(aj.memo||""):"",
       soryoKbn:hit?(hit.soryo||"送料込み"):"",
       carrier:(fr||lead||frow)?((fr||lead||frow).carrier||""):"",
       hai:(fr||lead||frow)?((fr||lead||frow).hai||"自社"):"",
@@ -847,25 +887,27 @@ function build(sale,buy){
       shohin:shohin,freight:frAmt,
       sale:(shohin!=null)?shohin+frAmt:null,buy:null,y:ym[0],m:ym[1],shanai:sh,
       status:sh?"off":(no<=TODAY?"delivered":"created"),
-      why:sh?"対象外":!mp?"対応表に未登録":!hit?"単価マスタに該当なし"
-        :(betsu&&!fr)?"運賃マスタに該当なし":""});
+      why:sh?"対象外":!mp?"対応表に未登録":(tk==null)?"単価マスタに該当なし"
+        :(betsu&&!fr&&!(aj&&aj.freight!=null))?"運賃マスタに該当なし":""});
   });
   SRCB.forEach(r=>{
     const d=parseDate(r.date); if(!d) return;
-    const cs=parseFloat(r.cs)||0, kg=parseFloat(r.kg)||0;
+    const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
+    const _pno=txNo("P",d,bq[key]), aj=OPS.adj[_pno]||null;
+    const cs=numOr(aj&&aj.qty,parseFloat(r.cs)||0), kg=numOr(aj&&aj.kg,parseFloat(r.kg)||0);
     const cap=parseFloat(r.size);
     const sh=SHANAI.has(r.seisansha);
     const hit=sh?null:lookup("仕入",r.seisansha,r.kubun,cap,d);
-    const off=sh||!hit;
-    const kin=hit?Number(hit.tanka)*(hit.unit==="円/kg"?kg:cs):null;
-    const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
+    const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
+    const ku=(aj&&aj.unit)?aj.unit:(hit?hit.unit:"円/kg");
+    const kin=tk!=null?tk*(ku==="円/kg"?kg:cs):null;
     const isOut=CFG.price.some(p=>p.kind==="対象外"&&N(p.t)===N(r.seisansha)&&N(p.item)===N(r.kubun));
-    TX.push({kind:"buy",no:txNo("P",d,bq[key]),date:d,deliv:d,customer:"",supplier:r.seisansha,
+    TX.push({kind:"buy",no:_pno,date:d,deliv:d,customer:"",supplier:r.seisansha,edited:!!aj,memo:aj?(aj.memo||""):"",
       sanchi:"熊本",item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
-      cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:hit?Number(hit.tanka):null,
-      kunit:hit?hit.unit:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
+      cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:tk,
+      kunit:tk!=null?ku:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
       shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
-      why:(sh||isOut)?"買取の対象外":!hit?"買取単価が未設定":""});
+      why:(sh||isOut)?"買取の対象外":(tk==null)?"買取単価が未設定":""});
   });
   fillYM(); render();
 }
@@ -904,7 +946,9 @@ function render(){
   document.getElementById("statusBox").innerHTML=
     '<span class="badge b-wait" style="padding:6px 14px;font-size:13px">納品予定 '+st.created+' 件</span>'
     +'<span class="badge b-ok" style="padding:6px 14px;font-size:13px">納品✓済 '+st.delivered+' 件</span>'
-    +'<span class="badge '+(st.ng?"b-ng":"b-gray")+'" style="padding:6px 14px;font-size:13px">要確認 '+st.ng+' 件</span>';
+    +'<span class="badge '+(st.ng?"b-ng":"b-gray")+' click" data-ng="1" title="押すと、要確認の一覧を出します" style="padding:6px 14px;font-size:13px">要確認 '+st.ng+' 件 ▸</span>';
+  document.querySelectorAll("#statusBox [data-ng]").forEach(b=>b.onclick=showNg);
+  if(document.getElementById("ngCard").style.display!=="none") drawNg();
 
   const tfd=TF(), aggS={};
   sOk.forEach(t=>{const a=aggS[t.customer]||(aggS[t.customer]={c:0,q:0,k:0,sh:0,fr:0});
@@ -1020,13 +1064,14 @@ function drawDv(){
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>';
     const act=lock?'<span style="color:#999;font-size:11px">請求済のため変更不可</span>'
-      :'<button class="edit" data-meisai="'+esc(t.no)+'">明細ごとに入力</button> '
+      :'<button class="edit" data-txedit="'+esc(t.no)+'">✎ 修正</button> '
        +(st==="delivered"
          ?'<button class="del" data-undv="'+esc(t.no)+'">取消</button>'
          :'<button class="btn sm grn" data-dv="'+esc(t.no)+'">納品✓(全量)</button>');
     const tr=document.createElement("tr");
     tr.innerHTML='<td style="font-family:Consolas,monospace">'+t.no+'</td><td>'+fmtY(t.date)+'</td>'
-      +'<td>'+esc(p?p.name:t.customer)+'</td><td>'+esc(t.sanchi)+'</td><td>'+qtyTxt+'</td>'
+      +'<td>'+esc(p?p.name:t.customer)+'</td><td>'+esc(t.sanchi)+'</td><td>'+qtyTxt+edBadge(t)
+      +(t.memo?'<br><span style="font-size:10.5px;color:#5E35B1">'+esc(t.memo)+'</span>':'')+'</td>'
       +'<td class="num">¥'+yen(t.sale||0)+'</td><td>'+badge+'</td>'
       +'<td>'+(st==="created"?"-":fmtY(t.deliv))+'</td>'
       +'<td style="position:relative">'+docCell+'</td><td style="white-space:nowrap">'+act+'</td>';
@@ -1037,15 +1082,7 @@ function drawDv(){
     OPS.st[b.dataset.dv]="delivered"; saveOps(); build();});
   tb.querySelectorAll("[data-undv]").forEach(b=>b.onclick=()=>{
     OPS.st[b.dataset.undv]="created"; saveOps(); build();});
-  tb.querySelectorAll("[data-meisai]").forEach(b=>b.onclick=()=>{
-    const no=b.dataset.meisai, t=TX.find(x=>x.no===no); if(!t) return;
-    const cur=OPS.qty[no]!=null?OPS.qty[no]:t.baseQty;
-    const v=prompt("納品した数量（c/s）を入力してください。\n取引の数量：" + t.baseQty + " c/s", cur);
-    if(v===null) return;
-    const num=parseFloat(String(v).replace(/,/g,""));
-    if(isNaN(num)||num<0){alert("数字を入れてください");return;}
-    if(num>=t.baseQty){delete OPS.qty[no];}else{OPS.qty[no]=num;}
-    OPS.st[no]="delivered"; saveOps(); build();});
+  tb.querySelectorAll("[data-txedit]").forEach(b=>b.onclick=()=>openTxEditor(b.dataset.txedit));
   tb.querySelectorAll("[data-reissue]").forEach(a=>a.onclick=e=>{
     e.preventDefault();
     const d=OPS.doc[a.dataset.reissue];
@@ -1082,6 +1119,421 @@ function showDv(no){
   document.getElementById("dvBack").style.display="";
   window.scrollTo(0,0);
 }
+// ===== 編集ダイアログ（共通） =====
+function openModal(html){
+  closeModal();
+  const bg=document.createElement("div"); bg.className="mdl-bg"; bg.id="mdlBg";
+  bg.innerHTML='<div class="mdl no-print">'+html+'</div>';
+  bg.addEventListener("click",e=>{ if(e.target===bg) closeModal(); });
+  document.body.appendChild(bg);
+  return bg.querySelector(".mdl");
+}
+function closeModal(){ const b=document.getElementById("mdlBg"); if(b) b.remove(); }
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+const ymdOf=d=>d?ymd(d.getFullYear(),d.getMonth()+1,d.getDate()):"";
+const numIn=v=>{ const t=String(v==null?"":v).replace(/,/g,"").trim(); if(t==="") return null;
+  const n=Number(t); return isNaN(n)?NaN:n; };
+const edBadge=t=>t&&t.edited?' <span class="badge ed" title="手で修正した取引です">修正あり</span>':'';
+
+// 取引1件の修正（受注・発注どちらも）
+function openTxEditor(no, after){
+  const t=TX.find(x=>x.no===no); if(!t) return;
+  if(t.kind==="sale"&&OPS.invLines[no]){
+    alert("この取引は請求済みのため修正できません。\n\n直す場合は、請求タブの「この月の発行済請求書」で\n該当の請求書を取り消してから修正し、もう一度発行してください。");
+    return;
+  }
+  const a=OPS.adj[no]||{};
+  const v=(k,d)=>esc(a[k]!=null&&a[k]!==""?a[k]:(d==null?"":d));
+  const sale=t.kind==="sale";
+  let h='<h3>取引の修正 <span style="font-family:Consolas,monospace;font-size:13px;color:#666">'+esc(no)+'</span>'
+    +(t.edited?'<span class="badge ed">修正あり</span>':'')+'</h3>'
+    +'<div class="sub">'+esc(sale?(t.sell+"／"+t.kubun+" → 請求先："+(t.customer||"—")):(t.supplier+"／"+t.kubun))
+    +'　取引日 '+fmtY(t.date)+'<br>空欄にした項目は、マスタから計算した元の値に戻ります。</div><div class="grid">';
+  if(sale){
+    h+='<label>品名（請求書・納品書に出る名前）<input id="ed_item" value="'+v("item",t.priceItem)+'"></label>'
+      +'<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"><span class="was">黒板：'+yen(t.baseQty)+' c/s</span></label>'
+      +'<label>単価（円）<input id="ed_tanka" inputmode="decimal" value="'+v("tanka",t.tanka)+'"><span class="was">空欄＝単価マスタ</span></label>'
+      +'<label>送料（円・税10%）<input id="ed_freight" inputmode="decimal" value="'+v("freight",t.freight||"")+'"><span class="was">空欄＝運賃マスタ／0で送料なし</span></label>'
+      +'<label>納品（店着）日<input id="ed_deliv" type="date" value="'+v("deliv",ymdOf(t.deliv))+'"><span class="was">いま：'+esc(t.delivSrc||"")+'</span></label>';
+  }else{
+    h+='<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"></label>'
+      +'<label>数量（kg）<input id="ed_kg" inputmode="decimal" value="'+v("kg",t.kg)+'"></label>'
+      +'<label>単価（円）<input id="ed_tanka" inputmode="decimal" value="'+v("tanka",t.tanka)+'"><span class="was">空欄＝単価マスタ</span></label>'
+      +'<label>単価の単位<select id="ed_unit">'+["円/kg","円/ケース"].map(u=>'<option'+((a.unit||t.kunit||"円/kg")===u?" selected":"")+'>'+u+'</option>').join("")+'</select></label>';
+  }
+  h+='</div><label style="display:block;margin-top:10px;font-size:12px">修正の理由・備考（社内用）'
+    +'<textarea id="ed_memo" style="width:100%;min-height:54px">'+esc(a.memo||"")+'</textarea></label>'
+    +'<div class="foot"><button class="btn" id="ed_save">保存する</button>'
+    +'<button class="btn sub" id="ed_cancel">閉じる</button><span class="sp"></span>'
+    +(OPS.adj[no]?'<button class="del" id="ed_reset">修正をすべて取り消す</button>':'')+'</div>';
+  const md=openModal(h);
+  md.querySelector("#ed_cancel").onclick=closeModal;
+  const rs=md.querySelector("#ed_reset");
+  if(rs) rs.onclick=()=>{ if(!confirm("この取引の手修正をすべて取り消して、元の値に戻します。")) return;
+    delete OPS.adj[no]; saveOps(); closeModal(); build(); if(after) after(); };
+  md.querySelector("#ed_save").onclick=()=>{
+    const n={}, bad=[];
+    const put=(k,id,label)=>{ const el=md.querySelector("#"+id); if(!el) return;
+      const x=numIn(el.value); if(Number.isNaN(x)){ bad.push(label); return; }
+      if(x!=null) n[k]=x; };
+    put("qty","ed_qty","数量"); put("tanka","ed_tanka","単価");
+    if(sale) put("freight","ed_freight","送料"); else put("kg","ed_kg","kg");
+    if(bad.length){ alert(bad.join("・")+" に数字以外が入っています。"); return; }
+    if((n.qty!=null&&n.qty<0)||(n.kg!=null&&n.kg<0)){ alert("数量はマイナスにできません。"); return; }
+    // 元の値と同じなら保存しない（マスタや黒板を直したときに追随させるため）
+    if(a.tanka==null&&n.tanka!=null&&n.tanka===t.tanka) delete n.tanka;
+    if(a.qty==null&&n.qty!=null&&n.qty===t.qty) delete n.qty;
+    if(sale){
+      const it=md.querySelector("#ed_item").value.trim();
+      if(it&&(a.item||it!==t.priceItem)) n.item=it;
+      const dv=md.querySelector("#ed_deliv").value;
+      if(dv&&(a.deliv||dv!==ymdOf(t.deliv))) n.deliv=dv;
+      if(a.freight==null&&n.freight!=null&&n.freight===(t.freight||0)) delete n.freight;
+    }else{
+      if(a.kg==null&&n.kg!=null&&n.kg===t.kg) delete n.kg;
+      const u=md.querySelector("#ed_unit").value; if(a.unit||u!==(t.kunit||"円/kg")) n.unit=u;
+    }
+    const memo=md.querySelector("#ed_memo").value.trim(); if(memo) n.memo=memo;
+    const changed=Object.keys(n).length>0;
+    if(changed){ n.at=nowStr(); n.by=CFG.userName||""; OPS.adj[no]=n; }
+    else delete OPS.adj[no];
+    if(sale&&n.qty!=null){ delete OPS.qty[no]; OPS.st[no]="delivered"; }
+    saveOps(); closeModal(); build(); if(after) after();
+    dlMsg(changed?"取引 "+no+" を修正しました":"取引 "+no+" は元の値のままです","ok");
+  };
+}
+// 請求書の追加行（値引き・調整）を計算できる形にする
+function invExtras(k,y,m){
+  return (OPS.extra[docKey("inv",k,y,m)]||[]).map(e=>{
+    const q=numOr(e.qty,1), tk=numOr(e.tanka,0);
+    return {tekiyo:e.tekiyo||"", qty:q, unit:e.unit||"式", tanka:tk,
+      amount:Math.round(q*tk), tax:e.tax==="10%"?"10%":"8%"};
+  });
+}
+// 税率ごとに小計してから消費税（切り捨て）
+function invTotals(rows,ex){
+  const tf=TF();
+  let shohin=rows.reduce((a,t)=>a+(t.shohin||0),0), soryo=rows.reduce((a,t)=>a+(t.freight||0),0);
+  (ex||[]).forEach(e=>{ if(e.tax==="10%") soryo+=e.amount; else shohin+=e.amount; });
+  const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
+  return {shohin, soryo, taxF, taxS, total:shohin+soryo+taxF+taxS};
+}
+function extraRowsHtml(ex,hasF,withTanka){
+  return (ex||[]).map(e=>'<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
+    +' <span class="badge ed">追加・税'+e.tax+'</span></td><td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
+    +(withTanka?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
+    +'<td class="num">¥'+yen(e.amount)+'</td>'+(hasF?'<td></td><td></td>':'')
+    +'<td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
+}
+// 請求書（未発行分）の修正
+function openInvEditor(k){
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  const key=docKey("inv",k,y,m), tf=TF();
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&!OPS.invLines[t.no])
+    .sort((a,b)=>a.deliv-b.deliv);
+  if(!rows.length){ alert("この月に、まだ請求していない明細がありません。\n発行済みの請求書を直すときは「この月の発行済請求書」の「取消して修正」を使います。"); return; }
+  const p=partnerOf(k), hd=OPS.head[key]||{};
+  const bs=boardSubject(rows.map(t=>t.sell),p?p.name:k,k);
+  const defSub=(bs?bs+"　":"")+y+"年"+m+"月分 ご請求";
+  const ex=(OPS.extra[key]||[]).map(e=>Object.assign({},e));
+  let h='<h3>請求書の修正　'+esc(p?p.name:k)+'<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span>'
+    +(hd.fromNo?'<span class="badge b-wait">'+esc(hd.fromNo)+' の出し直し</span>':'')+'</h3>'
+    +'<div class="sub">まだ請求していない明細が対象です。<b>数量を0にすると、その明細は今回の請求から外れます</b>。空欄にした項目はマスタの値に戻ります。<br>'
+    +'値引きは「追加する行」に<b>マイナスの単価</b>で入れます。ここで直した内容は、納品タブの取引にも反映されます。</div>'
+    +'<div class="grid"><label>件名<input id="iv_sub" value="'+esc(hd.subject||defSub)+'"></label></div>'
+    +'<h4 style="margin:14px 0 6px;font-size:13px">明細</h4><div class="scroll" style="max-height:38vh"><table><thead><tr>'
+    +'<th>納品日</th><th>取引No.</th><th style="width:28%">品名</th><th class="num" style="width:9%">数量c/s</th>'
+    +'<th class="num" style="width:11%">単価</th><th class="num" style="width:10%">送料</th><th class="num">金額(税抜)</th></tr></thead><tbody>'
+    +rows.map((t,i)=>'<tr data-r="'+i+'"><td>'+fmtY(t.deliv)+'</td>'
+      +'<td style="font-family:Consolas,monospace;font-size:11px">'+esc(t.no)+edBadge(t)+'</td>'
+      +'<td><input data-f="item" value="'+esc(t.priceItem||"")+'"></td>'
+      +'<td><input class="n" data-f="qty" inputmode="decimal" value="'+esc(t.qty)+'"></td>'
+      +'<td><input class="n" data-f="tanka" inputmode="decimal" value="'+esc(t.tanka==null?"":t.tanka)+'"'
+        +(t.tanka==null?' style="background:#FFF4DB" placeholder="単価なし"':'')+'></td>'
+      +'<td><input class="n" data-f="freight" inputmode="decimal" value="'+esc(t.freight||0)+'"></td>'
+      +'<td class="num" data-amt></td></tr>').join("")
+    +'</tbody></table></div>'
+    +'<h4 style="margin:14px 0 6px;font-size:13px">追加する行（値引き・調整など）</h4>'
+    +'<table id="iv_ex"><thead><tr><th style="width:34%">品名</th><th class="num" style="width:9%">数量</th>'
+    +'<th style="width:9%">単位</th><th class="num" style="width:12%">単価</th><th style="width:9%">税率</th>'
+    +'<th class="num">金額</th><th style="width:6%"></th></tr></thead><tbody></tbody></table>'
+    +'<button class="btn sm sub" id="iv_exadd" style="margin-top:6px">＋ 行を追加</button>'
+    +'<label style="display:block;margin-top:12px;font-size:12px">備考（請求書の下に出ます）'
+    +'<textarea id="iv_memo" style="width:100%;min-height:54px">'+esc(hd.memo||"")+'</textarea></label>'
+    +'<div class="foot"><span id="iv_tot" style="font-size:13px"></span><span class="sp"></span>'
+    +'<button class="btn" id="iv_save">保存する</button><button class="btn sub" id="iv_cancel">閉じる</button></div>';
+  const md=openModal(h);
+  const fv=(tr,f)=>tr.querySelector('[data-f="'+f+'"]').value;
+  const recalc=()=>{
+    let sh=0, so=0;
+    rows.forEach((t,i)=>{ const tr=md.querySelector('tr[data-r="'+i+'"]');
+      const q=numIn(fv(tr,"qty")), tk=numIn(fv(tr,"tanka")), fr=numIn(fv(tr,"freight"));
+      const a=(Number(q)||0)*(Number(tk)||0), b=Number(fr)||0;
+      sh+=a; so+=b; tr.querySelector("[data-amt]").textContent="¥"+yen(a+b); });
+    md.querySelectorAll("#iv_ex tbody tr").forEach((tr,i)=>{ const e=ex[i];
+      const a=Math.round((numOr(numIn(e.qty),1))*(Number(numIn(e.tanka))||0));
+      tr.querySelector("[data-amt]").textContent="¥"+yen(a);
+      if(e.tax==="10%") so+=a; else sh+=a; });
+    const tot=sh+so+Math.floor(sh*tf.food)+Math.floor(so*tf.fre);
+    md.querySelector("#iv_tot").innerHTML='税抜 <b>¥'+yen(sh+so)+'</b>　税込 <b style="font-size:16px">¥'+yen(tot)+'</b>';
+  };
+  const drawEx=()=>{
+    const tb=md.querySelector("#iv_ex tbody");
+    tb.innerHTML=ex.map((e,i)=>'<tr><td><input data-e="'+i+'" data-f="tekiyo" value="'+esc(e.tekiyo||"")+'" placeholder="例：値引き"></td>'
+      +'<td><input class="n" data-e="'+i+'" data-f="qty" inputmode="decimal" value="'+esc(e.qty==null?1:e.qty)+'"></td>'
+      +'<td><input data-e="'+i+'" data-f="unit" value="'+esc(e.unit||"式")+'"></td>'
+      +'<td><input class="n" data-e="'+i+'" data-f="tanka" inputmode="decimal" value="'+esc(e.tanka==null?"":e.tanka)+'"></td>'
+      +'<td><select data-e="'+i+'" data-f="tax"><option'+(e.tax==="10%"?"":" selected")+'>8%</option>'
+      +'<option'+(e.tax==="10%"?" selected":"")+'>10%</option></select></td>'
+      +'<td class="num" data-amt></td><td><button class="del" data-exdel="'+i+'">削除</button></td></tr>').join("");
+    tb.querySelectorAll("[data-e]").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
+      ex[+el.dataset.e][el.dataset.f]=el.value; recalc(); }));
+    tb.querySelectorAll("[data-exdel]").forEach(b=>b.onclick=()=>{ ex.splice(+b.dataset.exdel,1); drawEx(); });
+    recalc();
+  };
+  md.querySelectorAll("tr[data-r] input").forEach(el=>el.addEventListener("input",recalc));
+  md.querySelector("#iv_exadd").onclick=()=>{ ex.push({tekiyo:"",qty:1,unit:"式",tanka:null,tax:"8%"}); drawEx(); };
+  md.querySelector("#iv_cancel").onclick=closeModal;
+  drawEx();
+  md.querySelector("#iv_save").onclick=()=>{
+    // 1回目：全部チェックしてから書き込む（途中で止まって半端に保存しないため）
+    const bad=[], plan=[];
+    rows.forEach((t,i)=>{
+      const tr=md.querySelector('tr[data-r="'+i+'"]'), a=OPS.adj[t.no]||{};
+      const n=Object.assign({},a); ["item","qty","tanka","freight","at","by"].forEach(x=>delete n[x]);
+      [["qty",t.qty],["tanka",t.tanka],["freight",t.freight||0]].forEach(([f,cur])=>{
+        const x=numIn(fv(tr,f));
+        if(Number.isNaN(x)){ bad.push(t.no+" の"+({qty:"数量",tanka:"単価",freight:"送料"})[f]); return; }
+        if(f==="qty"&&x!=null&&x<0){ bad.push(t.no+" の数量がマイナス"); return; }
+        if(x!=null&&(a[f]!=null||x!==cur)) n[f]=x;
+      });
+      const it=fv(tr,"item").trim(); if(it&&(a.item||it!==t.priceItem)) n.item=it;
+      plan.push([t.no,n]);
+    });
+    const exOut=[];
+    ex.forEach((e,i)=>{
+      const nm=String(e.tekiyo||"").trim(), q=numIn(e.qty), tk=numIn(e.tanka);
+      if(!nm&&tk==null) return;
+      if(!nm){ bad.push("追加行"+(i+1)+" の品名が空"); return; }
+      if(Number.isNaN(q)||Number.isNaN(tk)||tk==null){ bad.push("追加行"+(i+1)+" の数量・単価"); return; }
+      exOut.push({tekiyo:nm, qty:q==null?1:q, unit:String(e.unit||"式").trim()||"式", tanka:tk, tax:e.tax==="10%"?"10%":"8%"});
+    });
+    if(bad.length){ alert("次の入力を確認してください。\n\n・"+bad.join("\n・")); return; }
+    // 2回目：書き込み
+    plan.forEach(([no,n])=>{
+      if(Object.keys(n).length){ n.at=nowStr(); n.by=CFG.userName||""; OPS.adj[no]=n; }
+      else delete OPS.adj[no];
+      if(n.qty!=null) delete OPS.qty[no];
+    });
+    const sj=md.querySelector("#iv_sub").value.trim(), mo=md.querySelector("#iv_memo").value.trim();
+    const nh=Object.assign({},hd); delete nh.subject; delete nh.memo;
+    if(sj&&sj!==defSub) nh.subject=sj;
+    if(mo) nh.memo=mo;
+    if(Object.keys(nh).length) OPS.head[key]=nh; else delete OPS.head[key];
+    if(exOut.length) OPS.extra[key]=exOut; else delete OPS.extra[key];
+    saveOps(); closeModal(); build();
+    dlMsg((p?p.name:k)+" の請求書（"+y+"年"+m+"月分）を修正しました","ok");
+  };
+}
+// 買取書の追加行
+function buyExtras(k,y,m){
+  return (OPS.extra[docKey("buy",k,y,m)]||[]).map(e=>{
+    const q=numOr(e.qty,1), tk=numOr(e.tanka,0);
+    return {tekiyo:e.tekiyo||"", qty:q, unit:e.unit||"式", tanka:tk, amount:Math.round(q*tk)};
+  });
+}
+function buyExtraRowsHtml(ex){
+  return (ex||[]).map(e=>'<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
+    +' <span class="badge ed">追加</span></td><td class="num">'+dec1(e.qty)+esc(e.unit)+'</td><td></td>'
+    +'<td class="num">¥'+yen(e.tanka)+'</td><td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
+}
+// 買取書の修正
+function openBuyEditor(k){
+  const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
+  const key=docKey("buy",k,y,m);
+  const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k).sort((a,b)=>a.date-b.date);
+  if(!rows.length){ alert("この月に、この生産者の買取明細がありません。"); return; }
+  const hd=OPS.head[key]||{}, ex=(OPS.extra[key]||[]).map(e=>Object.assign({},e));
+  let h='<h3>買取書の修正　'+esc(k)+' 様<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span></h3>'
+    +'<div class="sub">空欄にした項目はマスタ・電子黒板の値に戻ります。<b>数量とkgを0にすると、その明細の金額は0になります</b>。<br>'
+    +'差し引きは「追加する行」に<b>マイナスの単価</b>で入れます。</div>'
+    +'<div class="scroll" style="max-height:42vh"><table><thead><tr>'
+    +'<th>記録日</th><th>取引No.</th><th>区分</th><th class="num" style="width:9%">数量c/s</th><th class="num" style="width:9%">数量kg</th>'
+    +'<th class="num" style="width:10%">単価</th><th style="width:11%">単位</th><th class="num">金額</th></tr></thead><tbody>'
+    +rows.map((t,i)=>'<tr data-r="'+i+'"><td>'+fmtY(t.date)+'</td>'
+      +'<td style="font-family:Consolas,monospace;font-size:11px">'+esc(t.no)+edBadge(t)+'</td>'
+      +'<td>'+esc(t.kubun)+' '+(t.cap||"")+'kg</td>'
+      +'<td><input class="n" data-f="qty" inputmode="decimal" value="'+esc(t.qty)+'"></td>'
+      +'<td><input class="n" data-f="kg" inputmode="decimal" value="'+esc(t.kg)+'"></td>'
+      +'<td><input class="n" data-f="tanka" inputmode="decimal" value="'+esc(t.tanka==null?"":t.tanka)+'"'
+        +(t.tanka==null?' style="background:#FFF4DB" placeholder="単価なし"':'')+'></td>'
+      +'<td><select data-f="unit">'+["円/kg","円/ケース"].map(u=>'<option'+((t.kunit||"円/kg")===u?" selected":"")+'>'+u+'</option>').join("")+'</select></td>'
+      +'<td class="num" data-amt></td></tr>').join("")
+    +'</tbody></table></div>'
+    +'<h4 style="margin:14px 0 6px;font-size:13px">追加する行（差し引き・調整など）</h4>'
+    +'<table id="by_ex"><thead><tr><th style="width:40%">品名</th><th class="num" style="width:10%">数量</th>'
+    +'<th style="width:10%">単位</th><th class="num" style="width:14%">単価</th><th class="num">金額</th><th style="width:7%"></th></tr></thead><tbody></tbody></table>'
+    +'<button class="btn sm sub" id="by_exadd" style="margin-top:6px">＋ 行を追加</button>'
+    +'<label style="display:block;margin-top:12px;font-size:12px">備考（買取書の下に出ます）'
+    +'<textarea id="by_memo" style="width:100%;min-height:54px">'+esc(hd.memo||"")+'</textarea></label>'
+    +'<div class="foot"><span id="by_tot" style="font-size:13px"></span><span class="sp"></span>'
+    +'<button class="btn grn" id="by_save">保存する</button><button class="btn sub" id="by_cancel">閉じる</button></div>';
+  const md=openModal(h);
+  const fv=(tr,f)=>tr.querySelector('[data-f="'+f+'"]').value;
+  const recalc=()=>{
+    let sum=0;
+    rows.forEach((t,i)=>{ const tr=md.querySelector('tr[data-r="'+i+'"]');
+      const q=Number(numIn(fv(tr,"qty")))||0, kg=Number(numIn(fv(tr,"kg")))||0, tk=Number(numIn(fv(tr,"tanka")))||0;
+      const a=tk*(fv(tr,"unit")==="円/kg"?kg:q); sum+=a;
+      tr.querySelector("[data-amt]").textContent="¥"+yen(a); });
+    md.querySelectorAll("#by_ex tbody tr").forEach((tr,i)=>{ const e=ex[i];
+      const a=Math.round(numOr(numIn(e.qty),1)*(Number(numIn(e.tanka))||0)); sum+=a;
+      tr.querySelector("[data-amt]").textContent="¥"+yen(a); });
+    md.querySelector("#by_tot").innerHTML='税抜 <b>¥'+yen(sum)+'</b>　税込 <b style="font-size:16px">¥'+yen(sum*(1+TAX))+'</b>';
+  };
+  const drawEx=()=>{
+    const tb=md.querySelector("#by_ex tbody");
+    tb.innerHTML=ex.map((e,i)=>'<tr><td><input data-e="'+i+'" data-f="tekiyo" value="'+esc(e.tekiyo||"")+'" placeholder="例：資材代 差し引き"></td>'
+      +'<td><input class="n" data-e="'+i+'" data-f="qty" inputmode="decimal" value="'+esc(e.qty==null?1:e.qty)+'"></td>'
+      +'<td><input data-e="'+i+'" data-f="unit" value="'+esc(e.unit||"式")+'"></td>'
+      +'<td><input class="n" data-e="'+i+'" data-f="tanka" inputmode="decimal" value="'+esc(e.tanka==null?"":e.tanka)+'"></td>'
+      +'<td class="num" data-amt></td><td><button class="del" data-exdel="'+i+'">削除</button></td></tr>').join("");
+    tb.querySelectorAll("[data-e]").forEach(el=>el.addEventListener("input",()=>{
+      ex[+el.dataset.e][el.dataset.f]=el.value; recalc(); }));
+    tb.querySelectorAll("[data-exdel]").forEach(b=>b.onclick=()=>{ ex.splice(+b.dataset.exdel,1); drawEx(); });
+    recalc();
+  };
+  md.querySelectorAll("tr[data-r] input,tr[data-r] select").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",recalc));
+  md.querySelector("#by_exadd").onclick=()=>{ ex.push({tekiyo:"",qty:1,unit:"式",tanka:null}); drawEx(); };
+  md.querySelector("#by_cancel").onclick=closeModal;
+  drawEx();
+  md.querySelector("#by_save").onclick=()=>{
+    const bad=[], plan=[];
+    rows.forEach((t,i)=>{
+      const tr=md.querySelector('tr[data-r="'+i+'"]'), a=OPS.adj[t.no]||{};
+      const n=Object.assign({},a); ["qty","kg","tanka","unit","at","by"].forEach(x=>delete n[x]);
+      [["qty",t.qty],["kg",t.kg],["tanka",t.tanka]].forEach(([f,cur])=>{
+        const x=numIn(fv(tr,f));
+        if(Number.isNaN(x)){ bad.push(t.no+" の"+({qty:"数量",kg:"kg",tanka:"単価"})[f]); return; }
+        if(f!=="tanka"&&x!=null&&x<0){ bad.push(t.no+" の"+(f==="kg"?"kg":"数量")+"がマイナス"); return; }
+        if(x!=null&&(a[f]!=null||x!==cur)) n[f]=x;
+      });
+      const u=fv(tr,"unit"); if(a.unit||u!==(t.kunit||"円/kg")) n.unit=u;
+      plan.push([t.no,n]);
+    });
+    const exOut=[];
+    ex.forEach((e,i)=>{
+      const nm=String(e.tekiyo||"").trim(), q=numIn(e.qty), tk=numIn(e.tanka);
+      if(!nm&&tk==null) return;
+      if(!nm){ bad.push("追加行"+(i+1)+" の品名が空"); return; }
+      if(Number.isNaN(q)||Number.isNaN(tk)||tk==null){ bad.push("追加行"+(i+1)+" の数量・単価"); return; }
+      exOut.push({tekiyo:nm, qty:q==null?1:q, unit:String(e.unit||"式").trim()||"式", tanka:tk});
+    });
+    if(bad.length){ alert("次の入力を確認してください。\n\n・"+bad.join("\n・")); return; }
+    plan.forEach(([no,n])=>{
+      if(Object.keys(n).length){ n.at=nowStr(); n.by=CFG.userName||""; OPS.adj[no]=n; }
+      else delete OPS.adj[no];
+    });
+    const mo=md.querySelector("#by_memo").value.trim();
+    const nh=Object.assign({},hd); delete nh.memo; if(mo) nh.memo=mo;
+    if(Object.keys(nh).length) OPS.head[key]=nh; else delete OPS.head[key];
+    if(exOut.length) OPS.extra[key]=exOut; else delete OPS.extra[key];
+    saveOps(); closeModal(); build();
+    const bd=document.getElementById("buydoc");
+    if(bd&&bd.style.display!=="none") showBuy(k);
+    dlMsg(k+" 様の買取書（"+y+"年"+m+"月分）を修正しました","ok");
+  };
+}
+// ===== 要確認の一覧と、直す場所への移動 =====
+function goTab(id){ const b=document.querySelector('nav button[data-p="'+id+'"]'); if(b) b.click(); }
+function setSel(id,v){ const el=document.getElementById(id);
+  if([...el.options].some(o=>o.value===v)){ el.value=v; return true; } el.value=""; return false; }
+function scrollTo_(el){ if(el) setTimeout(()=>el.scrollIntoView({behavior:"smooth",block:"start"}),30); }
+const NG_ORDER=["対応表に未登録","単価マスタに該当なし","運賃マスタに該当なし","買取単価が未設定"];
+const NG_HOW={
+  "対応表に未登録":"電子黒板の販売先・区分が、単価マスタタブの「取引先の対応表」にありません。行を足して、請求先と単価マスタの取引先・商品を選びます。",
+  "単価マスタに該当なし":"対応表はあるのに、単価マスタに合う単価（取引先・商品・容量・期間）が見つかりません。",
+  "運賃マスタに該当なし":"単価マスタで「送料別」なのに、運賃マスタに合う行がありません。",
+  "買取単価が未設定":"生産者・区分・サイズに合う買取単価（単価マスタの種別＝仕入）がありません。"
+};
+function showNg(){
+  const c=document.getElementById("ngCard"); c.style.display=""; drawNg(); scrollTo_(c);
+}
+function drawNg(){
+  const list=cur().filter(t=>t.why);
+  document.getElementById("ngCnt").textContent="("+list.length+"件)";
+  const body=document.getElementById("ngBody");
+  if(!list.length){ body.innerHTML='<div class="note ok">この月の要確認はありません。</div>'; return; }
+  const g={}; list.forEach(t=>{(g[t.why]||(g[t.why]=[])).push(t);});
+  const keys=Object.keys(g).sort((a,b)=>(NG_ORDER.indexOf(a)+99)%99-(NG_ORDER.indexOf(b)+99)%99);
+  body.innerHTML=keys.map(w=>{
+    const rows=g[w].sort((a,b)=>a.date-b.date);
+    return '<h3 style="font-size:14px;margin:14px 0 4px"><span class="badge b-ng">'+esc(w)+'</span> '+rows.length+'件</h3>'
+      +(NG_HOW[w]?'<p class="hint" style="margin-bottom:6px">'+esc(NG_HOW[w])+'</p>':'')
+      +'<div class="scroll" style="max-height:34vh"><table><thead><tr><th>取引No.</th><th>取引日</th><th>区分</th>'
+      +'<th>黒板の名前／区分</th><th>請求先・生産者</th><th>品目</th><th class="num">数量</th><th></th></tr></thead><tbody>'
+      +rows.map(t=>'<tr><td style="font-family:Consolas,monospace;font-size:11.5px">'+esc(t.no)+'</td><td>'+fmt(t.date)+'</td>'
+        +'<td><span class="badge '+(t.kind==="sale"?"b-sale":"b-buy")+'">'+(t.kind==="sale"?"受注":"発注")+'</span></td>'
+        +'<td>'+esc(t.sell)+'／'+esc(t.kubun)+'</td><td>'+esc(t.kind==="sale"?(t.customer||"—"):t.supplier)+'</td>'
+        +'<td>'+esc(t.kind==="sale"?(t.priceKey?t.priceKey+"　"+(t.priceItem||""):"—"):(t.kubun+" "+(t.cap||"")+"kg"))+'</td>'
+        +'<td class="num">'+(t.kind==="buy"?dec1(t.qty):yen(t.qty))+'</td>'
+        +'<td style="white-space:nowrap"><button class="btn sm" data-ngfix="'+esc(t.no)+'">直す場所へ</button>'
+        +(w!=="対応表に未登録"?' <button class="edit" data-ngtx="'+esc(t.no)+'">この取引だけ手で入れる</button>':'')
+        +'</td></tr>').join("")
+      +'</tbody></table></div>';
+  }).join("");
+  body.querySelectorAll("[data-ngfix]").forEach(b=>b.onclick=()=>ngJump(b.dataset.ngfix));
+  body.querySelectorAll("[data-ngtx]").forEach(b=>b.onclick=()=>openTxEditor(b.dataset.ngtx,drawNg));
+}
+function ngJump(no){
+  const t=TX.find(x=>x.no===no); if(!t) return;
+  const w=t.why;
+  if(w==="対応表に未登録"){
+    goTab("prices");
+    let i=CFG.map.findIndex(m=>m.sell===t.sell&&(m.kubun||"")===(t.kubun||""));
+    if(i<0){
+      if(!confirm("対応表に「"+t.sell+"／"+t.kubun+"」の行を足します。\n足したあと、請求先・単価マスタの取引先・商品を選んでください。")) return;
+      CFG.map.unshift({sell:t.sell,kubun:t.kubun||"",bill:"",tori:"",item:"",sanchi:"熊本",_new:1});
+      saveCfg("対応表に行を足しました");
+    }
+    MAPF=""; document.getElementById("fMap").value=t.sell; drawMap(); build();
+    scrollTo_(document.getElementById("mapCard"));
+    dlMsg("対応表の「"+t.sell+"／"+(t.kubun||"")+"」の行です。請求先・単価マスタの取引先・商品を選んでください","wait");
+    return;
+  }
+  if(w==="単価マスタに該当なし"){
+    goTab("prices");
+    if(t.priceKey&&!priceHas(t.priceKey)){
+      // 対応表の「単価マスタの取引先」が単価マスタに無い
+      setSel("fpTori",""); setSel("fpKind","");
+      document.getElementById("fMap").value=""; MAPF="price"; drawMap(); drawPrice();
+      scrollTo_(document.getElementById("mapCard"));
+      dlMsg("対応表の「単価マスタの取引先」が単価マスタにありません。正しい名前を選び直してください","wait");
+    }else{
+      setSel("fpKind","販売"); setSel("fpTori",t.priceKey||""); document.getElementById("fPrice").value="";
+      drawPrice(); scrollTo_(document.getElementById("tPrice"));
+      dlMsg("「"+(t.priceKey||"")+"」の単価を表示しています。商品「"+(t.priceItem||"")+"」・容量"+(t.cap||"")+"kg・適用期間を確認してください","wait");
+    }
+    return;
+  }
+  if(w==="運賃マスタに該当なし"){
+    goTab("freight");
+    const ok=setSel("ffTori",t.priceKey||""); document.getElementById("fFre").value="";
+    drawFreight(); scrollTo_(document.getElementById("tFre"));
+    dlMsg(ok?"「"+t.priceKey+"」の運賃の行を表示しています。運賃・条件を入れてください"
+            :"運賃マスタに「"+(t.priceKey||"")+"」の行がありません。「＋ 新規」で足してください","wait");
+    return;
+  }
+  if(w==="買取単価が未設定"){
+    goTab("prices");
+    setSel("fpKind","仕入"); const ok=setSel("fpTori",t.supplier); document.getElementById("fPrice").value="";
+    drawPrice(); scrollTo_(document.getElementById("tPrice"));
+    dlMsg(ok?"「"+t.supplier+"」の買取単価を表示しています。区分「"+t.kubun+"」・サイズ"+(t.cap||"")+"kgの行を確認してください"
+            :"単価マスタに「"+t.supplier+"」の仕入の行がありません。「＋ 新規」で足してください","wait");
+    return;
+  }
+  openTxEditor(no,drawNg);
+}
 function termText(k,y,m){
   const r=shimeOf(k);
   if(r.shime==="20日"){
@@ -1106,19 +1558,23 @@ function drawInvList(){
    .forEach(([k,list])=>{
     if(only!=="all"&&only!==k) return;
     const r=shimeOf(k), p=partnerOf(k), tf=TF();
-    const shohin=list.reduce((s,t)=>s+(t.shohin||0),0);
-    const soryo=list.reduce((s,t)=>s+(t.freight||0),0);
-    const tax=shohin*tf.food+soryo*tf.fre;
-    const sub=shohin+soryo, hasF=soryo>0;
+    const ex=invExtras(k,y,m), tt=invTotals(list,ex), hd=OPS.head[docKey("inv",k,y,m)]||{};
+    const shohin=tt.shohin, soryo=tt.soryo, tax=tt.taxF+tt.taxS;
+    const sub=shohin+soryo, hasF=list.some(t=>t.freight);
     const d=document.createElement("div"); d.className="prev";
     d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
       +'<div class="cond">[請求基準: '+kijunLabel(r)+' ／ '+esc(r.shime)+'締め ／ 期間: '+termText(k,y,m)+']'
-      +(hasF?' <span class="badge b-wait">送料別</span>':' <span class="badge b-gray">送料込み</span>')+'</div></div>'
+      +(hasF?' <span class="badge b-wait">送料別</span>':' <span class="badge b-gray">送料込み</span>')
+      +(ex.length?' <span class="badge ed">追加行 '+ex.length+'</span>':'')
+      +(hd.subject||hd.memo?' <span class="badge ed">件名・備考あり</span>':'')
+      +(list.some(t=>t.edited)?' <span class="badge ed">修正あり '+list.filter(t=>t.edited).length+'件</span>':'')
+      +(hd.fromNo?' <span class="badge b-wait">'+esc(hd.fromNo)+' の出し直し</span>':'')+'</div></div>'
       +'<div class="sp"></div><div class="amt">'
       +(hasF?'商品: ¥'+yen(shohin)+'　送料: ¥'+yen(soryo)+'　':'')
       +'税抜: <b>¥'+yen(sub)+'</b>　'
       +'<span style="font-size:11px">消費税: ¥'+yen(tax)+'</span>　税込: <span class="big">¥'
       +yen(sub+tax)+'</span></div>'
+      +'<button class="btn sub" data-invedit="'+esc(k)+'">✎ この請求書を修正</button>'
       +'<div class="menu"><button class="btn" data-menu="inv-'+esc(k)+'">請求書発行 ▾</button>'
       +'<div class="menu-list" id="m-inv-'+esc(k)+'">'
       +'<button data-freee="inv" data-key="'+esc(k)+'">請求書(freee)</button>'
@@ -1129,16 +1585,18 @@ function drawInvList(){
       +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
       +'<th class="num">請求金額</th></tr></thead><tbody>'
       +list.sort((a,b)=>a.deliv-b.deliv).map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
-        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg</td>'
+        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg'+edBadge(t)+'</td>'
         +'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
         +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
         +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
+      +extraRowsHtml(ex,hasF,false)
       +'</tbody></table>';
     box.appendChild(d);
   });
   if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">'
     +'この月に、まだ請求していない明細はありません。（下の「この月の発行済請求書」をご覧ください）</p></div>';
   box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showInv(b.dataset.doc));
+  box.querySelectorAll("[data-invedit]").forEach(b=>b.onclick=()=>openInvEditor(b.dataset.invedit));
   drawIssuedInvoices();
 }
 function drawBuyList(){
@@ -1156,38 +1614,45 @@ function drawBuyList(){
   Object.entries(agg).sort((a,b)=>b[1].reduce((s,t)=>s+(t.buy||0),0)-a[1].reduce((s,t)=>s+(t.buy||0),0))
    .forEach(([k,list])=>{
     if(only!=="all"&&only!==k) return;
-    const sub=list.reduce((s,t)=>s+(t.buy||0),0);
+    const ex=buyExtras(k,y,m), hd=OPS.head[docKey("buy",k,y,m)]||{};
+    const sub=list.reduce((s,t)=>s+(t.buy||0),0)+ex.reduce((a,e)=>a+e.amount,0);
     const miss=list.filter(t=>!t.buy).length;
     const d=document.createElement("div"); d.className="prev";
     d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(k)+'　様 - '+list.length+'明細</div>'
       +'<div class="cond">[買取基準: 記録日 ／ 月末締め ／ 期間: '+y+'-'+p2(m)+'-01〜'+y+'-'+p2(m)+'-'
-      +new Date(y,m,0).getDate()+']'+(miss?' <span class="badge b-ng">単価未設定 '+miss+'件</span>':'')+'</div></div>'
+      +new Date(y,m,0).getDate()+']'+(miss?' <span class="badge b-ng">単価未設定 '+miss+'件</span>':'')
+      +(ex.length?' <span class="badge ed">追加行 '+ex.length+'</span>':'')
+      +(hd.memo?' <span class="badge ed">備考あり</span>':'')
+      +(list.some(t=>t.edited)?' <span class="badge ed">修正あり '+list.filter(t=>t.edited).length+'件</span>':'')+'</div></div>'
       +'<div class="sp"></div><div class="amt">税抜: <b>¥'+yen(sub)+'</b>　'
       +'<span style="font-size:11px">消費税: ¥'+yen(sub*TAX)+'</span>　税込: <span class="big">¥'
       +yen(sub*(1+TAX))+'</span></div>'
+      +'<button class="btn sub" data-buyedit="'+esc(k)+'">✎ この買取書を修正</button>'
       +'<button class="btn grn" data-doc="'+esc(k)+'">買取書PDF発行</button></div>'
       +'<table><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
       +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th>'
       +'<th class="num">買取金額</th></tr></thead><tbody>'
       +list.sort((a,b)=>a.date-b.date).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'+t.no+'</td><td>'
-        +esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
+        +esc(t.kubun)+edBadge(t)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
         +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
         +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
         +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
+      +buyExtraRowsHtml(ex)
       +'</tbody></table>';
     box.appendChild(d);
   });
   if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">この月に買取対象がありません。</p></div>';
   box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showBuy(b.dataset.doc));
+  box.querySelectorAll("[data-buyedit]").forEach(b=>b.onclick=()=>openBuyEditor(b.dataset.buyedit));
 }
 function showInv(k){
   const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
-  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&t.sale).sort((a,b)=>a.deliv-b.deliv);
+  // 発行するときと同じ明細（未請求だけ）を出す
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&t.sale&&!OPS.invLines[t.no]).sort((a,b)=>a.deliv-b.deliv);
   const r=shimeOf(k), p=partnerOf(k), tf=TF();
-  const shohin=rows.reduce((s,t)=>s+(t.shohin||0),0);
-  const soryo=rows.reduce((s,t)=>s+(t.freight||0),0);
-  const taxF=shohin*tf.food, taxS=soryo*tf.fre;
-  const sub=shohin+soryo, hasF=soryo>0;
+  const ex=invExtras(k,y,m), tt=invTotals(rows,ex), hd=OPS.head[docKey("inv",k,y,m)]||{};
+  const shohin=tt.shohin, soryo=tt.soryo, taxF=tt.taxF, taxS=tt.taxS;
+  const sub=shohin+soryo, hasF=rows.some(t=>t.freight);
   const ad=p?'<span class="ad">〒'+esc(p.zip)+'　'+esc(p.addr)+(p.person?'　'+esc(p.person)+' 様':'')+'</span>'
            :'<span class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</span>';
   document.getElementById("inv").innerHTML=
@@ -1195,8 +1660,8 @@ function showInv(k){
     +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">請求日：'
     +y+'年'+m+'月末日<br>対象期間：'+termText(k,y,m)+'<br>請求基準：'+kijunLabel(r)+'（'+esc(r.shime)+'締め）</div></div>'
     +'<div class="doc-title">請求書</div><div class="doc-to">'+esc(p?p.name:k)+'　御中'+ad+'</div>'
-    +(function(){const bs=boardSubject(rows.map(t=>t.sell),p?p.name:k,k);
-      return bs?'<p style="font-size:12.5px;margin-top:10px"><b>件名：'+esc(bs)+'</b></p>':'';})()
+    +(function(){const bs=boardSubject(rows.map(t=>t.sell),p?p.name:k,k), sj=hd.subject||bs;
+      return sj?'<p style="font-size:12.5px;margin-top:10px"><b>件名：'+esc(sj)+'</b></p>':'';})()
     +'<div><div class="doc-total"><div class="l">ご請求金額（税込）</div><div class="v">¥ '+yen(sub+taxF+taxS)
     +'</div></div></div><p style="font-size:12.5px;color:#666">下記の通りご請求申し上げます。</p>'
     +'<table><thead><tr><th>納品日</th><th>取引No.</th><th>産地</th><th>品名</th>'
@@ -1208,12 +1673,14 @@ function showInv(k){
       +yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.tanka)+'</td><td class="num">¥'+yen(t.shohin)+'</td>'
       +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
       +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
+    +extraRowsHtml(ex,hasF,true)
     +'</tbody></table><div class="doc-foot"><table>'
     +'<tr><td>商品 小計（税抜）</td><td class="num">¥'+yen(shohin)+'</td></tr>'
     +'<tr><td>消費税（'+(tf.food*100)+'%）</td><td class="num">¥'+yen(taxF)+'</td></tr>'
     +(hasF?'<tr><td>送料 小計（税抜）</td><td class="num">¥'+yen(soryo)+'</td></tr>'
       +'<tr><td>消費税（'+(tf.fre*100)+'%）</td><td class="num">¥'+yen(taxS)+'</td></tr>':'')
     +'<tr class="total"><td>合計請求額（税込）</td><td class="num">¥'+yen(sub+taxF+taxS)+'</td></tr></table></div>'
+    +(hd.memo?'<div class="note" style="margin-top:14px">'+esc(hd.memo).replace(/\n/g,"<br>")+'</div>':'')
     +'<div class="bank">'+esc(CO().bank)
     +(CO().invoiceNo?'<br>登録番号：'+esc(CO().invoiceNo)
       :'<br><span style="color:#C62828">※ 登録番号（インボイス）は未設定です。設定タブの「自社情報」で登録できます。</span>')
@@ -1226,7 +1693,8 @@ function showInv(k){
 function showBuy(k){
   const[y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
   const rows=curOf("buyYm").filter(t=>t.kind==="buy"&&t.supplier===k).sort((a,b)=>a.date-b.date);
-  const priced=rows.filter(t=>t.buy), sub=priced.reduce((s,t)=>s+t.buy,0);
+  const ex=buyExtras(k,y,m), hd=OPS.head[docKey("buy",k,y,m)]||{};
+  const priced=rows.filter(t=>t.buy), sub=priced.reduce((s,t)=>s+t.buy,0)+ex.reduce((a,e)=>a+e.amount,0);
   const miss=rows.length-priced.length;
   document.getElementById("buydoc").innerHTML=
     '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
@@ -1244,9 +1712,11 @@ function showBuy(k){
       +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
       +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
       +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
+    +buyExtraRowsHtml(ex)
     +'</tbody></table><div class="doc-foot"><table class="buy"><tr><td>小計（税抜）</td><td class="num">¥'
     +yen(sub)+'</td></tr><tr><td>消費税（8%）</td><td class="num">¥'+yen(sub*TAX)+'</td></tr>'
     +'<tr class="total"><td>合計（税込）</td><td class="num">¥'+yen(sub*(1+TAX))+'</td></tr></table></div>'
+    +(hd.memo?'<div class="note" style="margin-top:14px">'+esc(hd.memo).replace(/\n/g,"<br>")+'</div>':'')
     +'<div class="bank">この買取書の内容は、後日ご確認をお願いいたします。'
     +(CO().invoiceNo?'<br>当社 登録番号：'+esc(CO().invoiceNo):'')
     +'<br><span style="color:#C62828">※ 仕入明細書として使う場合、生産者様の登録番号（インボイス）の記載とご確認が要件になります。</span></div>';
@@ -1318,6 +1788,25 @@ function drawShime(){
       +'</td><td>'+delBtn("shime",i)+'</td>'; tb.appendChild(tr);});
   bind();
 }
+// 単価マスタの取引先の候補（販売＝販売先の呼び名／仕入＝生産者）
+function priceTNames(kind){
+  const buy=(kind==="仕入"||kind==="対象外");
+  const set=new Set();
+  CFG.price.forEach(p=>{ const b=(p.kind==="仕入"||p.kind==="対象外");
+    if(b===buy&&String(p.t||"").trim()) set.add(String(p.t).trim()); });
+  if(buy) (SRCB||[]).forEach(r=>{ if(r.seisansha) set.add(String(r.seisansha).trim()); });
+  else CFG.map.forEach(m=>{ if(String(m.tori||"").trim()) set.add(String(m.tori).trim()); });
+  return [...set].sort((a,b)=>a.localeCompare(b,"ja"));
+}
+function selPriceT(i,p){
+  const cur=String(p.t==null?"":p.t).trim(), names=priceTNames(p.kind);
+  let h='<select class="cell'+(cur?"":" need")+'" data-t="price" data-i="'+i+'" data-k="t">';
+  h+='<option value=""'+(cur?"":" selected")+'>（取引先を選ぶ）</option>';
+  if(cur&&!names.includes(cur)) h+='<option selected>'+esc(cur)+'</option>';
+  names.forEach(x=>{h+='<option value="'+esc(x)+'"'+(cur===x?" selected":"")+'>'+esc(x)+'</option>';});
+  h+='<option value="__new__">＋ 新しい名前を入れる…</option>';
+  return h+'</select>';
+}
 function drawPrice(){
   const q=N(document.getElementById("fPrice").value);
   const ft=document.getElementById("fpTori").value, fk=document.getElementById("fpKind").value;
@@ -1329,7 +1818,7 @@ function drawPrice(){
     if(q&&!N([p.t,p.item].join("")).includes(q)) return;
     sh++; const tr=document.createElement("tr"); if(p._new){tr.className="new";delete p._new;}
     const bl=p.kind==="仕入"&&(p.tanka==null||p.tanka==="");
-    tr.innerHTML='<td>'+cell("price",i,"t",p.t)+'</td><td>'+cell("price",i,"item",p.item)+'</td>'
+    tr.innerHTML='<td>'+selPriceT(i,p)+'</td><td>'+cell("price",i,"item",p.item)+'</td>'
       +'<td>'+cell("price",i,"cap",p.cap,true)+'</td><td>'+selc("price",i,"sanchi",p.sanchi||"熊本",["熊本","広島"])+'</td>'
       +'<td>'+selc("price",i,"kind",p.kind,["販売","仕入","加工賃","対象外"])+'</td>'
       +'<td>'+cell("price",i,"tanka",p.tanka,true,bl)+'</td>'
@@ -1498,11 +1987,16 @@ function bind(){
     if(el._b) return; el._b=1;
     el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
       const t=el.dataset.t,i=+el.dataset.i,k=el.dataset.k; let v=el.value;
+      if(t==="price"&&k==="t"&&v==="__new__"){
+        const nm=prompt("単価マスタに足す取引先の名前を入れてください。\n（販売＝営業課の単価表の呼び名／仕入＝生産者名）","");
+        if(nm===null||!nm.trim()){ drawPrice(); return; }
+        v=nm.trim();
+      }
       if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))){
         v=v.trim()===""?null:parseFloat(v.replace(/,/g,"")); if(v!==null&&isNaN(v)) return;}
       CFG[t][i][k]=v; saveCfg(); build();
       if(t==="freight"&&k==="ruleType") drawFreight();
-      if(t==="price"&&k==="kind") drawPrice();
+      if(t==="price"&&(k==="kind"||k==="t")) drawPrice();
       if(t==="partners"&&k==="key") drawMap();
       if(t==="map"){
         if(el.tagName==="SELECT") drawMap();            // 請求先・単価マスタの取引先・産地
@@ -1914,7 +2408,8 @@ function buildInvoiceHtml(inv){
     +'<th class="n">数量</th><th>単位</th>'
     +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +sumTable(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total)
-    +'<div class="note">※印は軽減税率対象です。</div></body></html>';
+    +'<div class="note">'+(inv.memo?esc2(inv.memo).replace(/\n/g,"<br>")+'<br>':'')
+    +'※印は軽減税率対象です。</div></body></html>';
 }
 // 納品書HTML
 function buildDeliveryNoteHtml(doc){
@@ -1984,20 +2479,25 @@ async function issueInvoice(custKey){
     if(t.freight) lines.push({txNo:t.no, date:dt, tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
         qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
   });
-  const shohin=rows.reduce((a,t)=>a+(t.shohin||0),0);
-  const soryo=rows.reduce((a,t)=>a+(t.freight||0),0);
-  const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
-  const total=shohin+soryo+taxF+taxS;
+  // 追加行・件名・備考も、発行の直前に読み直す
+  const ekey=docKey("inv",custKey,y,m), ex=invExtras(custKey,y,m), hd=OPS.head[ekey]||{};
+  ex.forEach(e=>lines.push({txNo:"", date:"", tekiyo:e.tekiyo+(e.tax==="10%"?"":" ※"),
+    qty:e.qty, unit:e.unit, tanka:e.tanka, amount:e.amount, kind:"extra", tax:e.tax}));
+  const tt=invTotals(rows,ex);
+  const shohin=tt.shohin, soryo=tt.soryo, taxF=tt.taxF, taxS=tt.taxS, total=tt.total;
   const issueDate=(r.shime==="20日")?ymd(y,m,20):ymd(y,m,lastDayOf(y,m));
   const pname=p?p.name:custKey;
   const bs=boardSubject(rows.map(t=>t.sell), pname, custKey);
-  const subject=(bs?bs+"　":"")+y+"年"+m+"月分 ご請求";
+  const subject=hd.subject||((bs?bs+"　":"")+y+"年"+m+"月分 ご請求");
   const inv={ id:"iv"+Date.now(), invoiceNo:nextInvoiceNo(y,m), customer:custKey,
     partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:custKey},
     subject:subject, boardName:bs,
     targetMonth:y+"-"+p2(m), issueDate:issueDate, dueDate:calcDueDate(p,issueDate),
     basisLabel:kijunLabel(r)+"／"+r.shime+"締め",
     lines:lines, shohin:shohin, soryo:soryo, taxF:taxF, taxS:taxS, total:total,
+    memo:hd.memo||"", originalInvoiceNo:hd.fromNo||"",
+    extraLines:ex.map(e=>({tekiyo:e.tekiyo,qty:e.qty,unit:e.unit,tanka:e.tanka,tax:e.tax})),
+    headSaved:{subject:hd.subject||"", memo:hd.memo||""},
     issuedAt:nowStr(), issuedBy:CFG.userName||"", status:"issued", pdfUrl:"", pdfName:"" };
 
   dlMsg("請求書PDFを作成しています…","wait");
@@ -2013,6 +2513,8 @@ async function issueInvoice(custKey){
   inv.pdfUrl=res.url||""; inv.pdfName=res.name||"";
   OPS.invoices.push(inv);
   rows.forEach(t=>{ OPS.invLines[t.no]=inv.id; });
+  // 追加行・件名・備考はこの請求書に凍結したので、次の請求に二重に載らないよう消す
+  delete OPS.extra[ekey]; delete OPS.head[ekey];
   saveOps(); build();
   document.getElementById("inv").style.display="none";
   document.getElementById("invBack").style.display="none";
@@ -2063,30 +2565,47 @@ function drawIssuedInvoices(){
     const tr=document.createElement("tr");
     const st=i.status==="cancelled"?'<span class="badge b-ng">取消済</span>'
       :'<span class="badge b-ok">発行済</span>';
-    tr.innerHTML='<td style="font-family:Consolas,monospace">'+esc(i.invoiceNo)+'</td>'
+    tr.innerHTML='<td style="font-family:Consolas,monospace">'+esc(i.invoiceNo)
+      +(i.originalInvoiceNo?'<br><span style="font-size:10px;color:#888;font-family:inherit">'+esc(i.originalInvoiceNo)+' の出し直し</span>':'')+'</td>'
       +'<td>'+esc((i.partner&&i.partner.name)||i.customer)+'</td><td>'+esc(i.targetMonth)+'</td>'
       +'<td>'+esc(i.issueDate)+'</td><td>'+esc(i.dueDate)+'</td>'
       +'<td class="num">¥'+yen(i.total)+'</td><td>'+esc(i.issuedBy||"—")+'</td>'
       +'<td>'+(i.pdfUrl?'<a href="'+esc(i.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
       +'<td>'+st+'</td>'
-      +'<td>'+(i.status==="cancelled"?'':'<button class="del" data-cancelinv="'+esc(i.id)+'">取消</button>')+'</td>';
+      +'<td style="white-space:nowrap">'+(i.status==="cancelled"?'':'<button class="edit" data-fixinv="'+esc(i.id)+'">取消して修正</button> '
+        +'<button class="del" data-cancelinv="'+esc(i.id)+'">取消</button>')+'</td>';
     tb.appendChild(tr);
   });
   document.getElementById("issuedCnt").textContent="("+list.length+"件)";
   tb.querySelectorAll("[data-cancelinv]").forEach(b=>b.onclick=()=>cancelInvoice(b.dataset.cancelinv));
+  tb.querySelectorAll("[data-fixinv]").forEach(b=>b.onclick=()=>{
+    const inv=OPS.invoices.find(i=>i.id===b.dataset.fixinv); if(!inv) return;
+    if(!cancelInvoice(inv.id)) return;
+    const [yy,mm]=inv.targetMonth.split("-").map(Number);
+    document.getElementById("invYm").value=yy+"/"+mm; drawInvList();
+    openInvEditor(inv.customer);
+  });
 }
 // 請求の取消（請求済みを戻す。PDFとレコードは証憑として残す）
 function cancelInvoice(id){
-  const inv=OPS.invoices.find(i=>i.id===id); if(!inv) return;
+  const inv=OPS.invoices.find(i=>i.id===id); if(!inv||inv.status==="cancelled") return false;
   if(!confirm("請求書 "+inv.invoiceNo+" を取り消します。\n"
     +"・この請求書に含まれる明細は「未請求」に戻ります\n"
-    +"・請求書の記録とPDFは証憑として残します\n\nよろしいですか？")) return;
+    +"・請求書の記録とPDFは証憑として残します\n\nよろしいですか？")) return false;
   const reason=prompt("取消の理由（任意）","")||"";
   inv.status="cancelled"; inv.cancelledAt=nowStr(); inv.cancelReason=reason;
   inv.cancelledBy=CFG.userName||"";
   Object.keys(OPS.invLines).forEach(k=>{ if(OPS.invLines[k]===id) delete OPS.invLines[k]; });
+  // 追加行・件名・備考を未発行側へ戻す（出し直しで同じ内容から直せるように）
+  const ek="inv|"+inv.customer+"|"+inv.targetMonth;
+  if((inv.extraLines||[]).length&&!(OPS.extra[ek]||[]).length) OPS.extra[ek]=inv.extraLines.map(e=>Object.assign({},e));
+  const hs=Object.assign({},OPS.head[ek]||{});
+  if(inv.headSaved){ if(!hs.subject&&inv.headSaved.subject) hs.subject=inv.headSaved.subject;
+    if(!hs.memo&&inv.headSaved.memo) hs.memo=inv.headSaved.memo; }
+  hs.fromNo=inv.invoiceNo; OPS.head[ek]=hs;
   saveOps(); build(); drawIssuedInvoices();
   dlMsg("請求書 "+inv.invoiceNo+" を取り消しました","wait");
+  return true;
 }
 
 // 発行メニュー
@@ -2168,6 +2687,8 @@ TABS.forEach(([id,label],i)=>{
     document.getElementById("ymBox").style.display=(id==="dashboard")?"":"none";};
   nav.appendChild(b);});
 document.getElementById("ym").onchange=render;
+document.getElementById("kpiNg").onclick=showNg;
+document.getElementById("ngClose").onclick=()=>{ document.getElementById("ngCard").style.display="none"; };
 document.getElementById("invYm").onchange=drawInvList;
 document.getElementById("invCust").onchange=drawInvList;
 document.getElementById("buyYm").onchange=drawBuyList;
