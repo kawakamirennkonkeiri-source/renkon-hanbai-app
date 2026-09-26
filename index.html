@@ -222,7 +222,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
           取引先・単価・運賃・締め日が一度に入ります。</td></tr>
       <tr><td><b>② 手で入力する</b></td>
         <td><b>取引先マスタ → 単価マスタ → 運賃マスタ</b> の順に「＋新規」で登録します。
-          そのあと<b>データ取込</b>タブで、電子黒板の荷造りリストと生産者記録を貼り付けます。</td></tr>
+          取引データは<b>電子黒板から30分ごとに自動で入ってきます</b>（貼り付け作業はありません）。</td></tr>
     </tbody>
   </table>
   <div class="note">
@@ -326,7 +326,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="card">
     <h2>取引 <span id="txCnt" class="cnt"></span> 受注＋発注</h2>
     <p class="hint">💡 電子黒板の荷造りリストが「受注」、生産者記録が「発注」として取り込まれます。納品予定日を過ぎたものは納品✓済となり、請求タブに集計されます。<br>
-      <b>収穫舟数はここには出しません</b>（買取の対象外で、取引ではないため）。数量はデータ取込タブで確認できます。</p>
+      <b>収穫舟数はここには出しません</b>（買取の対象外で、取引ではないため）。</p>
     <div class="flex">
       <select id="txKind"><option value="all">全て</option><option value="sale">受注のみ</option><option value="buy">発注のみ</option></select>
       <select id="txStatus"><option value="all">状態：全て</option><option value="created">納品予定</option>
@@ -407,7 +407,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <label>生産者：<select id="buySei"><option value="all">全て</option></select></label>
     </div>
     <p class="hint">💡 電子黒板の生産者記録をもとに、生産者ごとの買取金額を集計します。単価は「単価マスタ」の種別＝仕入の行を使います。<br>
-      <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数はデータ取込タブで確認できます。<br>
+      <b>収穫舟数の行は出しません</b>（買取の対象外のため）。明細数・数量・kgにも入りません。舟数は電子黒板で確認してください。<br>
       数量・kg・単価、差し引きなどの追加行、備考は<b>「✎ この買取書を修正」</b>から直せます。<br>
       <b>「買取書を発行（PDF保存）」</b>を押すと、請求書と同じドライブの「買取書PDF」フォルダに保存し、その明細は<b>発行済み</b>になって直せなくなります。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。</p>
   </div>
@@ -525,24 +525,6 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <option>宅急便</option><option>エア・ウォーター</option><option>ファス</option>
       <option>自社便</option>
     </datalist>
-  </div>
-</section>
-
-<!-- 取込 -->
-<section class="panel" id="importing">
-  <div class="card">
-    <h2>① 受注を取り込む（電子黒板 → 荷造りリスト）</h2>
-    <div class="note">保管庫の <b>荷造りリスト</b> から <b>生産日〜荷造数kg</b> の範囲をコピーして貼り付け</div>
-    <textarea id="paste" placeholder="2026/9/4	2026/9/5	○○商店	洗い	10	100	1000"></textarea>
-    <div class="flex"><button class="btn" id="btnLoad">取り込む</button>
-      <button class="btn sub" id="btnReset">取り込んだ分を消す</button><span id="loadMsg"></span></div>
-  </div>
-  <div class="card">
-    <h2>② 発注を取り込む（電子黒板 → 生産者記録）</h2>
-    <div class="note">保管庫の <b>生産者記録</b> から <b>日付〜出来高kg</b> の範囲をコピーして貼り付け</div>
-    <textarea id="pasteB" placeholder="2026/9/4	AM	○○	洗い	10	8	80"></textarea>
-    <div class="flex"><button class="btn grn" id="btnLoadB">取り込む</button>
-      <button class="btn sub" id="btnResetB">取り込んだ分を消す</button><span id="loadMsgB"></span></div>
   </div>
 </section>
 
@@ -686,7 +668,7 @@ const CFG_KEY="krs_cfg_v2", ROW_KEY="krs_rows", ROWB_KEY="krs_rows_buy";
 const COMPANY_DEFAULT={name:"",addr:"",bank:"",invoiceNo:""};
 const TABS=[["dashboard","ダッシュボード"],["quote","見積"],["tx","取引 (受注＋発注)"],["deliv","納品"],
   ["invoicing","請求"],["buying","買取 (生産者)"],["partners","取引先マスタ"],
-  ["prices","単価マスタ"],["freight","運賃マスタ"],["importing","データ取込"],["settings","設定"]];
+  ["prices","単価マスタ"],["freight","運賃マスタ"],["settings","設定"]];
 const PFROM="2026-04-01", PTO="2027-03-31";
 
 const N=s=>String(s==null?"":s).normalize("NFKC").replace(/[\s\u3000]+/g,"");
@@ -1052,7 +1034,7 @@ function build(sale,buy){
     const mp=MAPI[r.tori+"\u0001"+(r.kubun||"")];
     const cap=parseFloat(r.nyusu);
     const key=se.toDateString(); sq[key]=(sq[key]||0)+1;
-    const _no=txNo("S",se,sq[key]);
+    const _no=r.no||txNo("S",se,sq[key]);   // 自動取込で番号が決まっていればそれを使う
     if(OPS.qty[_no]!=null) cs=OPS.qty[_no];
     const aj=OPS.adj[_no]||null;
     if(aj&&aj.qty!=null) cs=Number(aj.qty);
@@ -1090,7 +1072,7 @@ function build(sale,buy){
   SRCB.forEach(r=>{
     const d=parseDate(r.date); if(!d) return;
     const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
-    const _pno=txNo("P",d,bq[key]), aj=OPS.adj[_pno]||null;
+    const _pno=r.no||txNo("P",d,bq[key]), aj=OPS.adj[_pno]||null;
     const cs=numOr(aj&&aj.qty,parseFloat(r.cs)||0), kg=numOr(aj&&aj.kg,parseFloat(r.kg)||0);
     const cap=parseFloat(r.size);
     const sh=SHANAI.has(r.seisansha);
@@ -2299,49 +2281,22 @@ document.getElementById("btnExport").onclick=()=>{
   a.href=URL.createObjectURL(b);
   a.download="仕入販売管理_設定_"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+".json";
   a.click(); URL.revokeObjectURL(a.href); setCfgMsg("設定ファイルを保存しました");};
+// 設定を読み込んでも、共有DBの設定・操作者名・GASのURLは消さない
+function keepCfg_(o){
+  const k={syncUrl:CFG.syncUrl,syncCode:CFG.syncCode,syncOn:CFG.syncOn,userName:CFG.userName};
+  ["dvGas","dvFolder","invGas","invFolder"].forEach(x=>{ if(!(o&&o[x])&&CFG[x]) k[x]=CFG[x]; });
+  return k;
+}
 document.getElementById("btnImportBtn").onclick=()=>document.getElementById("btnImport").click();
 document.getElementById("btnImport").onchange=e=>{
   const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
   rd.onload=()=>{try{const o=JSON.parse(rd.result); if(!o.price||!o.map) throw 0;
-    CFG=Object.assign(defaultCfg(),o); drawAll(); saveCfg("設定を読み込みました"); build();}
+    CFG=Object.assign(defaultCfg(),o,keepCfg_(o)); drawAll(); saveCfg("設定を読み込みました"); build();}
     catch(err){setCfgMsg("読み込めませんでした","ng");}};
   rd.readAsText(f); e.target.value="";};
 document.getElementById("btnCfgReset").onclick=()=>{
   if(!confirm("編集した設定をすべて捨てて、最初の状態に戻します。よろしいですか？")) return;
   CFG=defaultCfg(); drawAll(); saveCfg("最初の設定に戻しました"); build();};
-
-// ===== 取込 =====
-function parsePaste(txt,cols){
-  const out=[];
-  txt.split(/\r?\n/).forEach(line=>{
-    if(!line.trim()) return;
-    let c=line.split("\t"); if(c.length<4) c=line.split(",");
-    c=c.map(x=>x.trim().replace(/^"|"$/g,""));
-    const i=c.findIndex(x=>/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(x));
-    if(i<0) return;
-    const seg=c.slice(i); if(seg.length<cols.length-1) return;
-    const o={}; cols.forEach((k,j)=>o[k]=seg[j]||""); out.push(o);});
-  return out;}
-document.getElementById("btnLoad").onclick=()=>{
-  const rows=parsePaste(document.getElementById("paste").value,["seisan","nouhin","tori","kubun","nyusu","cs","kg"]);
-  const m=document.getElementById("loadMsg");
-  if(!rows.length){m.innerHTML='<span class="badge b-ng">読み取れる行がありませんでした</span>';return;}
-  try{localStorage.setItem(ROW_KEY,JSON.stringify(rows));}catch(e){}
-  build(rows,null); m.innerHTML='<span class="badge b-ok">'+rows.length+' 件を取り込みました</span>';};
-document.getElementById("btnReset").onclick=()=>{
-  try{localStorage.removeItem(ROW_KEY);}catch(e){}
-  document.getElementById("paste").value=""; build(DATA.sample,null);
-  document.getElementById("loadMsg").innerHTML='<span class="badge b-sale">サンプルに戻しました</span>';};
-document.getElementById("btnLoadB").onclick=()=>{
-  const rows=parsePaste(document.getElementById("pasteB").value,["date","ampm","seisansha","kubun","size","cs","kg"]);
-  const m=document.getElementById("loadMsgB");
-  if(!rows.length){m.innerHTML='<span class="badge b-ng">読み取れる行がありませんでした</span>';return;}
-  try{localStorage.setItem(ROWB_KEY,JSON.stringify(rows));}catch(e){}
-  build(null,rows); m.innerHTML='<span class="badge b-ok">'+rows.length+' 件を取り込みました</span>';};
-document.getElementById("btnResetB").onclick=()=>{
-  try{localStorage.removeItem(ROWB_KEY);}catch(e){}
-  document.getElementById("pasteB").value=""; build(null,DATA.prod);
-  document.getElementById("loadMsgB").innerHTML='<span class="badge b-buy">サンプルに戻しました</span>';};
 
 // ===== 見積 =====
 const QT_KEY="krs_quote";
@@ -3145,7 +3100,7 @@ document.getElementById("fileFull").onchange=e=>{
       +"【いまの内容】\n"+opsSummary(OPS)+"\n\n"
       +"置き換える前に、いまの内容を自動で書き出しておきます。よろしいですか？")) return;
     downloadJson(fullData(),"仕入販売管理_読込前の控え_"+stamp()+".json");
-    CFG=Object.assign(defaultCfg(),o.cfg);
+    CFG=Object.assign(defaultCfg(),o.cfg,keepCfg_(o.cfg));
     OPS=normOps(o.ops);
     if(o.quote&&o.quote.lines) QT=o.quote;
     try{
