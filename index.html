@@ -990,9 +990,24 @@ async function syncPull(){
   if(n){ SNAP=syncSnapshot(); saveSnap(); indexCfg(); drawAll(); build(); drawLog(); }
   return n;
 }
+// 入力中かどうか（打っている最中に画面を作り直すと、文字や変換中の文字が消えるため）
+let IMEON=false, LASTKEY=0;
+document.addEventListener("compositionstart",()=>{IMEON=true;});
+document.addEventListener("compositionend",()=>{IMEON=false;LASTKEY=Date.now();});
+document.addEventListener("keydown",()=>{LASTKEY=Date.now();},true);
+document.addEventListener("input",()=>{LASTKEY=Date.now();},true);
+function typingNow(){
+  if(IMEON) return true;                      // 変換中は必ず待つ
+  const a=document.activeElement;
+  if(!a) return false;
+  const t=(a.tagName||"").toUpperCase();
+  if(t!=="INPUT"&&t!=="TEXTAREA"&&!a.isContentEditable) return false;
+  return (Date.now()-LASTKEY)<20000;          // 20秒打っていなければ、入力中とみなさない
+}
 async function syncTick(force){
   if(!syncOn()||SYNCBUSY) return;
-  if(!force&&document.getElementById("mdlBg")) return;   // 入力中は反映しない
+  if(!force&&document.getElementById("mdlBg")) return;   // 入力の小窓が開いている間は反映しない
+  if(!force&&typingNow()) return;                        // 打っている最中は反映しない
   SYNCBUSY=true; drawSyncBadge();
   try{ await syncPush(); await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
   catch(e){ SYNCERR=e.message||String(e); }
@@ -3098,18 +3113,26 @@ document.getElementById("fileFull").onchange=e=>{
     if(!confirm("バックアップ（"+(o.exportedAt||"日時不明")+" 書き出し）で、いまの内容を置き換えます。\n\n"
       +"【ファイルの中身】\n"+opsSummary(o.ops)+"\n・受注 "+(o.sale||[]).length+"行／生産者記録 "+(o.buy||[]).length+"行\n\n"
       +"【いまの内容】\n"+opsSummary(OPS)+"\n\n"
+      +(syncOn()?"※ 共有データベースを使っているので、取引データ（電子黒板の取込分）は戻しません。\n  マスタ・帳票・見積だけを戻します。\n\n":"")
       +"置き換える前に、いまの内容を自動で書き出しておきます。よろしいですか？")) return;
     downloadJson(fullData(),"仕入販売管理_読込前の控え_"+stamp()+".json");
     CFG=Object.assign(defaultCfg(),o.cfg,keepCfg_(o.cfg));
     OPS=normOps(o.ops);
     if(o.quote&&o.quote.lines) QT=o.quote;
-    try{
-      localStorage.setItem(ROW_KEY,JSON.stringify(o.sale||[]));
-      localStorage.setItem(ROWB_KEY,JSON.stringify(o.buy||[]));
-    }catch(x){}
+    // 共有データベースを使っているときは、取引データ（電子黒板の取込分）は戻さない。
+    // 戻すと自動取込より古い内容で全員分を上書きしてしまうため。
+    const keepRows=syncOn();
+    if(!keepRows){
+      try{
+        localStorage.setItem(ROW_KEY,JSON.stringify(o.sale||[]));
+        localStorage.setItem(ROWB_KEY,JSON.stringify(o.buy||[]));
+      }catch(x){}
+    }
     saveCfg("バックアップから戻しました"); saveOps(); qtSave();
-    drawAll(); build(o.sale||[],o.buy||[]);
-    dlMsg("バックアップから戻しました（"+(o.exportedAt||"")+" 時点）","ok");
+    drawAll(); keepRows?build():build(o.sale||[],o.buy||[]);
+    dlMsg(keepRows
+      ?"マスタと帳票を戻しました（"+(o.exportedAt||"")+" 時点）。取引データは共有データベースの内容（電子黒板の自動取込）のままです。"
+      :"バックアップから戻しました（"+(o.exportedAt||"")+" 時点）","ok");
   };
   rd.readAsText(f); e.target.value="";
 };
