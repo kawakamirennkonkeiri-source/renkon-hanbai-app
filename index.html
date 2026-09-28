@@ -1418,9 +1418,13 @@ function invTotals(rows,ex){
   return {shohin, soryo, taxF, taxS, total:shohin+soryo+taxF+taxS};
 }
 function extraRowsHtml(ex,hasF,withTanka){
+  // withTanka: 'pre'=数量の前に単価を出す／true=数量の後ろ／false=単価なし
+  var pre=(withTanka==='pre');
   return (ex||[]).map(e=>'<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
-    +' <span class="badge ed">追加・税'+e.tax+'</span></td><td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
-    +(withTanka?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
+    +' <span class="badge ed">追加・税'+e.tax+'</span></td>'
+    +(pre?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
+    +'<td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
+    +(withTanka===true?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
     +'<td class="num">¥'+yen(e.amount)+'</td>'+(hasF?'<td></td><td></td>':'')
     +'<td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
 }
@@ -1792,15 +1796,15 @@ function drawInvList(){
       +'<button data-pdf="inv" data-key="'+esc(k)+'">請求書PDF</button>'
       +'<div class="sep"></div><button data-doc="'+esc(k)+'">画面で確認する</button></div></div></div>'
       +'<table><thead><tr><th>取引日</th><th>取引No.</th><th>産地</th><th>品目</th>'
-      +'<th class="num">請求数量</th><th class="num">商品金額</th>'
+      +'<th class="num">単価</th><th class="num">請求数量</th><th class="num">商品金額</th>'
       +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
       +'<th class="num">請求金額</th></tr></thead><tbody>'
       +list.sort((a,b)=>a.deliv-b.deliv).map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
         +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg'+edBadge(t)+'</td>'
-        +'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
+        +'<td class="num">'+(t.tanka==null?'<span style="color:#C62828">要確認</span>':'¥'+yen(t.tanka))+'</td>'+'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
         +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
         +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
-      +extraRowsHtml(ex,hasF,false)
+      +extraRowsHtml(ex,hasF,'pre')
       +'</tbody></table>';
     box.appendChild(d);
   });
