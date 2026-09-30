@@ -983,11 +983,32 @@ function applyRemote(data){
   if(n){ saveCfg(); saveOps(); }
   return n;
 }
+// 共有DBに中身が入っているか
+function syncHasData_(d){
+  return ["partners","price","freight","map","shime","rows","meta","invoices"]
+    .some(k=>(d[k]||[]).some(r=>!r._del));
+}
+// はじめての接続で、共有DBに合わせる（このPCの分は捨てる）
+function syncAdoptLocal_(){
+  try{ downloadJson(fullData(),"仕入販売管理_共有DBにつなぐ前の控え_"+stamp()+".json"); }catch(e){}
+  CFG.partners=[]; CFG.price=[]; CFG.freight=[]; CFG.map=[]; CFG.shime=[];
+  OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[];
+  ["adj","extra","head","st","qty","doc","invLines","buyLines"].forEach(k=>{ OPS[k]={}; });
+  SRC=[]; SRCB=[]; SNAP={};
+  try{ localStorage.setItem(ROW_KEY,"[]"); localStorage.setItem(ROWB_KEY,"[]"); }catch(e){}
+}
 async function syncPull(){
+  const first=!SINCE;
   const j=await syncApi("pullAll",{since:SINCE});
-  const n=applyRemote(j.data||{});
+  const d=j.data||{};
+  // はじめての接続で共有DBに中身があるときは、このPCの分を捨てて共有DBに合わせる。
+  // ここで合わせておかないと、次にこのPCの中身を共有DBへ送ってしまい、
+  // マスタが二重になったり、自社情報が空で上書きされたりする。
+  const adopt=first&&syncHasData_(d);
+  if(adopt) syncAdoptLocal_();
+  const n=applyRemote(d);
   SINCE=j.serverTime||SINCE; saveSince();
-  if(n){ SNAP=syncSnapshot(); saveSnap(); indexCfg(); drawAll(); build(); drawLog(); }
+  if(n||adopt){ SNAP=syncSnapshot(); saveSnap(); indexCfg(); drawAll(); build(); drawLog(); }
   return n;
 }
 // 入力中かどうか（打っている最中に画面を作り直すと、文字や変換中の文字が消えるため）
@@ -1009,7 +1030,8 @@ async function syncTick(force){
   if(!force&&document.getElementById("mdlBg")) return;   // 入力の小窓が開いている間は反映しない
   if(!force&&typingNow()) return;                        // 打っている最中は反映しない
   SYNCBUSY=true; drawSyncBadge();
-  try{ await syncPush(); await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
+  // 一度も受け取っていないPCは、送らずに先に受け取る
+  try{ if(SINCE) await syncPush(); await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
   catch(e){ SYNCERR=e.message||String(e); }
   SYNCBUSY=false; drawSyncBadge(); drawSyncCard();
 }
@@ -2314,6 +2336,14 @@ document.getElementById("btnImport").onchange=e=>{
     catch(err){setCfgMsg("読み込めませんでした","ng");}};
   rd.readAsText(f); e.target.value="";};
 document.getElementById("btnCfgReset").onclick=()=>{
+  // 共有データベースにつないだまま戻すと、このPCから「全部消した」と伝わってしまい、
+  // 共有データベースのマスタが全員分まとめて消える。
+  if(syncOn()){
+    alert("共有データベースにつないでいる間は、最初の設定に戻せません。\n\n"
+      +"このパソコンだけ戻すつもりでも、共有データベースのマスタが全員分消えてしまいます。\n\n"
+      +"どうしても戻すときは、先に設定タブの「共有する」のチェックを外してください。");
+    return;
+  }
   if(!confirm("編集した設定をすべて捨てて、最初の状態に戻します。よろしいですか？")) return;
   CFG=defaultCfg(); drawAll(); saveCfg("最初の設定に戻しました"); build();};
 
@@ -3211,7 +3241,13 @@ document.getElementById("ym").onchange=render;
 document.getElementById("btnFullExport").onclick=fullExport;
 ["syncUrl","syncCode"].forEach(id=>{ const el=document.getElementById(id);
   el.value=CFG[id]||"";
-  el.oninput=()=>{ CFG[id]=el.value.trim(); saveCfg("共有データベースの設定を変えました"); startSync(); };
+  el.oninput=()=>{
+    const v=el.value.trim();
+    // つなぎ先や合言葉を入れ直したときは「はじめての接続」に戻す。
+    // こうすると、このPCの中身を送る前に、共有データベースの中身で揃え直せる。
+    if(v!==(CFG[id]||"")){ SNAP={}; saveSnap(); SINCE=""; saveSince(); }
+    CFG[id]=v; saveCfg("共有データベースの設定を変えました"); startSync();
+  };
 });
 (function(){ const c=document.getElementById("syncOn");
   c.checked=!!CFG.syncOn;
