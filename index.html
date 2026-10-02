@@ -621,6 +621,15 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button class="btn sub sm" id="btnShanai">＋ 追加</button></div>
   </div>
   <div class="card">
+    <h2>請求書は作らない名前（売上だけ数える）</h2>
+    <div class="note" style="margin-top:0">個人注文のように、<b>請求書は立てないけれど売上には入れたい</b>名前を入れます。
+      取引とダッシュボードの受注合計には出ますが、請求タブと請求書PDFには出ません。<br>
+      上の「対象外にする名前」は金額をまったく数えません。こちらは<b>金額は数えます</b>。</div>
+    <div class="flex" id="nobillBox"></div>
+    <div class="flex"><input class="find" id="nobillNew" placeholder="追加する名前">
+      <button class="btn sub sm" id="btnNobill">＋ 追加</button></div>
+  </div>
+  <div class="card">
     <h2>共有データベース（複数PCで同時に使う）</h2>
     <div class="note or" style="margin-top:0">経理と営業の2〜3台で、同じ内容を見ながら作業するための設定です。<br>
       <b>約10秒ごと</b>にやりとりします。請求書・買取書の<b>番号はGoogle側で採番</b>するので、
@@ -718,7 +727,7 @@ function defaultCfg(){
     map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,
       bill:billOf(m.tori),sanchi:"熊本"})),
     shime:DATA.shime.map(s=>({tori:billOf(s.tori),shime:s.shime,kijun:s.kijun,memo:""})),
-    shanai:DATA.shanai.slice(),
+    shanai:DATA.shanai.slice(), nobill:(DATA.nobill||[]).slice(),
     partners:DATA.partners.map(p=>({name:p.name,key:KEYNAME(p.name),zip:p.zip,addr:p.addr,
       person:p.person,mail:p.mail,paymentMonthOffset:1,paymentDay:"月末"}))
       .concat(BILL_NEW.filter(nm=>!DATA.partners.some(p=>N(KEYNAME(p.name))===N(nm)))
@@ -732,6 +741,7 @@ try{const s=localStorage.getItem(CFG_KEY); if(s){const o=JSON.parse(s); if(o&&o.
 // 請求先の登録を、すでに保存されている設定にも反映する（1回だけ）
 (function migrateBill(){
   if(!CFG.partners) CFG.partners=[];
+  if(!CFG.nobill) CFG.nobill=[];
   BILL_NEW.forEach(nm=>{ if(!CFG.partners.some(p=>N(p.key)===N(nm)))
     CFG.partners.push({name:nm,key:nm,zip:"",addr:"",person:"",mail:"",
       paymentMonthOffset:1,paymentDay:"月末"}); });
@@ -745,11 +755,12 @@ function setCfgMsg(t,k){const el=document.getElementById("cfgMsg");
   el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":"b-ok")+'">'+esc(t)+'</span>';
   clearTimeout(setCfgMsg._t); setCfgMsg._t=setTimeout(()=>el.innerHTML="",3000);}
 
-let MAPI={},SHIME={},SHANAI=new Set(),PAR={};
+let MAPI={},SHIME={},SHANAI=new Set(),NOBILL=new Set(),PAR={};
 function indexCfg(){
   MAPI={};CFG.map.forEach(m=>{if(m.sell)MAPI[m.sell+"\u0001"+(m.kubun||"")]=m;});
   SHIME={};CFG.shime.forEach(s=>{if(s.tori)SHIME[s.tori]=s;});
   SHANAI=new Set(CFG.shanai);
+  NOBILL=new Set(CFG.nobill||[]);
   PAR={};CFG.partners.forEach(p=>{if(p.key)PAR[KEYNAME(p.key)]=p;});
 }
 const shimeOf=t=>SHIME[t]||{shime:"月末",kijun:"着"};
@@ -878,7 +889,7 @@ function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(
 // ===== 共有データベース（複数PCで同時に使う） =====
 const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
-const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
+const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
 const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
@@ -1070,6 +1081,7 @@ function build(sale,buy){
     let cs=parseFloat(r.cs); if(!(cs>0)) return;
     const baseQty=cs;
     const sh=SHANAI.has(r.tori);
+    const nb=!sh&&NOBILL.has(r.tori);   // 売上には数えるが請求書は作らない
     const mp=MAPI[r.tori+"\u0001"+(r.kubun||"")];
     const cap=parseFloat(r.nyusu);
     const key=se.toDateString(); sq[key]=(sq[key]||0)+1;
@@ -1103,7 +1115,7 @@ function build(sale,buy){
       hai:(fr||lead||frow)?((fr||lead||frow).hai||"自社"):"",
       lead:leadLabel(lead||fr),ship:se,delivSrc:noSrc,
       shohin:shohin,freight:frAmt,
-      sale:(shohin!=null)?shohin+frAmt:null,buy:null,y:ym[0],m:ym[1],shanai:sh,
+      sale:(shohin!=null)?shohin+frAmt:null,buy:null,y:ym[0],m:ym[1],shanai:sh,nobill:nb,
       status:sh?"off":(no<=TODAY?"delivered":"created"),
       why:sh?"対象外":!mp?"対応表に未登録":(tk==null)?"単価マスタに該当なし"
         :(betsu&&!fr&&!(aj&&aj.freight!=null))?"運賃マスタに該当なし":""});
@@ -1169,16 +1181,17 @@ function render(){
   if(document.getElementById("ngCard").style.display!=="none") drawNg();
 
   const tfd=TF(), aggS={};
-  sOk.forEach(t=>{const a=aggS[t.customer]||(aggS[t.customer]={c:0,q:0,k:0,sh:0,fr:0});
-    a.c++;a.q+=t.qty;a.k+=t.sale;a.sh+=(t.shohin||0);a.fr+=(t.freight||0);});
+  sOk.forEach(t=>{const a=aggS[t.customer]||(aggS[t.customer]={c:0,q:0,k:0,sh:0,fr:0,nb:0});
+    a.c++;a.q+=t.qty;a.k+=t.sale;a.sh+=(t.shohin||0);a.fr+=(t.freight||0);if(t.nobill)a.nb=1;});
   const tb=document.querySelector("#tSale tbody"); tb.innerHTML="";
   Object.entries(aggS).sort((a,b)=>b[1].k-a[1].k).forEach(([k,v])=>{
     const r=shimeOf(k),tr=document.createElement("tr");
-    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td><span class="badge '+(r.shime==="20日"?"b-wait":"b-sale")+'">'
-      +kijunLabel(r)+'／'+esc(r.shime)+'締め</span></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
+    tr.innerHTML='<td><b>'+esc(k)+'</b></td><td><span class="badge '+(v.nb?"b-gray":(r.shime==="20日"?"b-wait":"b-sale"))+'">'
+      +(v.nb?"売上のみ・請求しない":kijunLabel(r)+'／'+esc(r.shime)+'締め')+'</span></td><td class="num">'+v.c+'</td><td class="num">'+yen(v.q)
       +'</td><td class="num">'+yen(v.k)+(v.fr?'<br><span style="font-size:10px;color:#888">送料 '+yen(v.fr)+'</span>':'')
       +'</td><td class="num">'+yen(v.sh*tfd.food+v.fr*tfd.fre)+'</td><td class="num"><b>'
-      +yen(v.k+v.sh*tfd.food+v.fr*tfd.fre)+'</b></td><td><button class="btn sm" data-inv="'+esc(k)+'">請求書</button></td>';
+      +yen(v.k+v.sh*tfd.food+v.fr*tfd.fre)+'</b></td><td>'
+      +(v.nb?'—':'<button class="btn sm" data-inv="'+esc(k)+'">請求書</button>')+'</td>';
     tb.appendChild(tr);});
   const tt=document.createElement("tr"); tt.className="total";
   const shT=sOk.reduce((s,t)=>s+(t.shohin||0),0), frT=sOk.reduce((s,t)=>s+(t.freight||0),0);
@@ -1782,7 +1795,7 @@ function termText(k,y,m){
   return y+"-"+p2(m)+"-01〜"+y+"-"+p2(m)+"-"+new Date(y,m,0).getDate();
 }
 function drawInvList(){
-  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale&&!OPS.invLines[t.no]);
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale&&!t.nobill&&!OPS.invLines[t.no]);
   const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   document.getElementById("invMonth").textContent="("+y+"-"+p2(m)+"分)";
   const agg={};
@@ -2235,6 +2248,14 @@ function drawPar(){
   document.getElementById("cPar").textContent="("+CFG.partners.length+"行)"+(sh!==CFG.partners.length?" ／ "+sh+"行を表示中":"");
   bind();
 }
+function drawNobill(){
+  const box=document.getElementById("nobillBox");
+  box.innerHTML=(CFG.nobill||[]).map((s,i)=>'<span class="badge b-sale" style="padding:5px 10px;font-size:12.5px">'
+    +esc(s)+' <a href="#" data-rm="'+i+'" style="color:#C62828;text-decoration:none">×</a></span>').join(" ")
+    ||'<span style="color:#888;font-size:12.5px">（まだありません）</span>';
+  box.querySelectorAll("[data-rm]").forEach(a=>a.onclick=e=>{e.preventDefault();
+    CFG.nobill.splice(+a.dataset.rm,1); drawNobill(); saveCfg("削除しました"); build();});
+}
 function drawShanai(){
   const box=document.getElementById("shanaiBox");
   box.innerHTML=CFG.shanai.map((s,i)=>'<span class="badge b-wait" style="padding:5px 10px;font-size:12.5px">'
@@ -2271,7 +2292,7 @@ function bind(){
       if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
     });});
 }
-function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();
+function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();drawNobill();
   if(!QT.lines.length) QT.lines=[{item:"",qty:null,unit:"c/s",tanka:null,tax:"8%"}];
   drawQt();
   document.getElementById("taxFood").value=CFG.taxFood;
@@ -2314,6 +2335,11 @@ document.getElementById("delivRule").onchange=e=>{
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawTx;});
 ["fDv","dvStatus"].forEach(id=>{const el=document.getElementById(id);
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawDv;});
+document.getElementById("btnNobill").onclick=()=>{
+  const el=document.getElementById("nobillNew"),v=el.value.trim(); if(!v) return;
+  if(!CFG.nobill) CFG.nobill=[];
+  if(!CFG.nobill.includes(v)) CFG.nobill.push(v);
+  el.value=""; drawNobill(); saveCfg("追加しました"); build();};
 document.getElementById("btnShanai").onclick=()=>{
   const el=document.getElementById("shanaiNew"),v=el.value.trim(); if(!v) return;
   if(!CFG.shanai.includes(v)) CFG.shanai.push(v);
@@ -2730,7 +2756,7 @@ async function issueInvoice(custKey){
   }
   const r=shimeOf(custKey), p=partnerOf(custKey), tf=TF();
   // 発行の直前に、いまの状態から請求行を作り直す
-  const rows=TX.filter(t=>t.kind==="sale"&&!t.shanai&&t.customer===custKey
+  const rows=TX.filter(t=>t.kind==="sale"&&!t.shanai&&!t.nobill&&t.customer===custKey
       &&t.y===y&&t.m===m&&t.sale&&!OPS.invLines[t.no])
     .sort((a,b)=>a.deliv-b.deliv);
   if(!rows.length){ alert("請求できる明細がありません。\n（すでに全て請求済みの可能性があります）"); return; }
