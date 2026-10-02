@@ -764,7 +764,9 @@ function partnerOf(name){
   return cand[0];}
 function inTerm(p,d){
   if(!d) return true;
-  const f=p.from?new Date(p.from):null, t=p.to?new Date(p.to):null;
+  // 適用期間は「日付」で比べる。new Date("2026-09-14") は世界時の0時＝日本の朝9時になるので、
+  // そのまま比べると開始日 当日の納品がはじかれてしまう
+  const f=p.from?parseDate(p.from):null, t=p.to?parseDate(p.to):null;
   if(f&&d<f) return false;
   if(t&&d>t) return false;
   return true;
