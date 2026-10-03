@@ -133,6 +133,10 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 .prev-h .ttl{font-size:14.5px;font-weight:bold}
 .prev-h .cond{font-size:12px;color:#777;font-weight:400}
 .prev-h .sp{flex:1}
+.prev-h .hd{cursor:pointer;user-select:none;border-radius:6px;padding:2px 6px;margin:-2px -6px}
+.prev-h .hd:hover{background:#EEF3F8}
+.prev-h .cv{display:inline-block;width:14px;color:#1F4E79;font-size:12px}
+@media print{ .prev-b{display:block!important} .prev-h .cv{display:none} }
 .prev-h .amt{font-size:12px;color:#777;white-space:nowrap}
 .prev-h .amt b{font-size:15px;color:#222}
 .prev-h .amt .big{font-size:19px;color:#111;font-weight:bold}
@@ -377,6 +381,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="flex">
       <label>対象月：<select id="invYm"></select></label>
       <label>お客様：<select id="invCust"><option value="all">全て</option></select></label>
+      <div class="sp" style="flex:1"></div>
+      <button class="btn sub sm" id="btnInvOpen">すべて開く</button>
+      <button class="btn sub sm" id="btnInvClose">すべて閉じる</button>
     </div>
     <p class="hint">💡 <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
       対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
@@ -1891,6 +1898,25 @@ function smpUndo(id){
   s.done=null; saveOps(); logOp("有償サンプルの計上を取り消しました",s.date+" "+(s.size||""));
   drawSamples(); drawInvList();
 }
+let INVOPEN={};            // 開いている請求先（画面を開き直すと全部閉じた状態に戻ります）
+function invFold(k,open){
+  const d=document.querySelector('[data-tg="'+(window.CSS&&CSS.escape?CSS.escape(k):k)+'"]');
+  const card=d?d.closest(".prev"):null; if(!card) return;
+  const body=card.querySelector(".prev-b"), cv=card.querySelector(".cv");
+  if(open) INVOPEN[k]=1; else delete INVOPEN[k];
+  if(body) body.style.display=open?"":"none";
+  if(cv) cv.textContent=open?"\u25be":"\u25b8";
+}
+function invFoldAll(open){
+  document.querySelectorAll("#invList .prev").forEach(card=>{
+    const d=card.querySelector("[data-tg]"); if(!d) return;
+    const k=d.dataset.tg;
+    if(open) INVOPEN[k]=1; else delete INVOPEN[k];
+    const body=card.querySelector(".prev-b"), cv=card.querySelector(".cv");
+    if(body) body.style.display=open?"":"none";
+    if(cv) cv.textContent=open?"\u25be":"\u25b8";
+  });
+}
 function drawInvList(){
   drawSamples();
   const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale&&!t.nobill&&!OPS.invLines[t.no]);
@@ -1912,7 +1938,9 @@ function drawInvList(){
     const shohin=tt.shohin, soryo=tt.soryo, tax=tt.taxF+tt.taxS;
     const sub=shohin+soryo, hasF=list.some(t=>t.freight);
     const d=document.createElement("div"); d.className="prev";
-    d.innerHTML='<div class="prev-h"><div><div class="ttl">'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
+    const op=!!INVOPEN[k];
+    d.innerHTML='<div class="prev-h"><div class="hd" data-tg="'+esc(k)+'" title="押すと明細を開け閉めできます">'
+      +'<div class="ttl"><span class="cv">'+(op?'\u25be':'\u25b8')+'</span>'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
       +'<div class="cond">[請求基準: '+kijunLabel(r)+' ／ '+esc(r.shime)+'締め ／ 期間: '+termText(k,y,m)+']'
       +(hasF?' <span class="badge b-wait">送料別</span>':' <span class="badge b-gray">送料込み</span>')
       +(ex.length?' <span class="badge ed">追加行 '+ex.length+'</span>':'')
@@ -1930,6 +1958,7 @@ function drawInvList(){
       +'<button data-freee="inv" data-key="'+esc(k)+'">請求書(freee)</button>'
       +'<button data-pdf="inv" data-key="'+esc(k)+'">請求書PDF</button>'
       +'<div class="sep"></div><button data-doc="'+esc(k)+'">画面で確認する</button></div></div></div>'
+      +'<div class="prev-b"'+(op?'':' style="display:none"')+'>'
       +'<table><thead><tr><th>取引日</th><th>取引No.</th><th>産地</th><th>品目</th>'
       +'<th class="num">単価</th><th class="num">請求数量</th><th class="num">商品金額</th>'
       +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
@@ -1940,13 +1969,14 @@ function drawInvList(){
         +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
         +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
       +extraRowsHtml(ex,hasF,'pre')
-      +'</tbody></table>';
+      +'</tbody></table></div>';
     box.appendChild(d);
   });
   if(!box.children.length) box.innerHTML='<div class="card"><p style="color:#777">'
     +'この月に、まだ請求していない明細はありません。（下の「この月の発行済請求書」をご覧ください）</p></div>';
   box.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>showInv(b.dataset.doc));
   box.querySelectorAll("[data-invedit]").forEach(b=>b.onclick=()=>openInvEditor(b.dataset.invedit));
+  box.querySelectorAll("[data-tg]").forEach(h=>h.onclick=()=>invFold(h.dataset.tg,!INVOPEN[h.dataset.tg]));
   drawIssuedInvoices();
 }
 function drawBuyList(){
@@ -2433,6 +2463,8 @@ document.getElementById("delivRule").onchange=e=>{
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawTx;});
 ["fDv","dvStatus"].forEach(id=>{const el=document.getElementById(id);
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawDv;});
+document.getElementById("btnInvOpen").onclick=()=>invFoldAll(true);
+document.getElementById("btnInvClose").onclick=()=>invFoldAll(false);
 document.getElementById("btnNobill").onclick=()=>{
   const el=document.getElementById("nobillNew"),v=el.value.trim(); if(!v) return;
   if(!CFG.nobill) CFG.nobill=[];
