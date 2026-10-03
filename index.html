@@ -1613,6 +1613,41 @@ function buyExtraRowsHtml(ex){
     +' <span class="badge ed">追加</span></td><td class="num">'+dec1(e.qty)+esc(e.unit)+'</td><td></td>'
     +'<td class="num">¥'+yen(e.tanka)+'</td><td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
 }
+// 買取書の明細のまとめ方（2026/10/3 社長指示）
+//   同じ日・同じ単価なら、1行にまとめて kg を足します。
+//   ここに無い区分（新しい区分が増えたときなど）は、これまで通り 1行ずつ出ます。
+const BUY_GROUP = [
+  { name:"れんこん", kubun:["洗い","土","洗い半端","土半端"] },
+  { name:"CS",       kubun:["C","S"] }
+];
+function buyGrpOf(kubun){
+  const k=N(kubun);
+  for(let i=0;i<BUY_GROUP.length;i++)
+    if(BUY_GROUP[i].kubun.some(x=>N(x)===k)) return BUY_GROUP[i].name;
+  return null;   // 見覚えの無い区分はまとめない
+}
+// 同じ日・同じまとめ名・同じ単価 ごとに 1行にする
+function buyMergeRows(rows){
+  const out=[], idx={};
+  (rows||[]).forEach(t=>{
+    const g=buyGrpOf(t.kubun);
+    // 単価が「円/ケース」のものは、kg で足すと金額が合わないのでまとめません
+    if(!g||(t.tanka!=null&&t.kunit&&t.kunit!=="円/kg")){ out.push(t); return; }
+    const key=t.date.getTime()+"|"+g+"|"+(t.tanka==null?"":t.tanka);
+    if(idx[key]==null){
+      idx[key]=out.length;
+      out.push(Object.assign({},t,{kubun:g,cap:null,qty:null,_g:true,_n:1,
+        _kubunList:[t.kubun+" "+(t.cap||"")+"kg"]}));
+    }else{
+      const o=out[idx[key]];
+      o.kg=numOr(o.kg,0)+numOr(t.kg,0);
+      o.buy=(o.buy==null&&t.buy==null)?null:(numOr(o.buy,0)+numOr(t.buy,0));
+      o.edited=o.edited||t.edited;
+      o._n++; o._kubunList.push(t.kubun+" "+(t.cap||"")+"kg");
+    }
+  });
+  return out;
+}
 // 買取書：まだ発行していない明細
 function buyOpenRows(k,ymSel){
   return curOf(ymSel||"buyYm").filter(t=>t.kind==="buy"&&t.supplier===k&&!OPS.buyLines[t.no]).sort((a,b)=>a.date-b.date);
@@ -2039,8 +2074,12 @@ function drawBuyList(){
       +'<table><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
       +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th>'
       +'<th class="num">買取金額</th></tr></thead><tbody>'
-      +list.sort((a,b)=>a.date-b.date).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'+t.no+'</td><td>'
-        +esc(t.kubun)+edBadge(t)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
+      +buyMergeRows(list.sort((a,b)=>a.date-b.date)).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td>'
+        +(t._g?'<span style="color:#888;font-size:11px">'+t._n+'件</span>':t.no)+'</td><td>'
+        +esc(t.kubun)+edBadge(t)
+        +(t._g?'<div style="font-size:10.5px;color:#999">'+esc(t._kubunList.join("・"))+'</div>':'')
+        +'</td><td class="num">'+(t._g?'—':(t.cap||"")+'kg')+'</td><td class="num">'
+        +(t._g?'—':dec1(t.qty))
         +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
         +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
         +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
@@ -2119,8 +2158,10 @@ function showBuy(k){
     +'<p style="font-size:12.5px;color:#666">下記の通りお買い取りいたしました。</p>'
     +'<table class="buy"><thead><tr><th>記録日</th><th>取引No.</th><th>区分</th><th class="num">サイズ</th>'
     +'<th class="num">数量c/s</th><th class="num">数量kg</th><th class="num">単価</th><th class="num">買取金額</th></tr></thead><tbody>'
-    +rows.map(t=>'<tr><td>'+fmtY(t.date)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'+t.no
-      +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t.cap||"")+'kg</td><td class="num">'+dec1(t.qty)
+    +buyMergeRows(rows).map(t=>'<tr><td>'+fmtY(t.date)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'
+      +(t._g?'':t.no)
+      +'</td><td>'+esc(t.kubun)+'</td><td class="num">'+(t._g?'':(t.cap||"")+'kg')+'</td><td class="num">'
+      +(t._g?'':dec1(t.qty))
       +'</td><td class="num">'+kg1(t.kg)+'</td><td class="num">'
       +(t.tanka!=null?'¥'+yen(t.tanka)+'<span style="font-size:10px;color:#999"> '+esc(t.kunit)+'</span>':'—')
       +'</td><td class="num">'+(t.buy?'¥'+yen(t.buy):'—')+'</td></tr>').join("")
@@ -3035,7 +3076,7 @@ function nextBuyNo(y,m){
 // 買取書HTML（PDF用）
 function buildBuyHtml(doc){
   const rows=doc.lines.map(l=>'<tr><td>'+esc2(l.date)+'</td><td>'+esc2(l.kubun)+'</td>'
-    +'<td class="n">'+esc2(l.cap?l.cap+"kg":"")+'</td><td class="n">'+dec1(l.qty)+'</td>'
+    +'<td class="n">'+esc2(l.cap?l.cap+"kg":"")+'</td><td class="n">'+(l.qty==null?"":dec1(l.qty))+'</td>'
     +'<td class="n">'+kg1(l.kg)+'</td><td class="n">'+yen(l.tanka)+'<span style="font-size:7.5pt"> '+esc2(l.kunit)+'</span></td>'
     +'<td class="n">'+yen(l.amount)+'</td></tr>').join("")
     +(doc.extraLines||[]).map(e=>'<tr><td></td><td colspan="2">'+esc2(e.tekiyo)+'</td><td class="n">'+dec1(e.qty)+'</td>'
@@ -3099,8 +3140,9 @@ async function issueBuyDoc(k){
   }
   const doc={ id:bdId, docNo:bdNo, supplier:k, targetMonth:y+"-"+p2(m),
     issueDate:ymd(y,m,lastDayOf(y,m)), period:ymd(y,m,1)+"〜"+ymd(y,m,lastDayOf(y,m)),
-    lines:rows.map(t=>({txNo:t.no, date:(t.date.getMonth()+1)+"/"+t.date.getDate(), kubun:t.kubun, cap:t.cap||null,
-      qty:t.qty, kg:t.kg, tanka:t.tanka, kunit:t.kunit, amount:t.buy||0})),
+    lines:buyMergeRows(rows).map(t=>({txNo:t._g?"":t.no, date:(t.date.getMonth()+1)+"/"+t.date.getDate(),
+      kubun:t.kubun, cap:t.cap||null, qty:(t._g?null:t.qty), kg:t.kg,
+      tanka:t.tanka, kunit:t.kunit, amount:t.buy||0})),
     extraLines:ex.map(e=>({tekiyo:e.tekiyo,qty:e.qty,unit:e.unit,tanka:e.tanka})),
     memo:hd.memo||"", headSaved:{memo:hd.memo||""}, originalDocNo:hd.fromNo||"",
     sub:bt.sub, tax:bt.tax, total:bt.total,
