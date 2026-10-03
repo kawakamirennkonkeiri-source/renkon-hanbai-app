@@ -381,6 +381,18 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">💡 <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
       対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
   </div>
+  <div class="card no-print" id="smpCard" style="display:none">
+    <h2>有償サンプル <span class="cnt" id="smpCnt"></span></h2>
+    <p class="hint">💡 発注書で<b>ピンクの枠</b>が付いたセル（＝有償）だけを並べています。
+      請求先と単価を入れて「請求書に足す」を押すと、その取引先の請求書に<b>追加行</b>として載ります。<br>
+      送り先と請求先が違うことがあるので、ヒントの文は<b>そのまま請求先として使わず</b>、必ず確かめてください。
+      まだ足していないものは、前の月のぶんも下に残します。</p>
+    <div class="scroll" style="max-height:40vh"><table id="tSmp"><thead><tr>
+      <th style="width:9%">出荷日</th><th style="width:8%">品目</th><th class="num" style="width:7%">kg</th>
+      <th style="width:22%">請求先</th><th class="num" style="width:10%">単価(円/kg)</th>
+      <th class="num" style="width:10%">金額(税抜)</th><th style="width:12%"></th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
   <div id="invList" class="no-print"></div>
   <div class="card no-print" id="issuedCard">
     <h2>この月の発行済請求書 <span class="cnt" id="issuedCnt"></span></h2>
@@ -880,6 +892,7 @@ try{const o=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
        adj:o.adj||{},extra:o.extra||{},head:o.head||{},
        buyDocs:o.buyDocs||[],buyLines:o.buyLines||{},log:o.log||[]};}catch(e){}
 if(!OPS.quotes) OPS.quotes=[];
+if(!OPS.samples) OPS.samples=(function(){try{return (JSON.parse(localStorage.getItem(OPS_KEY)||"{}").samples)||[];}catch(e){return [];}})();
 ["adj","extra","head","buyLines"].forEach(k=>{ if(!OPS[k]) OPS[k]={}; });
 if(!OPS.buyDocs) OPS.buyDocs=[];
 if(!OPS.log) OPS.log=[];
@@ -887,7 +900,7 @@ const docKey=(type,who,y,m)=>type+"|"+who+"|"+y+"-"+p2(m);
 const numOr=(v,d)=>(v==null||v===""||isNaN(Number(v)))?d:Number(v);
 function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){} syncSoon();}
 // ===== 共有データベース（複数PCで同時に使う） =====
-const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes",
+const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
 const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
 const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
@@ -937,6 +950,7 @@ function syncSnapshot(){
   arr("map",CFG.map); arr("shime",CFG.shime);
   const docs=(e,list)=>{const m={};(list||[]).forEach(d=>{ if(d&&d.id) m[d.id]=Object.assign({},d); }); s[e]=m;};
   docs("invoices",OPS.invoices); docs("buyDocs",OPS.buyDocs); docs("quotes",OPS.quotes);
+  docs("samples",OPS.samples);
   const kv=(e,o)=>{const m={};Object.keys(o||{}).forEach(k=>{m[k]={id:k,v:o[k]};});s[e]=m;};
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
   kv("doc",OPS.doc); kv("invLines",OPS.invLines); kv("buyLines",OPS.buyLines);
@@ -973,6 +987,7 @@ function applyRemote(data){
     const rec=Object.assign({},r); delete rec.u;
     if(i>=0) list[i]=rec; else list.push(rec); }); };
   docs("invoices",OPS.invoices); docs("buyDocs",OPS.buyDocs); docs("quotes",OPS.quotes);
+  docs("samples",OPS.samples);
   const kv=(e,o)=>{ (data[e]||[]).forEach(r=>{ n++;
     if(r._del) delete o[r.id]; else o[r.id]=r.v; }); };
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
@@ -1005,7 +1020,7 @@ function syncHasData_(d){
 function syncAdoptLocal_(){
   try{ downloadJson(fullData(),"仕入販売管理_共有DBにつなぐ前の控え_"+stamp()+".json"); }catch(e){}
   CFG.partners=[]; CFG.price=[]; CFG.freight=[]; CFG.map=[]; CFG.shime=[];
-  OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[];
+  OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[]; OPS.samples=[];
   ["adj","extra","head","st","qty","doc","invLines","buyLines"].forEach(k=>{ OPS[k]={}; });
   SRC=[]; SRCB=[]; SNAP={};
   try{ localStorage.setItem(ROW_KEY,"[]"); localStorage.setItem(ROWB_KEY,"[]"); }catch(e){}
@@ -1794,7 +1809,90 @@ function termText(k,y,m){
   }
   return y+"-"+p2(m)+"-01〜"+y+"-"+p2(m)+"-"+new Date(y,m,0).getDate();
 }
+// ===== 有償サンプル =====
+function smpYm(s){ const d=parseDate(s.date); return d?[d.getFullYear(),d.getMonth()+1]:[0,0]; }
+function smpAmount(s){ return Math.round((numOr(s.kg,0))*(numOr(s.tanka,0))); }
+function drawSamples(){
+  const card=document.getElementById("smpCard"); if(!card) return;
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  const end=new Date(y,m,0);
+  // この月のぶん＋まだ足していない前の月のぶん
+  const list=(OPS.samples||[]).filter(s=>{
+    const d=parseDate(s.date); if(!d) return false;
+    const [sy,sm]=smpYm(s);
+    if(sy===y&&sm===m) return true;                 // この月に出したぶん
+    if(s.done) return s.done.ym===(y+"-"+p2(m));    // 前の月のぶんでも、この月に計上したなら残す
+    return d<=end;                                  // まだ計上していない前の月のぶん
+  }).sort((a,b)=>(parseDate(a.date)-parseDate(b.date)));
+  if(!list.length){ card.style.display="none"; return; }
+  card.style.display="";
+  const yet=list.filter(s=>!s.done).length;
+  document.getElementById("smpCnt").textContent="("+list.length+"件"+(yet?"／未処理 "+yet+"件":"・すべて処理済み")+")";
+  const keys=partnerKeys();
+  const tb=document.querySelector("#tSmp tbody"); tb.innerHTML="";
+  list.forEach(s=>{
+    const tr=document.createElement("tr");
+    const done=!!s.done;
+    const sel='<select class="cell" data-smp="'+esc(s.id)+'" data-f="bill"'+(done?" disabled":"")+'>'
+      +'<option value="">（選んでください）</option>'
+      +keys.map(k=>'<option value="'+esc(k)+'"'+(String(s.bill||"")===k?" selected":"")+'>'+esc(k)+'</option>').join("")
+      +'</select>';
+    tr.innerHTML='<td>'+esc(s.date)+'</td><td>'+esc(s.size||"")+'</td>'
+      +'<td class="num">'+dec1(numOr(s.kg,0))+'</td><td>'+sel+'</td>'
+      +'<td class="num"><input class="cell n" style="width:90px" data-smp="'+esc(s.id)+'" data-f="tanka" value="'
+        +(s.tanka==null||s.tanka===""?"":esc(String(s.tanka)))+'"'+(done?" disabled":"")+'></td>'
+      +'<td class="num">'+(numOr(s.tanka,null)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
+      +'<td>'+(done
+        ? '<span class="badge b-ok">'+esc(s.done.ym)+' に計上</span> <a href="#" data-smpundo="'+esc(s.id)+'" style="font-size:11px">取消</a>'
+        : '<button class="btn sm" data-smpadd="'+esc(s.id)+'">請求書に足す</button>')+'</td>';
+    tb.appendChild(tr);
+    if(s.hint){
+      const h=document.createElement("tr");
+      h.innerHTML='<td></td><td colspan="6" style="font-size:11px;color:#666;padding-top:0">ヒント：'+esc(s.hint)+'</td>';
+      tb.appendChild(h);
+    }
+  });
+  tb.querySelectorAll("[data-smp]").forEach(el=>{
+    el[el.tagName==="SELECT"?"onchange":"oninput"]=()=>{
+      const s=(OPS.samples||[]).find(x=>x.id===el.dataset.smp); if(!s) return;
+      s[el.dataset.f]=el.value; saveOps(); drawSamples();
+    };});
+  tb.querySelectorAll("[data-smpadd]").forEach(b=>b.onclick=()=>smpAdd(b.dataset.smpadd));
+  tb.querySelectorAll("[data-smpundo]").forEach(a=>a.onclick=e=>{e.preventDefault();smpUndo(a.dataset.smpundo);});
+}
+function smpAdd(id){
+  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s) return;
+  const miss=[];
+  if(!String(s.bill||"").trim()) miss.push("・請求先を選んでください");
+  if(numOr(s.tanka,null)==null||numOr(s.tanka,0)<=0) miss.push("・単価（円/kg）を入れてください");
+  if(miss.length){ alert("請求書に足せません。\n\n"+miss.join("\n")); return; }
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  if(!y){ alert("対象月を選んでください。"); return; }
+  const key=docKey("inv",s.bill,y,m);
+  const line={tekiyo:"有償サンプル "+s.date+"　"+(s.size||""),
+    qty:numOr(s.kg,0), unit:"kg", tanka:numOr(s.tanka,0), tax:"8%", smp:s.id};
+  if(!OPS.extra[key]) OPS.extra[key]=[];
+  OPS.extra[key].push(line);
+  s.done={ym:y+"-"+p2(m), bill:s.bill, at:nowStr()};
+  saveOps(); logOp("有償サンプルを請求書に足しました",
+    s.date+" "+(s.size||"")+" "+s.kg+"kg × "+s.tanka+"円 → "+s.bill+"（"+y+"年"+m+"月分）");
+  drawSamples(); drawInvList();
+  alert(s.bill+" の "+y+"年"+m+"月分の請求書に、追加行として足しました。");
+}
+function smpUndo(id){
+  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s||!s.done) return;
+  const [yy,mm]=String(s.done.ym).split("-").map(Number);
+  const key=docKey("inv",s.done.bill,yy,mm);
+  const list=OPS.extra[key]||[];
+  const i=list.findIndex(e=>e.smp===s.id);
+  if(i<0){
+    if(!confirm("請求書の追加行が見つかりませんでした。\n（すでに発行済みの請求書に入っている可能性があります）\n\nこの行の「計上済み」の印だけを外しますか？")) return;
+  } else { list.splice(i,1); if(!list.length) delete OPS.extra[key]; }
+  s.done=null; saveOps(); logOp("有償サンプルの計上を取り消しました",s.date+" "+(s.size||""));
+  drawSamples(); drawInvList();
+}
 function drawInvList(){
+  drawSamples();
   const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.sale&&!t.nobill&&!OPS.invLines[t.no]);
   const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   document.getElementById("invMonth").textContent="("+y+"-"+p2(m)+"分)";
