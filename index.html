@@ -871,8 +871,11 @@ function findLead(tori,item,d){
     :String(f.ruleVal==null?"":f.ruleVal).trim()!=="";
   const c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)&&has(f));
   if(!c.length) return null;
-  const c2=c.filter(f=>!N(f.item)||N(f.item)===k||N(f.item).includes(k.slice(0,4)));
-  return (c2.length?c2:c)[0];
+  // 規格・品目を書いた行が先。品目が空欄の行は「その販売先の全部に効く予備」として後から見る
+  const c2=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
+  if(c2.length) return c2[0];
+  const c3=c.filter(f=>!N(f.item));
+  return (c3.length?c3:c)[0];
 }
 // 出荷日＋リード＝店着日
 function arrivalDate(ship,f){
