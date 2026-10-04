@@ -815,6 +815,13 @@ try{const s=localStorage.getItem(CFG_KEY); if(s){const o=JSON.parse(s); if(o&&o.
 let saveTimer=null;
 function saveCfg(msg){syncSoon();clearTimeout(saveTimer);saveTimer=setTimeout(()=>{
   try{localStorage.setItem(CFG_KEY,JSON.stringify(CFG));}catch(e){} setCfgMsg(msg||"保存しました");},350);}
+// 待たずに今すぐ書く。書けたかどうかを返す。
+// 共有DBから受け取った直後に使う。設定が書けていないのに控え（SNAP）だけ
+// 新しくなると、次の送信で「手元に無い＝消された」と見て、共有DBの行を消してしまう。
+function saveCfgNow(){
+  clearTimeout(saveTimer);
+  try{ localStorage.setItem(CFG_KEY,JSON.stringify(CFG)); return true; }catch(e){ return false; }
+}
 function setCfgMsg(t,k){const el=document.getElementById("cfgMsg");
   el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":"b-ok")+'">'+esc(t)+'</span>';
   clearTimeout(setCfgMsg._t); setCfgMsg._t=setTimeout(()=>el.innerHTML="",3000);}
@@ -981,6 +988,14 @@ const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
 try{SINCE=localStorage.getItem(SINCE_KEY)||"";}catch(e){SINCE="";}
+// 画面の「削除」で消したマスタの行番号。
+// 共有DBから消してよいのは、ここに入っている行だけ。
+const DELQ_KEY="krs_sync_delq";
+const MASTER_ENT=["partners","price","freight","map","shime"];
+let DELQ={};
+try{DELQ=JSON.parse(localStorage.getItem(DELQ_KEY)||"{}");}catch(e){DELQ={};}
+function saveDelq(){ try{localStorage.setItem(DELQ_KEY,JSON.stringify(DELQ));}catch(e){} }
+function delqAdd(ent,id){ if(!id) return; if(!DELQ[ent]) DELQ[ent]={}; DELQ[ent][id]=1; saveDelq(); }
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const syncOn=()=>!!(CFG.syncOn&&CFG.syncUrl&&CFG.syncCode);
 function saveSnap(){ try{localStorage.setItem(SNAP_KEY,JSON.stringify(SNAP));}catch(e){} }
@@ -1039,9 +1054,14 @@ async function syncPush(){
   for(const e of SYNC_ENT){
     const now=cur[e]||{}, old=SNAP[e]||{}, ch=[], del=[];
     Object.keys(now).forEach(id=>{ if(JSON.stringify(now[id])!==JSON.stringify(old[id])) ch.push(now[id]); });
-    Object.keys(old).forEach(id=>{ if(!now[id]) del.push(id); });
+    // マスタは、画面の「削除」で消した行だけを消す。
+    // 手元に無いというだけで消すと、共有DBにあとから足された行（GASで入れた行など）が、
+    // 設定の保存が間に合わなかったPCの送信で消えてしまう。
+    if(MASTER_ENT.indexOf(e)>=0) Object.keys(DELQ[e]||{}).forEach(id=>{ if(!now[id]) del.push(id); });
+    else Object.keys(old).forEach(id=>{ if(!now[id]) del.push(id); });
     if(ch.length) await syncApi("pushBatch",{entity:e,records:ch});
-    if(del.length) await syncApi("deleteBatch",{entity:e,ids:del});
+    if(del.length){ await syncApi("deleteBatch",{entity:e,ids:del});
+      if(DELQ[e]){ del.forEach(id=>{ delete DELQ[e][id]; }); saveDelq(); } }
   }
   SNAP=cur; saveSnap();
 }
@@ -1109,8 +1129,14 @@ async function syncPull(){
   const adopt=first&&syncHasData_(d);
   if(adopt) syncAdoptLocal_();
   const n=applyRemote(d);
-  SINCE=j.serverTime||SINCE; saveSince();
-  if(n||adopt){ SNAP=syncSnapshot(); saveSnap(); indexCfg(); drawAll(); build(); drawLog(); }
+  // 設定を先に、待たずに書く。書けていないのに控えだけ新しくすると、行が消える。
+  const ok=(n||adopt)?saveCfgNow():true;
+  if(ok){ SINCE=j.serverTime||SINCE; saveSince(); }
+  if(n||adopt){
+    if(ok){ SNAP=syncSnapshot(); saveSnap(); }
+    indexCfg(); drawAll(); build(); drawLog();
+  }
+  if(!ok) throw new Error("このPCに設定を保存できませんでした。保存場所がいっぱいかもしれません。");
   return n;
 }
 // 入力中かどうか（打っている最中に画面を作り直すと、文字や変換中の文字が消えるため）
@@ -2706,7 +2732,9 @@ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
   drawAll(); saveCfg("行を追加しました"); build();});
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-del]"); if(!b) return;
-  CFG[b.dataset.del].splice(+b.dataset.i,1); drawAll(); saveCfg("削除しました"); build();});
+  const ent=b.dataset.del, gone=CFG[ent].splice(+b.dataset.i,1)[0];
+  if(gone&&gone._id) delqAdd(ent,gone._id);
+  drawAll(); saveCfg("削除しました"); build();});
 ["fMap","fPar","fPrice","fItemName"].forEach(id=>{
   document.getElementById(id).oninput={fMap:drawMap,fPar:drawPar,fPrice:drawPrice,fItemName:drawItemName}[id];});
 ["fpTori","fpKind"].forEach(id=>document.getElementById(id).onchange=drawPrice);
