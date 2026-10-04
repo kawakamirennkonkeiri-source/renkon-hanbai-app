@@ -112,6 +112,7 @@ tr.hit td{background:#FFF9E6}
 .wd input{margin:0;width:11px;height:11px}
 select.cell{width:100%;padding:3px 5px;border:1px solid #D5D5D8;border-radius:3px;
   font-size:12.5px;font-family:inherit;background:#fff}
+tr.grp td{background:#EEF3F8;font-weight:bold;color:#1F4E79;font-size:12px;padding:5px 8px}
 tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{background:transparent}}
 .kpi.click{cursor:pointer}.kpi.click:hover{border-color:var(--or);box-shadow:0 0 0 1px var(--or)}
 /* 編集ダイアログ */
@@ -210,6 +211,10 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <input type="file" id="fileFull" accept=".json" style="display:none">
 <input type="file" id="fileData" accept=".json" style="display:none">
 
+<datalist id="dlItemT"></datalist>
+<datalist id="dlItemI"></datalist>
+<datalist id="dlItemN"></datalist>
+
 <main>
 
 <!-- ダッシュボード -->
@@ -245,7 +250,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="kpi"><div class="l">取引件数</div><div class="v" id="kCnt">-</div></div>
     <div class="kpi click" id="kpiNg" title="押すと、要確認の一覧を出します"><div class="l">要確認 <span style="font-size:10.5px;color:var(--or)">▸ 押すと一覧</span></div><div class="v" id="kNg">-</div></div>
   </div>
-  <div class="card"><h2>ステータス</h2><div class="flex" id="statusBox"></div></div>
+  <div class="card"><h2>ステータス<span class="sp"></span>
+    <button class="btn sm sub" id="btnToBuyAgg">仕入先別 発注（生産者）へ ▾</button></h2>
+    <div class="flex" id="statusBox"></div></div>
   <div class="card" id="ngCard" style="display:none">
     <h2>要確認の一覧 <span class="cnt" id="ngCnt"></span><span class="sp"></span>
       <button class="btn sm sub" id="ngClose">閉じる</button></h2>
@@ -262,7 +269,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
-  <div class="card">
+  <div class="card" id="buyAgg">
     <h2>仕入先別 発注（生産者）</h2>
     <div class="scroll" style="max-height:38vh">
       <table id="tBuy"><thead><tr>
@@ -337,6 +344,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">💡 電子黒板の荷造りリストが「受注」、生産者記録が「発注」として取り込まれます。納品予定日を過ぎたものは納品✓済となり、請求タブに集計されます。<br>
       <b>収穫舟数はここには出しません</b>（買取の対象外で、取引ではないため）。</p>
     <div class="flex">
+      <label>月：<select id="txYm"><option value="">全ての月</option></select></label>
       <select id="txKind"><option value="all">全て</option><option value="sale">受注のみ</option><option value="buy">発注のみ</option></select>
       <select id="txStatus"><option value="all">状態：全て</option><option value="created">納品予定</option>
         <option value="delivered">納品✓済</option><option value="ng">要確認</option></select>
@@ -478,6 +486,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <section class="panel" id="prices">
   <div class="card">
     <h2>単価マスタ <span class="cnt" id="cPrice"></span> 期間別価格<span class="sp"></span>
+      <button class="btn sm sub" id="btnToMap">取引先の対応表へ ▾</button>
+      <button class="btn sm sub" id="btnToItemName">請求書に書く商品名へ ▾</button>
       <button class="btn sm" data-add="price">＋ 新規</button></h2>
     <div class="flex">
       <select id="fpTori"><option value="">全ての取引先</option></select>
@@ -510,6 +520,27 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
         <th style="width:23%">→ 請求先（取引先マスタ）</th>
         <th style="width:16%">単価マスタの取引先</th><th style="width:19%">単価マスタの商品</th>
         <th style="width:11%">産地</th><th style="width:5%"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h2 id="itemNameCard">請求書に書く商品名（読み替え） <span class="cnt" id="cItemName"></span><span class="sp"></span>
+      <button class="btn sm sub" id="btnItemNameFill">単価マスタから取り込む</button>
+      <button class="btn sm" data-add="itemName">＋ 新規</button></h2>
+    <p class="hint">💡 発注書から引いてきた品名を、<b>請求書と納品書に印字する商品名</b>に書き換えます。<br>
+      例：<b>○○商事｜土付き8月｜5kg</b> → <b>熊本県産 れんこん「幸祝」 土付き Mup 5kg</b>（備考に「8月」）<br>
+      取引先と品名は<b>単価マスタにあるものから選べます</b>。無いものはそのまま書いて入れられます。<br>
+      <b>容量を空欄</b>にすると、その品名の全容量に効きます（容量を書いた行が優先）。<br>
+      <b>備考はこの表の中だけの覚え書き</b>で、請求書には出ません。<br>
+      取引の「✎ 修正」でその1件だけ品名を直している場合は、<b>そちらが優先</b>されます。</p>
+    <div class="flex"><input class="find" id="fItemName" placeholder="取引先・品名・商品名で絞り込み"></div>
+    <div class="scroll" style="max-height:60vh">
+      <table id="tItemName"><thead><tr>
+        <th style="width:17%">取引先（単価マスタ）</th>
+        <th style="width:17%">発注書からの品名</th>
+        <th style="width:7%" class="num">容量</th>
+        <th style="width:34%">請求書に書く商品名</th>
+        <th style="width:19%">備考</th><th style="width:6%"></th>
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
@@ -758,6 +789,7 @@ function defaultCfg(){
     map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,
       bill:billOf(m.tori),sanchi:"熊本"})),
     shime:DATA.shime.map(s=>({tori:billOf(s.tori),shime:s.shime,kijun:s.kijun,memo:""})),
+    itemName:[],
     shanai:DATA.shanai.slice(), nobill:(DATA.nobill||[]).slice(),
     partners:DATA.partners.map(p=>({name:p.name,key:KEYNAME(p.name),zip:p.zip,addr:p.addr,
       person:p.person,mail:p.mail,paymentMonthOffset:1,paymentDay:"月末"}))
@@ -773,6 +805,7 @@ try{const s=localStorage.getItem(CFG_KEY); if(s){const o=JSON.parse(s); if(o&&o.
 (function migrateBill(){
   if(!CFG.partners) CFG.partners=[];
   if(!CFG.nobill) CFG.nobill=[];
+  if(!CFG.itemName) CFG.itemName=[];
   BILL_NEW.forEach(nm=>{ if(!CFG.partners.some(p=>N(p.key)===N(nm)))
     CFG.partners.push({name:nm,key:nm,zip:"",addr:"",person:"",mail:"",
       paymentMonthOffset:1,paymentDay:"月末"}); });
@@ -796,6 +829,22 @@ function indexCfg(){
 }
 const shimeOf=t=>SHIME[t]||{shime:"月末",kijun:"着"};
 const kijunLabel=r=>r.kijun==="出し"?"出荷日":"納品日";
+// 請求書・納品書に書く商品名（読み替え表）
+//   容量を書いた行が先。容量が空欄の行は、その品名の全容量に効きます
+function itemNameOf(tori,item,cap){
+  const list=CFG.itemName||[], t=N(tori), k=N(item);
+  if(!t||!k) return "";
+  const same=list.filter(x=>N(x.t)===t&&N(x.item)===k);
+  let hit=same.find(x=>x.cap!=null&&x.cap!==""&&Number(x.cap)===Number(cap));
+  if(!hit) hit=same.find(x=>x.cap==null||x.cap==="");
+  return hit?String(hit.name||"").trim():"";
+}
+// その取引の、帳票に出す品名
+function invItem(t){
+  const aj=OPS.adj[t.no];
+  if(aj&&aj.item) return aj.item;              // 「✎ 修正」で直した品名が最優先
+  return itemNameOf(t.priceKey,t.priceItem,t.cap)||t.priceItem||t.item;
+}
 // 締め日マスタにその請求先の行があるか
 const shimeBadge=t=>SHIME[t]?''
   :' <span class="badge b-wait" title="締め日設定にこの請求先の行がありません。初期値（月末締め・納品日）で計算しています">締め日 未登録</span>';
@@ -927,7 +976,7 @@ function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(
 // ===== 共有データベース（複数PCで同時に使う） =====
 const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
-const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
+const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","itemName","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
 const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
@@ -1185,6 +1234,11 @@ function fillYM(){
   const set=new Set(TX.filter(t=>!t.shanai).map(t=>t.y+"/"+t.m));
   const arr=[...set].sort((a,b)=>{const[ay,am]=a.split("/").map(Number),[by,bm]=b.split("/").map(Number);
     return ay-by||am-bm;});
+  const tx=document.getElementById("txYm");
+  if(tx){ const keep=tx.value; tx.innerHTML='<option value="">全ての月</option>';
+    arr.slice().reverse().forEach(k=>{const[y,m]=k.split("/");const o=document.createElement("option");
+      o.value=k;o.textContent=y+"年"+p2(m)+"月";tx.appendChild(o);});
+    if([...tx.options].some(o=>o.value===keep)) tx.value=keep; }
   ["ym","invYm","buyYm"].forEach(id=>{
     const sel=document.getElementById(id), prev=sel.value; sel.innerHTML="";
     arr.forEach(k=>{const[y,m]=k.split("/");const o=document.createElement("option");
@@ -1281,9 +1335,11 @@ function stBadge(t){
 function drawTx(){
   const q=N(document.getElementById("fTx").value);
   const kind=document.getElementById("txKind").value, stf=document.getElementById("txStatus").value;
+  const ym=document.getElementById("txYm").value;
   const tb=document.querySelector("#tTx tbody"); tb.innerHTML=""; let n=0;
   TX.slice().sort((a,b)=>b.date-a.date).forEach(t=>{
     if(isFune(t)) return;                        // 収穫舟数は取引ではないので出さない
+    if(ym&&(t.y+"/"+t.m)!==ym) return;
     if(kind!=="all"&&t.kind!==kind) return;
     if(stf==="ng"&&!t.why) return;
     if(stf!=="all"&&stf!=="ng"&&(t.why||t.status!==stf)) return;
@@ -1366,7 +1422,7 @@ function showDv(no){
   const p=partnerOf(t.customer);
   const ad=p?'<span class="ad">〒'+esc(p.zip)+'　'+esc(p.addr)+(p.person?'　'+esc(p.person)+' 様':'')+'</span>'
            :'<span class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</span>';
-  const rows=[{item:esc(t.priceItem||t.item),qty:yen(t.qty)+'c/s',
+  const rows=[{item:esc(invItem(t)),qty:yen(t.qty)+'c/s',
     tanka:t.tanka!=null?'¥'+yen(t.tanka):'—',kin:t.shohin?'¥'+yen(t.shohin):'—'}];
   if(t.freight) rows.push({item:'送料 '+esc(t.carrier||"")+'向け',qty:'1c/s',tanka:'—',kin:'¥'+yen(t.freight)});
   document.getElementById("dvdoc").innerHTML=
@@ -1480,6 +1536,50 @@ function openTxEditor(no, after){
   };
 }
 // 請求書の追加行（値引き・調整）を計算できる形にする
+// 請求明細の並び順（2026/10/3 社長指示）
+//   請求先が同じで産地が違うときは、熊本をまとめて並べたあとに広島を並べます。
+//   この一覧に無い産地は、そのあとに産地名の順で出ます。同じ産地の中は納品日の古い順。
+const SANCHI_ORDER=["熊本","広島"];
+function sanchiRank(s){
+  const i=SANCHI_ORDER.indexOf(String(s==null?"":s).trim());
+  return i<0?SANCHI_ORDER.length:i;
+}
+// 請求書を販売先（黒板の呼び名）ごとに固める（2026/10/4 社長指示）
+//   グループの順番：産地（熊本→広島）→ 最初の納品日が早い順 → 名前
+//   同じ販売先の中は、これまで通り 産地 → 納品日の順
+function invGroups(rows){
+  const g={}, order=[];
+  (rows||[]).forEach(t=>{
+    const k=String(t.sell||"");
+    if(!g[k]){ g[k]={sell:k, rows:[]}; order.push(k); }
+    g[k].rows.push(t);
+  });
+  order.forEach(k=>g[k].rows.sort(bySanchi));
+  const grp=order.map(k=>g[k]);
+  grp.sort((a,b)=>{
+    const ra=sanchiRank(a.rows[0].sanchi), rb=sanchiRank(b.rows[0].sanchi);
+    if(ra!==rb) return ra-rb;
+    const da=a.rows[0].deliv||a.rows[0].date||0, db=b.rows[0].deliv||b.rows[0].date||0;
+    return (da-db)||a.sell.localeCompare(b.sell,"ja");
+  });
+  return grp;
+}
+// 販売先ごとに固めた順番で、一本の並びに戻す
+function invOrder(rows){
+  const out=[];
+  invGroups(rows).forEach(g=>g.rows.forEach(t=>out.push(t)));
+  return out;
+}
+function bySanchi(a,b){
+  const ra=sanchiRank(a.sanchi), rb=sanchiRank(b.sanchi);
+  if(ra!==rb) return ra-rb;
+  if(ra===SANCHI_ORDER.length){            // どちらも上の一覧に無い産地のとき
+    const c=String(a.sanchi||"").localeCompare(String(b.sanchi||""),"ja");
+    if(c) return c;
+  }
+  const da=a.deliv||a.date||0, db=b.deliv||b.date||0;
+  return (da-db)||String(a.no||"").localeCompare(String(b.no||""));
+}
 function invExtras(k,y,m){
   return (OPS.extra[docKey("inv",k,y,m)]||[]).map(e=>{
     const q=numOr(e.qty,1), tk=numOr(e.tanka,0);
@@ -1510,8 +1610,7 @@ function extraRowsHtml(ex,hasF,withTanka){
 function openInvEditor(k){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   const key=docKey("inv",k,y,m), tf=TF();
-  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&!OPS.invLines[t.no])
-    .sort((a,b)=>a.deliv-b.deliv);
+  const rows=invOrder(curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&!OPS.invLines[t.no]));
   if(!rows.length){ alert("この月に、まだ請求していない明細がありません。\n発行済みの請求書を直すときは「この月の発行済請求書」の「取消して修正」を使います。"); return; }
   const p=partnerOf(k), hd=OPS.head[key]||{};
   const bs=boardSubject(rows.map(t=>t.sell),p?p.name:k,k);
@@ -2018,11 +2117,13 @@ function drawInvList(){
       +'<th class="num">単価</th><th class="num">請求数量</th><th class="num">商品金額</th>'
       +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
       +'<th class="num">請求金額</th></tr></thead><tbody>'
-      +list.sort((a,b)=>a.deliv-b.deliv).map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
-        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.item)+' '+(t.cap||"")+'kg'+edBadge(t)+'</td>'
+      +(function(){ const gs=invGroups(list), many=gs.length>1, cols=hasF?9:7;
+        return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td></tr>':'')
+          +gp.rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
+        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+edBadge(t)+'</td>'
         +'<td class="num">'+(t.tanka==null?'<span style="color:#C62828">要確認</span>':'¥'+yen(t.tanka))+'</td>'+'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
         +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
-        +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
+        +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")).join(""); })()
       +extraRowsHtml(ex,hasF,'pre')
       +'</tbody></table></div>';
     box.appendChild(d);
@@ -2113,7 +2214,7 @@ function drawBuyList(){
 function showInv(k){
   const[y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   // 発行するときと同じ明細（未請求だけ）を出す
-  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&t.sale&&!OPS.invLines[t.no]).sort((a,b)=>a.deliv-b.deliv);
+  const rows=curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&t.sale&&!OPS.invLines[t.no]).sort(bySanchi);
   const r=shimeOf(k), p=partnerOf(k), tf=TF();
   const ex=invExtras(k,y,m), tt=invTotals(rows,ex), hd=OPS.head[docKey("inv",k,y,m)]||{};
   const shohin=tt.shohin, soryo=tt.soryo, taxF=tt.taxF, taxS=tt.taxS;
@@ -2130,15 +2231,17 @@ function showInv(k){
     +'<div><div class="doc-total"><div class="l">ご請求金額（税込）</div><div class="v">¥ '+yen(sub+taxF+taxS)
     +'</div></div></div><p style="font-size:12.5px;color:#666">下記の通りご請求申し上げます。</p>'
     +'<table><thead><tr><th>納品日</th><th>取引No.</th><th>産地</th><th>品名</th>'
-    +'<th class="num">請求数量</th><th class="num">単価</th><th class="num">商品金額</th>'
+    +'<th class="num">単価</th><th class="num">請求数量</th><th class="num">商品金額</th>'
     +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
     +'<th class="num">請求金額</th></tr></thead><tbody>'
-    +rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'
-      +t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(t.priceItem||t.item)+'</td><td class="num">'
-      +yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.tanka)+'</td><td class="num">¥'+yen(t.shohin)+'</td>'
+    +(function(){ const gs=invGroups(rows), many=gs.length>1, cols=hasF?9:7;
+      return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td></tr>':'')
+        +gp.rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'
+      +t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+'</td><td class="num">¥'
+      +yen(t.tanka)+'</td><td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
       +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
-      +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")
-    +extraRowsHtml(ex,hasF,true)
+      +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")).join(""); })()
+    +extraRowsHtml(ex,hasF,'pre')
     +'</tbody></table><div class="doc-foot"><table>'
     +'<tr><td>商品 小計（税抜）</td><td class="num">¥'+yen(shohin)+'</td></tr>'
     +'<tr><td>消費税（'+(tf.food*100)+'%）</td><td class="num">¥'+yen(taxF)+'</td></tr>'
@@ -2264,6 +2367,64 @@ function shimeFill(){
   saveCfg(); indexCfg(); drawShime(); build();
   logOp("締め日をまとめて追加",add.length+"件（月末締め・納品日）");
   alert(add.length+" 件を追加しました。\n実際と違うところを直してください。");
+}
+// ===== 請求書に書く商品名（読み替え） =====
+function priceItemNames(){
+  return [...new Set((CFG.price||[]).filter(p=>(p.kind||"販売")==="販売")
+    .map(p=>String(p.item||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+}
+function fillDl(id,list){
+  const el=document.getElementById(id); if(!el) return;
+  el.innerHTML=list.map(v=>'<option value="'+esc(v)+'">').join("");
+}
+function drawItemName(){
+  const tb=document.querySelector("#tItemName tbody"); if(!tb) return;
+  fillDl("dlItemT",priceTNames("販売"));
+  fillDl("dlItemI",priceItemNames());
+  fillDl("dlItemN",[...new Set((CFG.itemName||[]).map(x=>String(x.name||"").trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"ja")));
+  const q=N(document.getElementById("fItemName").value);
+  tb.innerHTML=""; let sh=0;
+  (CFG.itemName||[]).forEach((x,i)=>{
+    if(q&&!N([x.t,x.item,x.name,x.memo].join("")).includes(q)) return;
+    sh++; const tr=document.createElement("tr"); if(x._new){tr.className="new";delete x._new;}
+    const yet=!String(x.name||"").trim();
+    tr.innerHTML='<td><input class="cell" list="dlItemT" data-t="itemName" data-i="'+i+'" data-k="t" value="'+esc(x.t||"")+'"></td>'
+      +'<td><input class="cell" list="dlItemI" data-t="itemName" data-i="'+i+'" data-k="item" value="'+esc(x.item||"")+'"></td>'
+      +'<td>'+cell("itemName",i,"cap",x.cap,true)+'</td>'
+      +'<td><input class="cell'+(yet?" need":"")+'" list="dlItemN" data-t="itemName" data-i="'+i+'" data-k="name" '
+        +'placeholder="例：熊本県産 れんこん「幸祝」 土付き Mup 5kg" value="'+esc(x.name||"")+'"></td>'
+      +'<td>'+cell("itemName",i,"memo",x.memo)+'</td><td>'+delBtn("itemName",i)+'</td>';
+    tb.appendChild(tr);});
+  const yetN=(CFG.itemName||[]).filter(x=>!String(x.name||"").trim()).length;
+  document.getElementById("cItemName").textContent="("+(CFG.itemName||[]).length+"行)"
+    +(sh!==(CFG.itemName||[]).length?" ／ "+sh+"行を表示中":"")
+    +(yetN?"　※ 商品名未記入 "+yetN+"行（その行はこれまで通りの品名で出ます）":"");
+  bind();
+}
+// 単価マスタ（販売）の組み合わせを、まだ無いぶんだけ並べる
+function itemNameFill(){
+  const have={};
+  (CFG.itemName||[]).forEach(x=>{have[N(x.t)+"\u0001"+N(x.item)+"\u0001"+(x.cap==null||x.cap===""?"":Number(x.cap))]=1;});
+  const add=[], seen={};
+  (CFG.price||[]).forEach(p=>{
+    if((p.kind||"販売")!=="販売") return;
+    const t=String(p.t||"").trim(), it=String(p.item||"").trim();
+    if(!t||!it) return;
+    const cap=(p.cap==null||p.cap==="")?"":Number(p.cap);
+    const k=N(t)+"\u0001"+N(it)+"\u0001"+cap;
+    if(have[k]||seen[k]) return; seen[k]=1;
+    add.push({t:t,item:it,cap:(cap===""?null:cap),name:"",memo:""});
+  });
+  if(!add.length){ alert("足すべき組み合わせはありません。\n単価マスタ（販売）の組み合わせは、すべて並んでいます。"); return; }
+  if(!confirm("単価マスタ（販売）から "+add.length+" 行を並べます。\n"
+    +"商品名は空欄で入ります。空欄のうちは、これまで通りの品名が請求書に出ます。\n\n"
+    +"（いまの請求金額は変わりません）")) return;
+  add.sort((a,b)=>a.t.localeCompare(b.t,"ja")||a.item.localeCompare(b.item,"ja")||(a.cap||0)-(b.cap||0));
+  CFG.itemName=(CFG.itemName||[]).concat(add);
+  saveCfg(); drawItemName(); build();
+  logOp("商品名の読み替え表を取り込み",add.length+"行");
+  alert(add.length+" 行を並べました。\n「請求書に書く商品名」を埋めてください。");
 }
 function drawShime(){
   const tb=document.querySelector("#tShime tbody"); tb.innerHTML="";
@@ -2504,7 +2665,7 @@ function bind(){
         if(nm===null||!nm.trim()){ drawFreight(); return; }
         v=nm.trim();
       }
-      if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))){
+      if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))||(t==="itemName"&&k==="cap")){
         v=v.trim()===""?null:parseFloat(v.replace(/,/g,"")); if(v!==null&&isNaN(v)) return;}
       CFG[t][i][k]=v; saveCfg(); build();
       if(t==="freight"&&(k==="ruleType"||k==="carrier")) drawFreight();   // 新しい運送会社を他の行の候補にも出す
@@ -2518,7 +2679,7 @@ function bind(){
       if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
     });});
 }
-function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();drawNobill();
+function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();drawNobill();drawItemName();
   if(!QT.lines.length) QT.lines=[{item:"",qty:null,unit:"c/s",tanka:null,tax:"8%"}];
   drawQt();
   document.getElementById("taxFood").value=CFG.taxFood;
@@ -2535,6 +2696,7 @@ function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();dra
 document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
   const t=b.dataset.add;
   if(t==="shime") CFG.shime.push({tori:"",shime:"月末",kijun:"着",memo:""});
+  if(t==="itemName") CFG.itemName.unshift({t:"",item:"",cap:null,name:"",memo:"",_new:1});
   if(t==="map") CFG.map.unshift({sell:"",kubun:"",bill:"",tori:"",item:"",sanchi:"熊本",_new:1});
   if(t==="price") CFG.price.unshift({t:"",item:"",cap:null,sanchi:"熊本",kind:"販売",tanka:null,
     unit:"円/ケース",from:PFROM,to:PTO,_new:1});
@@ -2545,8 +2707,8 @@ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-del]"); if(!b) return;
   CFG[b.dataset.del].splice(+b.dataset.i,1); drawAll(); saveCfg("削除しました"); build();});
-["fMap","fPar","fPrice"].forEach(id=>{
-  document.getElementById(id).oninput={fMap:drawMap,fPar:drawPar,fPrice:drawPrice}[id];});
+["fMap","fPar","fPrice","fItemName"].forEach(id=>{
+  document.getElementById(id).oninput={fMap:drawMap,fPar:drawPar,fPrice:drawPrice,fItemName:drawItemName}[id];});
 ["fpTori","fpKind"].forEach(id=>document.getElementById(id).onchange=drawPrice);
 document.getElementById("fFre").oninput=drawFreight;
 document.getElementById("ffTori").onchange=drawFreight;
@@ -2562,6 +2724,12 @@ document.getElementById("delivRule").onchange=e=>{
 ["fDv","dvStatus"].forEach(id=>{const el=document.getElementById(id);
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawDv;});
 document.getElementById("btnShimeFill").onclick=shimeFill;
+document.getElementById("btnItemNameFill").onclick=itemNameFill;
+const goTo=id=>{const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});};
+document.getElementById("btnToBuyAgg").onclick=()=>goTo("buyAgg");
+document.getElementById("btnToMap").onclick=()=>goTo("mapCard");
+document.getElementById("btnToItemName").onclick=()=>goTo("itemNameCard");
+document.getElementById("txYm").onchange=drawTx;
 document.getElementById("btnInvOpen").onclick=()=>invFoldAll(true);
 document.getElementById("btnInvClose").onclick=()=>invFoldAll(false);
 document.getElementById("btnNobill").onclick=()=>{
@@ -2901,9 +3069,17 @@ function sumTable(shohin, taxF, soryo, taxS, total){
 // 請求書HTML
 function buildInvoiceHtml(inv){
   const p=inv.partner||{};
-  const rows=inv.lines.map(l=>'<tr><td>'+esc2(l.date||"")+'</td><td>'+esc2(l.tekiyo)+'</td>'
-    +'<td class="n">'+yen(l.qty)+'</td>'
-    +'<td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
+  // 販売先が変わったところで見出しを入れる（2つ以上あるときだけ）
+  const sells=[...new Set(inv.lines.map(l=>String(l.sell||"")).filter(Boolean))];
+  let last="";
+  const rows=inv.lines.map(l=>{
+    let head="";
+    const sl=String(l.sell||"");
+    if(sells.length>1&&sl&&sl!==last){ head='<tr><td colspan="6" class="grp">'+esc2(sl)+'　様</td></tr>'; last=sl; }
+    return head+'<tr><td>'+esc2(l.date||"")+'</td><td>'+esc2(l.tekiyo)+'</td>'
+    +'<td class="n">'+yen(l.tanka)+'</td>'
+    +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.amount)+'</td></tr>';
+  }).join("");
   return docHead("請求書 "+inv.invoiceNo)
     +'<div class="ttl">請 求 書</div><div class="top"><div class="to">'
     +'<span class="nm">'+esc2(p.name||inv.customer)+'　御中</span>'
@@ -2916,8 +3092,8 @@ function buildInvoiceHtml(inv){
     +'<div class="amt">￥ '+yen(inv.total)+' －</div>'
     +'<div class="sub">お支払期日：'+esc2(inv.dueDate)+'<br>'+esc2(CO().bank||"")+'</div></div>'
     +'<h2>内訳</h2><table><thead><tr><th style="width:16mm">納品日</th><th>品名</th>'
-    +'<th class="n">数量</th><th>単位</th>'
-    +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<th class="n">単価</th>'
+    +'<th class="n">数量</th><th>単位</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +sumTable(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total)
     +'<div class="note">'+(inv.memo?esc2(inv.memo).replace(/\n/g,"<br>")+'<br>':'')
     +'※印は軽減税率対象です。</div></body></html>';
@@ -2985,17 +3161,16 @@ async function issueInvoice(custKey){
   }
   const r=shimeOf(custKey), p=partnerOf(custKey), tf=TF();
   // 発行の直前に、いまの状態から請求行を作り直す
-  const rows=TX.filter(t=>t.kind==="sale"&&!t.shanai&&!t.nobill&&t.customer===custKey
-      &&t.y===y&&t.m===m&&t.sale&&!OPS.invLines[t.no])
-    .sort((a,b)=>a.deliv-b.deliv);
+  const rows=invOrder(TX.filter(t=>t.kind==="sale"&&!t.shanai&&!t.nobill&&t.customer===custKey
+      &&t.y===y&&t.m===m&&t.sale&&!OPS.invLines[t.no]));
   if(!rows.length){ alert("請求できる明細がありません。\n（すでに全て請求済みの可能性があります）"); return; }
   const lines=[];
   rows.forEach(t=>{
     const d=t.deliv||t.date;                       // 明細に出すのは納品（店着）日
     const dt=(d.getMonth()+1)+"/"+d.getDate();
-    lines.push({txNo:t.no, date:dt, tekiyo:(t.priceItem||t.item)+" ※",
+    lines.push({txNo:t.no, date:dt, sell:t.sell||"", tekiyo:invItem(t)+" ※",
         qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin, kind:"shohin"});
-    if(t.freight) lines.push({txNo:t.no, date:dt, tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
+    if(t.freight) lines.push({txNo:t.no, date:dt, sell:t.sell||"", tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
         qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
   });
   // 追加行・件名・備考も、発行の直前に読み直す
@@ -3071,7 +3246,7 @@ async function issueDeliveryNote(txNo){
   const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
   if(!t){ alert("対象の取引が見つかりません"); return; }
   const p=partnerOf(t.customer), tf=TF();
-  const lines=[{txNo:t.no, tekiyo:(t.priceItem||t.item)+" ※",
+  const lines=[{txNo:t.no, tekiyo:invItem(t)+" ※",
     qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin}];
   if(t.freight) lines.push({txNo:t.no, tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
     qty:1, unit:"式", tanka:t.freight, amount:t.freight});
