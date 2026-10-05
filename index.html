@@ -577,6 +577,28 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
         <th style="width:17%">適用期間</th><th style="width:5%"></th>
       </tr></thead><tbody></tbody></table>
     </div>
+
+    <details id="takuBox" style="margin-top:14px">
+      <summary style="cursor:pointer;font-weight:600;padding:6px 0">宅配便（佐川急便）の料金表</summary>
+      <p class="hint">💡 箱のサイズは、中身の重さで決まります。<b>60＝2kgまで、80＝5kgまで、100＝10kgまで、140＝20kgまで、30kgまで</b>。<br>
+        例：5kg入りを3c/s送ると「100サイズ×1（2c/s）＋80サイズ×1（1c/s）」。いちばん安くなる組み合わせを自動で選びます。<br>
+        140サイズと 30kg は使っていないので空欄にしてあります。<b>空欄のサイズは使いません</b>。<br>
+        使うには、上の運賃マスタで<b>単位を「宅配便」</b>にして、その販売先の<b>地帯</b>を選んでください。<br>
+        サンプルのように行先が毎回変わるものは、取引の「✎ 修正」で<b>届け先の都道府県</b>を入れると、そちらが優先されます。</p>
+      <div class="flex"><button class="btn sub" id="btnTakuDefault">佐川急便の料金表（熊本発）を入れ直す</button></div>
+      <div class="scroll" style="max-height:48vh">
+        <table id="tTaku"><thead><tr>
+          <th style="width:11%">地帯</th><th style="width:33%">都道府県（カンマ区切り）</th>
+          <th class="num">60<br><span style="font-weight:400;font-size:10px;opacity:.85">2kgまで</span></th>
+          <th class="num">80<br><span style="font-weight:400;font-size:10px;opacity:.85">5kgまで</span></th>
+          <th class="num">100<br><span style="font-weight:400;font-size:10px;opacity:.85">10kgまで</span></th>
+          <th class="num">140<br><span style="font-weight:400;font-size:10px;opacity:.85">20kgまで</span></th>
+          <th class="num">—<br><span style="font-weight:400;font-size:10px;opacity:.85">30kgまで</span></th>
+          <th style="width:5%"></th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </details>
+
     <datalist id="carriers">
       <option>NKライン</option><option>アイゼンライン</option><option>福岡ソノリク</option>
       <option>マルエイ出荷組合</option><option>ランテック</option><option>佐川急便</option>
@@ -770,6 +792,33 @@ function billOf(tori){
   for(const a in BILL_FIX){ if(N(a)===k) return BILL_FIX[a]; }
   return tori;
 }
+// ===== 宅配便（佐川急便）の運賃 =====
+//   箱のサイズは、中身の重さで決まります。
+//     60＝2kgまで、80＝5kgまで、100＝10kgまで、140＝20kgまで、30kgまで
+//   例：5kg入りを3c/s 送る → 100サイズ（2c/s）1箱 ＋ 80サイズ（1c/s）1箱
+//   入れ方は何通りもあるので、いちばん安くなる組み合わせを選びます。
+const TAKU_SIZES=[{k:"y60",name:"60",maxKg:2},{k:"y80",name:"80",maxKg:5},
+  {k:"y100",name:"100",maxKg:10},{k:"y140",name:"140",maxKg:20},{k:"y30",name:"30kg",maxKg:30}];
+//   140サイズと 30kg は、いま使っていないので空欄にしてあります。
+//   空欄のサイズは、箱の組み合わせに使いません。
+//   佐川の料金表にある数字（熊本発・税別）はこちらです。
+//     140：2120 2120 2120 2190 2190 2360 2460 2600 2800 3080 3080 3480
+//     30kg：2880 2880 2880 2980 2980 3080 3080 3280 3280 3480 3480 3880
+const TAKU_RATES_DEFAULT=[
+  {chitai:"南九州",pref:"熊本,宮崎,鹿児島",y60:800,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"北九州",pref:"福岡,佐賀,長崎,大分",y60:800,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"中国",pref:"鳥取,島根,岡山,広島,山口",y60:840,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"四国",pref:"徳島,香川,愛媛,高知",y60:840,y80:1040,y100:1360,y140:null,y30:null},
+  {chitai:"関西",pref:"滋賀,京都,大阪,兵庫,奈良,和歌山",y60:840,y80:1040,y100:1360,y140:null,y30:null},
+  {chitai:"北陸",pref:"富山,石川,福井",y60:890,y80:1110,y100:1430,y140:null,y30:null},
+  {chitai:"東海",pref:"岐阜,静岡,愛知,三重",y60:890,y80:1110,y100:1430,y140:null,y30:null},
+  {chitai:"信越",pref:"新潟,長野",y60:1030,y80:1250,y100:1570,y140:null,y30:null},
+  {chitai:"関東",pref:"茨城,栃木,群馬,埼玉,千葉,東京,神奈川,山梨",y60:1030,y80:1250,y100:1650,y140:null,y30:null},
+  {chitai:"南東北",pref:"宮城,山形,福島",y60:1170,y80:1390,y100:2000,y140:null,y30:null},
+  {chitai:"北東北",pref:"青森,岩手,秋田",y60:1170,y80:1390,y100:2100,y140:null,y30:null},
+  {chitai:"北海道",pref:"北海道",y60:1450,y80:1670,y100:2600,y140:null,y30:null}
+];
+const PREF_LIST=["北海道","青森","岩手","宮城","秋田","山形","福島","茨城","栃木","群馬","埼玉","千葉","東京","神奈川","新潟","富山","石川","福井","山梨","長野","岐阜","静岡","愛知","三重","滋賀","京都","大阪","兵庫","奈良","和歌山","鳥取","島根","岡山","広島","山口","徳島","香川","愛媛","高知","福岡","佐賀","長崎","熊本","大分","宮崎","鹿児島","沖縄"];
 function defaultCfg(){
   const price=[];
   DATA.price.forEach(p=>price.push({t:p.t,item:p.item,cap:p.cap,sanchi:"熊本",kind:"販売",
@@ -789,7 +838,7 @@ function defaultCfg(){
     map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,
       bill:billOf(m.tori),sanchi:"熊本"})),
     shime:DATA.shime.map(s=>({tori:billOf(s.tori),shime:s.shime,kijun:s.kijun,memo:""})),
-    itemName:[],
+    itemName:[], takuhaiRates:TAKU_RATES_DEFAULT.map(r=>Object.assign({},r)),
     shanai:DATA.shanai.slice(), nobill:(DATA.nobill||[]).slice(),
     partners:DATA.partners.map(p=>({name:p.name,key:KEYNAME(p.name),zip:p.zip,addr:p.addr,
       person:p.person,mail:p.mail,paymentMonthOffset:1,paymentDay:"月末"}))
@@ -899,7 +948,8 @@ function seikyuYM(tori,se,no){
 const TF=()=>({food:(Number(CFG.taxFood)||8)/100, fre:(Number(CFG.taxFreight)||10)/100});
 function findFreight(tori,item,qty,kg,d){
   const t=N(tori),k=N(item); if(!t) return null;
-  let c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)&&f.tanka!=null&&f.tanka!=="");
+  let c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)
+    &&(f.unit==="宅配便"||(f.tanka!=null&&f.tanka!=="")));
   if(!c.length) return null;
   c=c.filter(f=>!N(f.item)||N(f.item)===k||N(f.item).includes(k.slice(0,4)));
   if(!c.length) return null;
@@ -953,12 +1003,54 @@ function leadLabel(f){
   if(f.ruleType==="曜日"){const l=wdList(f.ruleVal); return l.length?"着 "+l.join("・"):"";}
   const n=parseInt(f.ruleVal,10); return isNaN(n)?"":"+"+n+"日";
 }
-function freightAmt(f,qty,kg){
+const takuRates=()=>CFG.takuhaiRates||[];
+const prefKey=s=>N(s).replace(/[都道府県]$/,"");
+// 都道府県から地帯を引く
+function chitaiOfPref(pref){
+  const p=prefKey(pref); if(!p) return "";
+  const hit=takuRates().find(r=>String(r.pref||"").split(/[,、]/).some(x=>prefKey(x)===p));
+  return hit?hit.chitai:"";
+}
+// 地帯・1ケースのkg・ケース数 から、いちばん安い箱の組み合わせを出す
+function takuhaiCalc(chitai,cap,cs){
+  const c=N(chitai), q=Math.ceil(Number(cs)||0), kg=Number(cap)||0;
+  if(!c||!kg||q<1) return null;
+  const r=takuRates().find(x=>N(x.chitai)===c);
+  if(!r) return null;
+  const box=[];
+  TAKU_SIZES.forEach(s=>{const n=Math.floor(s.maxKg/kg), y=Number(r[s.k]);
+    if(n>=1&&y>0) box.push({name:s.name,n:n,y:y});});
+  if(!box.length) return null;
+  const best=[{cost:0,use:null,prev:-1}];
+  for(let i=1;i<=q;i++){
+    let bc=Infinity,bu=null,bp=-1;
+    box.forEach(b=>{const rest=Math.max(0,i-b.n), c2=b.y+best[rest].cost;
+      if(c2<bc){bc=c2;bu=b;bp=rest;}});
+    best[i]={cost:bc,use:bu,prev:bp};
+  }
+  const cnt={},ord=[]; let i=q;
+  while(i>0){const b=best[i].use; if(!cnt[b.name]){cnt[b.name]=0;ord.push(b.name);} cnt[b.name]++; i=best[i].prev;}
+  return {amt:best[q].cost, chitai:r.chitai, detail:ord.map(k=>k+"サイズ×"+cnt[k]).join("・")};
+}
+function freightAmt(f,qty,kg,cap,pref){
   if(!f) return 0;
+  if(f.unit==="宅配便"){
+    const r=takuhaiCalc(pref?chitaiOfPref(pref):f.chitai,cap,qty);
+    return r?r.amt:0;
+  }
   const t=Number(f.tanka)||0;
-  if(f.unit==="\u5186/kg") return t*(kg||0);
-  if(f.unit==="\u5186/\u4ef6") return t;
+  if(f.unit==="円/kg") return t*(kg||0);
+  if(f.unit==="円/件") return t;
   return t*(qty||0);
+}
+// 送料の出し方を説明する文字（画面に出すだけ）
+function freightNote(f,qty,kg,cap,pref){
+  if(!f||f.unit!=="宅配便") return "";
+  const ch=pref?chitaiOfPref(pref):f.chitai;
+  if(!ch) return pref?"宅配便：「"+pref+"」が料金表にありません":"宅配便：地帯が未設定です";
+  const r=takuhaiCalc(ch,cap,qty);
+  return r?("宅配便 "+r.chitai+"　"+r.detail+"　"+yen(r.amt)+"円")
+          :("宅配便 "+ch+"　箱が決まりません（1ケース "+(cap||"?")+"kg）");
 }
 const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
 
@@ -983,7 +1075,7 @@ function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(
 // ===== 共有データベース（複数PCで同時に使う） =====
 const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
-const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","itemName","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
+const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","itemName","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
 const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
@@ -1217,11 +1309,14 @@ function build(sale,buy){
     const ym=(mp&&!sh)?seikyuYM(bill,se,no):[no.getFullYear(),no.getMonth()+1];
     const betsu=!!hit&&hit.soryo==="送料別";
     const fr=betsu?findFreight(mp.tori,mp.item,cs,kgTot,se):null;
-    const frAmt=(aj&&aj.freight!=null)?Number(aj.freight):(betsu?freightAmt(fr,cs,kgTot):0);
+    const frPref=(aj&&aj.pref)?aj.pref:"";
+    const frAmt=(aj&&aj.freight!=null)?Number(aj.freight):(betsu?freightAmt(fr,cs,kgTot,cap,frPref):0);
+    const frNote=betsu?freightNote(fr,cs,kgTot,cap,frPref):"";
     const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
     const shohin=tk!=null?tk*cs:null;
     TX.push({kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
       customer:sh?"":bill,priceKey:mp?mp.tori:"",supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
+      frNote:frNote, frPref:frPref,
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
       priceItem:(aj&&aj.item)?aj.item:(hit?hit.item:(mp?mp.item:"")),
       qty:cs,unitLabel:"c/s",tanka:tk,edited:!!aj,memo:aj?(aj.memo||""):"",
@@ -1512,6 +1607,9 @@ function openTxEditor(no, after){
       +'<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"><span class="was">黒板：'+yen(t.baseQty)+' c/s</span></label>'
       +'<label>単価（円）<input id="ed_tanka" inputmode="decimal" value="'+v("tanka",t.tanka)+'"><span class="was">空欄＝単価マスタ</span></label>'
       +'<label>送料（円・税10%）<input id="ed_freight" inputmode="decimal" value="'+v("freight",t.freight||"")+'"><span class="was">空欄＝運賃マスタ／0で送料なし</span></label>'
+      +'<label>届け先の都道府県<select id="ed_pref"><option value=""></option>'
+      +PREF_LIST.map(p=>'<option'+(a.pref===p?" selected":"")+'>'+p+'</option>').join("")
+      +'</select><span class="was">'+esc(t.frNote||"宅配便のときだけ使います")+'</span></label>'
       +'<label>納品（店着）日<input id="ed_deliv" type="date" value="'+v("deliv",ymdOf(t.deliv))+'"><span class="was">いま：'+esc(t.delivSrc||"")+'</span></label>';
   }else{
     h+='<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"></label>'
@@ -1546,6 +1644,7 @@ function openTxEditor(no, after){
       if(it&&(a.item||it!==t.priceItem)) n.item=it;
       const dv=md.querySelector("#ed_deliv").value;
       if(dv&&(a.deliv||dv!==ymdOf(t.deliv))) n.deliv=dv;
+      const pf=md.querySelector("#ed_pref").value; if(pf) n.pref=pf;
       if(a.freight==null&&n.freight!=null&&n.freight===(t.freight||0)) delete n.freight;
     }else{
       if(a.kg==null&&n.kg!=null&&n.kg===t.kg) delete n.kg;
@@ -2561,12 +2660,14 @@ function drawFreight(){
     if(ft&&f.t!==ft) return;
     if(q&&!N([f.item,f.carrier,f.memo].join("")).includes(q)) return;
     sh++; const tr=document.createElement("tr"); if(f._new){tr.className="new";delete f._new;}
-    const need=(f.tanka==null||f.tanka==="");
+    const need=(f.unit!=="宅配便")&&(f.tanka==null||f.tanka==="");
     tr.innerHTML='<td>'+cell("freight",i,"t",f.t)+'</td><td>'+cell("freight",i,"item",f.item)+'</td>'
       +'<td>'+selc("freight",i,"hai",f.hai||"自社",["自社","取引先"])+'</td>'
       +'<td>'+selCarrier(i,f)+'</td>'
       +'<td>'+cell("freight",i,"tanka",f.tanka,true,need)+'</td>'
-      +'<td>'+selc("freight",i,"unit",f.unit,["円/ケース","円/kg","円/件"])+'</td>'
+      +'<td>'+selc("freight",i,"unit",f.unit,["円/ケース","円/kg","円/件","宅配便"])
+        +(f.unit==="宅配便"?'<div style="margin-top:3px">'
+          +selc("freight",i,"chitai",f.chitai||"",[""].concat(takuRates().map(r=>r.chitai)))+'</div>':'')+'</td>'
       +'<td style="white-space:nowrap">'+selc("freight",i,"cond",f.cond,["条件なし","以上","未満"])
         +'<span style="display:inline-flex;gap:3px;align-items:center;margin-top:3px">'
         +cell("freight",i,"condQty",f.condQty,true)+'<span style="font-size:11px;color:#888">c/s</span></span></td>'
@@ -2691,10 +2792,11 @@ function bind(){
         if(nm===null||!nm.trim()){ drawFreight(); return; }
         v=nm.trim();
       }
-      if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))||(t==="itemName"&&k==="cap")){
+      if((t==="price"&&(k==="cap"||k==="tanka"))||(t==="freight"&&(k==="tanka"||k==="condQty"))||(t==="itemName"&&k==="cap")
+         ||(t==="takuhaiRates"&&k!=="chitai"&&k!=="pref")){
         v=v.trim()===""?null:parseFloat(v.replace(/,/g,"")); if(v!==null&&isNaN(v)) return;}
       CFG[t][i][k]=v; saveCfg(); build();
-      if(t==="freight"&&(k==="ruleType"||k==="carrier")) drawFreight();   // 新しい運送会社を他の行の候補にも出す
+      if(t==="freight"&&(k==="ruleType"||k==="carrier"||k==="unit")) drawFreight();   // 新しい運送会社を他の行の候補にも出す
       if(t==="price"&&(k==="kind"||k==="t")) drawPrice();
       if(t==="partners"&&k==="key") drawMap();
       if(t==="map"){
@@ -2705,7 +2807,26 @@ function bind(){
       if(t==="price"&&k==="tanka") el.classList.toggle("need",CFG.price[i].kind==="仕入"&&(v==null||v===""));
     });});
 }
-function drawAll(){drawShime();drawPrice();drawFreight();drawMap();drawPar();drawShanai();drawNobill();drawItemName();
+// 宅配便の料金表
+function drawTakuhai(){
+  const tb=document.querySelector("#tTaku tbody"); if(!tb) return; tb.innerHTML="";
+  if(!CFG.takuhaiRates) CFG.takuhaiRates=[];
+  CFG.takuhaiRates.forEach((r,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML='<td>'+cell("takuhaiRates",i,"chitai",r.chitai)+'</td>'
+      +'<td>'+cell("takuhaiRates",i,"pref",r.pref)+'</td>'
+      +TAKU_SIZES.map(s=>'<td>'+cell("takuhaiRates",i,s.k,r[s.k],true)+'</td>').join("")
+      +'<td>'+delBtn("takuhaiRates",i)+'</td>';
+    tb.appendChild(tr);});
+  bind();
+}
+document.addEventListener("click",e=>{
+  if(!e.target.closest("#btnTakuDefault")) return;
+  if(!confirm("宅配便の料金表を、佐川急便の料金表（熊本発）で入れ直します。\n今入っている金額は上書きされます。")) return;
+  CFG.takuhaiRates=TAKU_RATES_DEFAULT.map(r=>Object.assign({},r));
+  drawTakuhai(); saveCfg("料金表を入れ直しました"); build();
+});
+function drawAll(){drawShime();drawPrice();drawFreight();drawTakuhai();drawMap();drawPar();drawShanai();drawNobill();drawItemName();
   if(!QT.lines.length) QT.lines=[{item:"",qty:null,unit:"c/s",tanka:null,tax:"8%"}];
   drawQt();
   document.getElementById("taxFood").value=CFG.taxFood;
