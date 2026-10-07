@@ -819,6 +819,28 @@ const TAKU_RATES_DEFAULT=[
   {chitai:"北海道",pref:"北海道",y60:1450,y80:1670,y100:2600,y140:null,y30:null}
 ];
 const PREF_LIST=["北海道","青森","岩手","宮城","秋田","山形","福島","茨城","栃木","群馬","埼玉","千葉","東京","神奈川","新潟","富山","石川","福井","山梨","長野","岐阜","静岡","愛知","三重","滋賀","京都","大阪","兵庫","奈良","和歌山","鳥取","島根","岡山","広島","山口","徳島","香川","愛媛","高知","福岡","佐賀","長崎","熊本","大分","宮崎","鹿児島","沖縄"];
+// 請求書に書く商品名のひな形（2026/10/7 社長からいただいた18通り）。
+//   「請求書に書く商品名」の欄をクリックすると、この一覧が出ます。
+//   ここに無い書き方も、そのまま打てば使えます。
+const INV_NAME_LIST=[
+  "熊本県産 れんこん 「幸祝」洗い Mup2㎏",
+  "熊本県産 れんこん 「幸祝」洗い Mup5㎏",
+  "熊本県産 れんこん 「幸祝」洗い Mup10㎏",
+  "熊本県産 れんこん 「幸祝」土付き Mup2㎏",
+  "熊本県産 れんこん 「幸祝」土付き Mup5㎏",
+  "熊本県産 れんこん 「幸祝」土付き Mup10㎏",
+  "熊本県産 れんこん 「幸祝」真空 Mup2㎏",
+  "熊本県産 れんこん 「幸祝」真空 Mup5㎏",
+  "熊本県産 れんこん 「幸祝」真空 Mup10㎏",
+  "熊本県産 れんこん 「幸祝」ピロー Mup2㎏",
+  "熊本県産 れんこん 「幸祝」ピロー Mup5㎏",
+  "熊本県産 れんこん 「幸祝」ピロー Mup10㎏",
+  "熊本県産 れんこん 「幸祝」　加工用　5kg",
+  "熊本県産 れんこん 「幸祝」　加工用　10kg",
+  "熊本県産 れんこん 「幸祝」　C　5kg",
+  "熊本県産 れんこん 「幸祝」　C　10kg",
+  "熊本県産 れんこん 「幸祝」　S　5kg",
+  "熊本県産 れんこん 「幸祝」　S　10kg"];
 function defaultCfg(){
   const price=[];
   DATA.price.forEach(p=>price.push({t:p.t,item:p.item,cap:p.cap,sanchi:"熊本",kind:"販売",
@@ -2519,8 +2541,9 @@ function drawItemName(){
   const tb=document.querySelector("#tItemName tbody"); if(!tb) return;
   fillDl("dlItemT",priceTNames("販売"));
   fillDl("dlItemI",priceItemNames());
-  fillDl("dlItemN",[...new Set((CFG.itemName||[]).map(x=>String(x.name||"").trim()).filter(Boolean))]
-    .sort((a,b)=>a.localeCompare(b,"ja")));
+  // ひな形が先。そのあとに、これまでに書いた商品名を並べます。
+  fillDl("dlItemN",[...new Set(INV_NAME_LIST.concat(
+    (CFG.itemName||[]).map(x=>String(x.name||"").trim()).filter(Boolean)))]);
   const q=N(document.getElementById("fItemName").value);
   tb.innerHTML=""; let sh=0;
   (CFG.itemName||[]).forEach((x,i)=>{
