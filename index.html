@@ -951,7 +951,9 @@ function findFreight(tori,item,qty,kg,d){
   let c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)
     &&(f.unit==="宅配便"||(f.tanka!=null&&f.tanka!=="")));
   if(!c.length) return null;
-  c=c.filter(f=>!N(f.item)||N(f.item)===k||N(f.item).includes(k.slice(0,4)));
+  // 品名を書いた行が先。品名が空欄の行は「その取引先の予備」として後から見ます。
+  const nmF=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
+  c=nmF.length?nmF:c.filter(f=>!N(f.item));
   if(!c.length) return null;
   const okc=c.filter(f=>{
     const q=Number(f.condQty);
@@ -967,7 +969,8 @@ function findFreightRow(tori,item,d){
   const t=N(tori),k=N(item); if(!t) return null;
   const c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d));
   if(!c.length) return null;
-  const c2=c.filter(f=>!N(f.item)||N(f.item)===k||N(f.item).includes(k.slice(0,4)));
+  const nmR=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
+  const c2=nmR.length?nmR:c.filter(f=>!N(f.item));
   return (c2.length?c2:c)[0];
 }
 // リード（店着日数・着曜日）だけを引く。運賃が未入力の行でも使える
@@ -1012,11 +1015,20 @@ function chitaiOfPref(pref){
   return hit?hit.chitai:"";
 }
 // 地帯・1ケースのkg・ケース数 から、いちばん安い箱の組み合わせを出す
-function takuhaiCalc(chitai,cap,cs){
+function takuhaiCalc(chitai,cap,cs,boxSize){
   const c=N(chitai), q=Math.ceil(Number(cs)||0), kg=Number(cap)||0;
-  if(!c||!kg||q<1) return null;
+  if(!c||q<1) return null;
   const r=takuRates().find(x=>N(x.chitai)===c);
   if(!r) return null;
+  // 箱サイズを決め打ちしてある行（例：蓮の葉 20枚＝80サイズ1箱）。
+  //   容量が重さではないもの（枚数など）は、重さから箱を決められません。
+  const fx=TAKU_SIZES.filter(s=>s.name===N(boxSize))[0];
+  if(fx){
+    const fy=Number(r[fx.k]);
+    if(!(fy>0)) return null;
+    return {amt:fy*q, chitai:r.chitai, detail:fx.name+"サイズ×"+q};
+  }
+  if(!kg) return null;
   const box=[];
   TAKU_SIZES.forEach(s=>{const n=Math.floor(s.maxKg/kg), y=Number(r[s.k]);
     if(n>=1&&y>0) box.push({name:s.name,n:n,y:y});});
@@ -1035,7 +1047,7 @@ function takuhaiCalc(chitai,cap,cs){
 function freightAmt(f,qty,kg,cap,pref){
   if(!f) return 0;
   if(f.unit==="宅配便"){
-    const r=takuhaiCalc(pref?chitaiOfPref(pref):f.chitai,cap,qty);
+    const r=takuhaiCalc(pref?chitaiOfPref(pref):f.chitai,cap,qty,f.boxSize);
     return r?r.amt:0;
   }
   const t=Number(f.tanka)||0;
@@ -1048,9 +1060,10 @@ function freightNote(f,qty,kg,cap,pref){
   if(!f||f.unit!=="宅配便") return "";
   const ch=pref?chitaiOfPref(pref):f.chitai;
   if(!ch) return pref?"宅配便：「"+pref+"」が料金表にありません":"宅配便：地帯が未設定です";
-  const r=takuhaiCalc(ch,cap,qty);
+  const r=takuhaiCalc(ch,cap,qty,f.boxSize);
   return r?("宅配便 "+r.chitai+"　"+r.detail+"　"+yen(r.amt)+"円")
-          :("宅配便 "+ch+"　箱が決まりません（1ケース "+(cap||"?")+"kg）");
+          :("宅配便 "+ch+"　箱が決まりません（1ケース "+(cap||"?")
+            +"。重さでないときは運賃マスタの「箱」でサイズを指定してください）");
 }
 const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
 
@@ -2667,7 +2680,11 @@ function drawFreight(){
       +'<td>'+cell("freight",i,"tanka",f.tanka,true,need)+'</td>'
       +'<td>'+selc("freight",i,"unit",f.unit,["円/ケース","円/kg","円/件","宅配便"])
         +(f.unit==="宅配便"?'<div style="margin-top:3px">'
-          +selc("freight",i,"chitai",f.chitai||"",[""].concat(takuRates().map(r=>r.chitai)))+'</div>':'')+'</td>'
+          +selc("freight",i,"chitai",f.chitai||"",[""].concat(takuRates().map(r=>r.chitai)))+'</div>'
+          +'<div style="margin-top:3px;display:flex;gap:3px;align-items:center">'
+          +'<span style="font-size:11px;color:#888">箱</span>'
+          +selc("freight",i,"boxSize",f.boxSize||"自動",["自動"].concat(TAKU_SIZES.map(s=>s.name)))
+          +'</div>':'')+'</td>'
       +'<td style="white-space:nowrap">'+selc("freight",i,"cond",f.cond,["条件なし","以上","未満"])
         +'<span style="display:inline-flex;gap:3px;align-items:center;margin-top:3px">'
         +cell("freight",i,"condQty",f.condQty,true)+'<span style="font-size:11px;color:#888">c/s</span></span></td>'
