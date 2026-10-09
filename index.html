@@ -2278,7 +2278,9 @@ function drawInvList(){
       +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
       +'<th class="num">請求金額</th></tr></thead><tbody>'
       +(function(){ const gs=invGroups(list), many=gs.length>1, cols=hasF?9:7;
-        return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td></tr>':'')
+        // 「○○ 様」の行の右端に、その販売先だけの合計（税抜）を出します。
+        return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td>'
+          +'<td class="num">¥'+yen(gp.rows.reduce((a,t)=>a+(Number(t.sale)||0),0))+'</td></tr>':'')
           +gp.rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
         +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+edBadge(t)+'</td>'
         +'<td class="num">'+(t.tanka==null?'<span style="color:#C62828">要確認</span>':'¥'+yen(t.tanka))+'</td>'+'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
