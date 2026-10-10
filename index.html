@@ -402,15 +402,19 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
   </div>
   <div class="card no-print" id="smpCard" style="display:none">
-    <h2>有償サンプル <span class="cnt" id="smpCnt"></span></h2>
-    <p class="hint">💡 発注書で<b>ピンクの枠</b>が付いたセル（＝有償）だけを並べています。
-      請求先と単価を入れて「請求書に足す」を押すと、その取引先の請求書に<b>追加行</b>として載ります。<br>
-      送り先と請求先が違うことがあるので、ヒントの文は<b>そのまま請求先として使わず</b>、必ず確かめてください。
-      まだ足していないものは、前の月のぶんも下に残します。</p>
-    <div class="scroll" style="max-height:40vh"><table id="tSmp"><thead><tr>
-      <th style="width:9%">出荷日</th><th style="width:8%">品目</th><th class="num" style="width:7%">kg</th>
-      <th style="width:22%">請求先</th><th class="num" style="width:10%">単価(円/kg)</th>
-      <th class="num" style="width:10%">金額(税抜)</th><th style="width:12%"></th>
+    <h2>サンプル（有償・無償） <span class="cnt" id="smpCnt"></span></h2>
+    <p class="hint">💡 発注書のサンプル欄に入っているものを、<b>有償も無償も</b>並べています。
+      <b>ピンクの枠</b>が付いたセルが有償、付いていなければ無償です。<br>
+      <b>届け先</b>は自由に書けます。まだ取引の無い相手でも構いません。
+      発注書のセルにコメントがあれば「ヒント」に出ますが、<b>そのまま請求先として使わず</b>必ず確かめてください。<br>
+      <b>有償の行だけ</b>請求先と単価を入れて「請求書に足す」を押せます。まだ足していないものは、前の月のぶんも下に残します。</p>
+    <div id="smpSum" class="note" style="margin-bottom:8px"></div>
+    <div class="scroll" style="max-height:44vh"><table id="tSmp"><thead><tr>
+      <th style="width:8%">出荷日</th><th style="width:6%">有償</th>
+      <th style="width:8%">品目</th><th class="num" style="width:6%">kg</th>
+      <th style="width:16%">届け先</th>
+      <th style="width:18%">請求先</th><th class="num" style="width:9%">単価(円/kg)</th>
+      <th class="num" style="width:9%">金額(税抜)</th><th style="width:11%"></th>
     </tr></thead><tbody></tbody></table></div>
   </div>
   <div id="invList" class="no-print"></div>
@@ -731,9 +735,13 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="flex">
       <button class="btn sub" id="btnSyncTest">接続を確認</button>
       <button class="btn sub" id="btnSyncNow">いますぐ同期</button>
+      <button class="btn sub" id="btnSyncRepull">全部取り直す</button>
       <span class="sp" style="flex:1"></span>
       <button class="btn dgr" id="btnSyncSeed">いまの内容を共有DBへ送る（最初の1台だけ）</button>
     </div>
+    <p class="hint">💡 <b>全部取り直す</b>…「ここまで受け取った」の印を消して、共有データベースの中身を
+      <b>最初から全部受け取り直します</b>。他のPCには出ているのにこのPCにだけ出てこないときに使います。
+      このPCの中身を消す機能ではありません。</p>
     <div class="note" id="syncInfo"></div>
   </div>
   <div class="card">
@@ -2136,6 +2144,8 @@ function termText(k,y,m){
 // ===== 有償サンプル =====
 function smpYm(s){ const d=parseDate(s.date); return d?[d.getFullYear(),d.getMonth()+1]:[0,0]; }
 function smpAmount(s){ return Math.round((numOr(s.kg,0))*(numOr(s.tanka,0))); }
+// paid が無い行は、2026/10/10 より前に取り込んだもの（当時は有償だけ）なので有償扱い。
+function smpPaid(s){ return s.paid==null ? true : !!Number(s.paid); }
 function drawSamples(){
   const card=document.getElementById("smpCard"); if(!card) return;
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
@@ -2150,29 +2160,48 @@ function drawSamples(){
   }).sort((a,b)=>(parseDate(a.date)-parseDate(b.date)));
   if(!list.length){ card.style.display="none"; return; }
   card.style.display="";
-  const yet=list.filter(s=>!s.done).length;
-  document.getElementById("smpCnt").textContent="("+list.length+"件"+(yet?"／未処理 "+yet+"件":"・すべて処理済み")+")";
+  const yet=list.filter(s=>smpPaid(s)&&!s.done).length;
+  const nPaid=list.filter(smpPaid).length;
+  document.getElementById("smpCnt").textContent="("+list.length+"件　有償 "+nPaid+"・無償 "+(list.length-nPaid)+"件"
+    +(yet?"／請求未処理 "+yet+"件":"")+")";
+  // 品目ごとの合計（シーズン終わりの振り返り用）
+  (function(){
+    const g={};
+    list.forEach(s=>{const k=(s.size||"（品目なし）");
+      if(!g[k])g[k]={p:0,f:0};
+      g[k][smpPaid(s)?"p":"f"]+=numOr(s.kg,0);});
+    const ks=Object.keys(g).sort((a,b)=>a.localeCompare(b,"ja"));
+    const tp=ks.reduce((a,k)=>a+g[k].p,0), tf=ks.reduce((a,k)=>a+g[k].f,0);
+    document.getElementById("smpSum").innerHTML="<b>この月のサンプル</b>　有償 "
+      +dec1(tp)+" kg　無償 "+dec1(tf)+" kg　合計 "+dec1(tp+tf)+" kg<br>"
+      +ks.map(k=>esc(k)+"　有償 "+dec1(g[k].p)+"・無償 "+dec1(g[k].f)+" kg").join("　／　");
+  })();
   const keys=partnerKeys();
   const tb=document.querySelector("#tSmp tbody"); tb.innerHTML="";
   list.forEach(s=>{
     const tr=document.createElement("tr");
-    const done=!!s.done;
-    const sel='<select class="cell" data-smp="'+esc(s.id)+'" data-f="bill"'+(done?" disabled":"")+'>'
+    const done=!!s.done, paid=smpPaid(s);
+    const lock=done||!paid;
+    const sel='<select class="cell" data-smp="'+esc(s.id)+'" data-f="bill"'+(lock?" disabled":"")+'>'
       +'<option value="">（選んでください）</option>'
       +keys.map(k=>'<option value="'+esc(k)+'"'+(String(s.bill||"")===k?" selected":"")+'>'+esc(k)+'</option>').join("")
       +'</select>';
-    tr.innerHTML='<td>'+esc(s.date)+'</td><td>'+esc(s.size||"")+'</td>'
-      +'<td class="num">'+dec1(numOr(s.kg,0))+'</td><td>'+sel+'</td>'
-      +'<td class="num"><input class="cell n" style="width:90px" data-smp="'+esc(s.id)+'" data-f="tanka" value="'
-        +(s.tanka==null||s.tanka===""?"":esc(String(s.tanka)))+'"'+(done?" disabled":"")+'></td>'
-      +'<td class="num">'+(numOr(s.tanka,null)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
-      +'<td>'+(done
+    tr.innerHTML='<td>'+esc(s.date)+'</td>'
+      +'<td>'+(paid?'<span class="badge b-wait">有償</span>':'<span class="badge" style="background:#ECEFF1;color:#546E7A">無償</span>')+'</td>'
+      +'<td>'+esc(s.size||"")+'</td>'
+      +'<td class="num">'+dec1(numOr(s.kg,0))+'</td>'
+      +'<td><input class="cell" data-smp="'+esc(s.id)+'" data-f="dest" placeholder="例：○○商事 札幌店" value="'+esc(s.dest||"")+'"></td>'
+      +'<td>'+(paid?sel:'<span style="font-size:11px;color:#999">無償なので請求しません</span>')+'</td>'
+      +'<td class="num">'+(paid?'<input class="cell n" style="width:80px" data-smp="'+esc(s.id)+'" data-f="tanka" value="'
+        +(s.tanka==null||s.tanka===""?"":esc(String(s.tanka)))+'"'+(done?" disabled":"")+'>':'—')+'</td>'
+      +'<td class="num">'+(!paid||numOr(s.tanka,null)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
+      +'<td>'+(!paid?'':(done
         ? '<span class="badge b-ok">'+esc(s.done.ym)+' に計上</span> <a href="#" data-smpundo="'+esc(s.id)+'" style="font-size:11px">取消</a>'
-        : '<button class="btn sm" data-smpadd="'+esc(s.id)+'">請求書に足す</button>')+'</td>';
+        : '<button class="btn sm" data-smpadd="'+esc(s.id)+'">請求書に足す</button>'))+'</td>';
     tb.appendChild(tr);
     if(s.hint){
       const h=document.createElement("tr");
-      h.innerHTML='<td></td><td colspan="6" style="font-size:11px;color:#666;padding-top:0">ヒント：'+esc(s.hint)+'</td>';
+      h.innerHTML='<td></td><td colspan="8" style="font-size:11px;color:#666;padding-top:0">ヒント：'+esc(s.hint)+'</td>';
       tb.appendChild(h);
     }
   });
@@ -2186,6 +2215,9 @@ function drawSamples(){
 }
 function smpAdd(id){
   const s=(OPS.samples||[]).find(x=>x.id===id); if(!s) return;
+  if(!smpPaid(s)){ alert("この行は無償サンプルなので、請求書には足せません。\n\n"
+    +"有償にするときは、発注書のそのセルにピンクの枠を付けてから、"
+    +"GASの pullYuusho を実行してください。"); return; }
   const miss=[];
   if(!String(s.bill||"").trim()) miss.push("・請求先を選んでください");
   if(numOr(s.tanka,null)==null||numOr(s.tanka,0)<=0) miss.push("・単価（円/kg）を入れてください");
@@ -3892,6 +3924,16 @@ document.getElementById("btnSyncTest").onclick=async()=>{
   }catch(e){ dlMsg("つながりません："+e.message,"ng"); alert("つながりませんでした。\n\n"+e.message); }
 };
 document.getElementById("btnSyncNow").onclick=()=>{ if(!syncOn()){alert("「共有する」にチェックを入れてください。");return;} syncTick(true); };
+// 「ここまで受け取った」の印を消して、共有DBを最初から全部受け取り直す。
+//   SNAP も一緒に消すと「手元に無い＝消された」と伝わってしまうので、SNAP は触りません。
+document.getElementById("btnSyncRepull").onclick=async()=>{
+  if(!syncOn()){alert("「共有する」にチェックを入れてください。");return;}
+  if(!confirm("共有データベースの中身を、最初から全部受け取り直します。\n\n"
+    +"このPCの中身は消えません。少し時間がかかります。")) return;
+  SINCE=""; saveSince();
+  await syncTick(true);
+  alert("受け取り直しました。\n\nそれでも出てこないときは、共有DBのシート自体に行が無いかもしれません。");
+};
 document.getElementById("btnSyncSeed").onclick=async()=>{
   if(!syncOn()){ alert("先にURLと合言葉を入れ、「共有する」にチェックを入れてください。"); return; }
   if(!confirm("いまこのPCにある内容を、すべて共有データベースへ送ります。\n\n"
