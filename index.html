@@ -549,9 +549,13 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <!-- 運賃マスタ -->
 <section class="panel" id="freight">
   <div class="card">
-    <h2>運賃マスタ <span class="cnt" id="cFre"></span> 販売先・規格ごと<span class="sp"></span>
+    <h2>運賃マスタ <span class="cnt" id="cFre"></span> 取引先・品名ごと<span class="sp"></span>
       <button class="btn sm" data-add="freight">＋ 新規</button></h2>
-    <div class="note or">単価マスタで<b>「送料別」</b>にした行だけ、ここの運賃が請求書に足されます。<b>「送料込み」</b>の行は運賃を足しません。<br>
+    <div class="note or"><b>一番左の欄は「取引先」です。発注書の行先（販売先）ではなく、
+      <u>単価マスタに並んでいる呼び名</u>を入れてください。</b>
+      （例：行先が「ワタリ」でも、取引先が「川上荷役」なら <b>川上荷役</b> と書きます）<br>
+      品名も同じで、<u>対応表の「品名」</u>と同じ書き方にします。空欄にするとその取引先の全部に効きます。<br>
+      単価マスタで<b>「送料別」</b>にした行だけ、ここの運賃が請求書に足されます。<b>「送料込み」</b>の行は運賃を足しません。<br>
       <b>店着リード</b>は運賃とは別に、<b>出荷日から何日後（または何曜日）に着くか</b>を決めます。運賃が空欄の行でもリードだけ使えます。<br>
       <b>便立て</b>は、その便を<b>どちらが立てるか</b>（自社／取引先）です。取引先が立てる便でも、着く日を管理するために運送会社とリードは入れておいてください。</div>
     <div class="flex" style="margin:8px 0">
@@ -564,12 +568,12 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     </div>
     <p class="hint">💡 条件は「〇c/s以上なら運賃いくら」という形で複数行つくれます。数量が大きい条件から順に当てはめます（例：100c/s以上＝無料、50c/s以上＝5,000円、条件なし＝8,000円）。</p>
     <div class="flex">
-      <select id="ffTori"><option value="">全ての販売先</option></select>
-      <input class="find" id="fFre" placeholder="規格・運送会社で絞り込み">
+      <select id="ffTori"><option value="">全ての取引先</option></select>
+      <input class="find" id="fFre" placeholder="品名・運送会社で絞り込み">
     </div>
     <div class="scroll" style="max-height:60vh">
       <table id="tFre"><thead><tr>
-        <th style="width:12%">販売先</th><th style="width:11%">規格・品目</th>
+        <th style="width:12%">取引先<br><span style="font-weight:400;font-size:10px;opacity:.85">単価マスタの呼び名</span></th><th style="width:11%">品名<br><span style="font-weight:400;font-size:10px;opacity:.85">空欄＝その取引先の全部</span></th>
         <th style="width:7%">便立て</th>
         <th style="width:9%">運送会社</th><th style="width:7%" class="num">運賃(税抜)</th>
         <th style="width:7%">単位</th><th style="width:10%">条件</th>
@@ -2720,7 +2724,7 @@ function drawFreight(){
     tb.appendChild(tr);});
   document.getElementById("cFre").textContent="("+CFG.freight.length+"行)"+(sh!==CFG.freight.length?" ／ "+sh+"行を表示中":"");
   const sel=document.getElementById("ffTori"), keep=sel.value;
-  sel.innerHTML='<option value="">全ての販売先</option>';
+  sel.innerHTML='<option value="">全ての取引先</option>';
   [...new Set(CFG.freight.map(f=>f.t).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja")).forEach(t=>{
     const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o);});
   if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
