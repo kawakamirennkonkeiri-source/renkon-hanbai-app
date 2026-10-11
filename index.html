@@ -2146,6 +2146,42 @@ function smpYm(s){ const d=parseDate(s.date); return d?[d.getFullYear(),d.getMon
 function smpAmount(s){ return Math.round((numOr(s.kg,0))*(numOr(s.tanka,0))); }
 // paid が無い行は、2026/10/10 より前に取り込んだもの（当時は有償だけ）なので有償扱い。
 function smpPaid(s){ return s.paid==null ? true : !!Number(s.paid); }
+// サンプルだけを、最初から取り直す。
+//   全部を一度に受け取ると重たくて失敗することがあるので、ここでは1種類だけ頑む。
+//   うまくいかなかったときは、黙らずに理由をそのまま出す。
+async function smpRepull(){
+  if(!syncOn()){ alert("設定タブで「共有する」にチェックを入れてください。"); return; }
+  const btn=document.getElementById("smpRepull");
+  if(btn){ btn.disabled=true; btn.textContent="受け取っています…"; }
+  try{
+    const j=await syncApi("pullAll",{since:"",only:"samples"});
+    const got=(j.data&&j.data.samples)||[];
+    if(!got.length){
+      alert("共有データベースの「有償サンプル」シートに行がありませんでした。\n\n"
+        +"※ 「表_有償サンプル」は見るだけの写しです。本物は「有償サンプル」の方です。\n"
+        +"GAS で pullYuusho を流してください。");
+      return;
+    }
+    if(!OPS.samples) OPS.samples=[];
+    let add=0, upd=0;
+    got.forEach(r=>{
+      const i=OPS.samples.findIndex(x=>x.id===r.id);
+      if(r._del){ if(i>=0){ OPS.samples.splice(i,1); upd++; } return; }
+      const rec=Object.assign({},r); delete rec.u;
+      if(i>=0){ OPS.samples[i]=rec; upd++; } else { OPS.samples.push(rec); add++; }
+    });
+    saveOps();
+    try{ SNAP=syncSnapshot(); saveSnap(); }catch(e){}
+    drawSamples(); drawInvList();
+    alert("サンプルを "+got.length+" 件受け取りました。\n\n"
+      +"新しく入った　"+add+" 件\n上書きした　"+upd+" 件\n\n"
+      +"出てこないときは、上の「対象月」を変えてみてください。");
+  }catch(e){
+    alert("受け取れませんでした。\n\n"+(e&&e.message?e.message:String(e)));
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent="サンプルだけ取り直す"; }
+  }
+}
 function drawSamples(){
   const card=document.getElementById("smpCard"); if(!card) return;
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
@@ -2176,7 +2212,9 @@ function drawSamples(){
         +"<b>「有償サンプル」シート</b>に行があるか見る　"
         +"③ 行が無ければ GAS で <b>pullYuusho</b> を流す<br>"
         +"<span style=\"color:#888\">※ サンプルは発注書からそのまま持ってくるので、"
-        +"単価マスタや取引先マスタへの登録はいりません。</span>";
+        +"単価マスタや取引先マスタへの登録はいりません。</span>"
+        +"<div style=\"margin-top:8px\"><button class=\"btn sm\" id=\"smpRepull\">サンプルだけ取り直す</button></div>";
+    const rb=document.getElementById("smpRepull"); if(rb) rb.onclick=smpRepull;
     const tb0=document.querySelector("#tSmp tbody"); if(tb0) tb0.innerHTML="";
     return;
   }
@@ -3952,6 +3990,14 @@ document.getElementById("btnSyncRepull").onclick=async()=>{
     +"このPCの中身は消えません。少し時間がかかります。")) return;
   SINCE=""; saveSince();
   await syncTick(true);
+  // syncTick は中でしくじるので、成功したかどうかは SYNCERR で見る。
+  if(SYNCERR){
+    alert("受け取り直せませんでした。\n\n"+SYNCERR
+      +"\n\n一度に全部を受け取ると重たすぎることがあります。"
+      +"サンプルだけなら、請求タブのサンプルのカードにある"
+      +"「サンプルだけ取り直す」をお試しください。");
+    return;
+  }
   alert("受け取り直しました。\n\nそれでも出てこないときは、共有DBのシート自体に行が無いかもしれません。");
 };
 document.getElementById("btnSyncSeed").onclick=async()=>{
