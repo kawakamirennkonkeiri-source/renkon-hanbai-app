@@ -2158,8 +2158,28 @@ function drawSamples(){
     if(s.done) return s.done.ym===(y+"-"+p2(m));    // 前の月のぶんでも、この月に計上したなら残す
     return d<=end;                                  // まだ計上していない前の月のぶん
   }).sort((a,b)=>(parseDate(a.date)-parseDate(b.date)));
-  if(!list.length){ card.style.display="none"; return; }
+  // 0件でもカードは隠しません。隠すと「仕組みが無い」と見えてしまうため、
+  //   何が起きているのか（この月に無いのか、そもそも受け取っていないのか）を書きます。
   card.style.display="";
+  if(!list.length){
+    const all=(OPS.samples||[]);
+    const ds=all.map(s=>String(s.date||"")).filter(Boolean).sort();
+    document.getElementById("smpCnt").textContent="(0件)";
+    document.getElementById("smpSum").innerHTML= all.length
+      ? "<b>この月に出したサンプルはありません。</b>　"
+        +"このPCが受け取っているサンプルは全部で "+all.length+" 件です"
+        +(ds.length?"（"+esc(ds[0])+" 〜 "+esc(ds[ds.length-1])+"）":"")
+        +"。上の<b>対象月</b>を変えてみてください。"
+      : "<b>このPCはサンプルをまだ 1 件も受け取っていません。</b><br>"
+        +"① 設定タブの<b>「全部取り直す」</b>を押す　"
+        +"② それでも増えなければ、共有データベースの"
+        +"<b>「有償サンプル」シート</b>に行があるか見る　"
+        +"③ 行が無ければ GAS で <b>pullYuusho</b> を流す<br>"
+        +"<span style=\"color:#888\">※ サンプルは発注書からそのまま持ってくるので、"
+        +"単価マスタや取引先マスタへの登録はいりません。</span>";
+    const tb0=document.querySelector("#tSmp tbody"); if(tb0) tb0.innerHTML="";
+    return;
+  }
   const yet=list.filter(s=>smpPaid(s)&&!s.done).length;
   const nPaid=list.filter(smpPaid).length;
   document.getElementById("smpCnt").textContent="("+list.length+"件　有償 "+nPaid+"・無償 "+(list.length-nPaid)+"件"
