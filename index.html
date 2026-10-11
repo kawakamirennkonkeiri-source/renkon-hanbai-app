@@ -2143,7 +2143,15 @@ function termText(k,y,m){
 }
 // ===== 有償サンプル =====
 function smpYm(s){ const d=parseDate(s.date); return d?[d.getFullYear(),d.getMonth()+1]:[0,0]; }
-function smpAmount(s){ return Math.round((numOr(s.kg,0))*(numOr(s.tanka,0))); }
+// 全角の数字（３）を半角（3）に直す。
+//   日本語入力のまま打つと全角になり、そのままでは数字として読めないため。
+function smpHan(v){
+  return String(v==null?"":v)
+    .replace(/[\uFF10-\uFF19\uFF0E]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[,\uFF0C\uFFE5\u00A5\s]/g,"");
+}
+function smpTanka(s){ return numOr(smpHan(s.tanka),null); }
+function smpAmount(s){ return Math.round((numOr(s.kg,0))*(smpTanka(s)||0)); }
 // paid が無い行は、2026/10/10 より前に取り込んだもの（当時は有償だけ）なので有償扱い。
 function smpPaid(s){ return s.paid==null ? true : !!Number(s.paid); }
 // サンプルだけを、最初から取り直す。
@@ -2252,7 +2260,7 @@ function drawSamples(){
       +'<td>'+(paid?sel:'<span style="font-size:11px;color:#999">無償なので請求しません</span>')+'</td>'
       +'<td class="num">'+(paid?'<input class="cell n" style="width:80px" data-smp="'+esc(s.id)+'" data-f="tanka" value="'
         +(s.tanka==null||s.tanka===""?"":esc(String(s.tanka)))+'"'+(done?" disabled":"")+'>':'—')+'</td>'
-      +'<td class="num">'+(!paid||numOr(s.tanka,null)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
+      +'<td class="num">'+(!paid||smpTanka(s)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
       +'<td>'+(!paid?'':(done
         ? '<span class="badge b-ok">'+esc(s.done.ym)+' に計上</span> <a href="#" data-smpundo="'+esc(s.id)+'" style="font-size:11px">取消</a>'
         : '<button class="btn sm" data-smpadd="'+esc(s.id)+'">請求書に足す</button>'))+'</td>';
@@ -2263,11 +2271,28 @@ function drawSamples(){
       tb.appendChild(h);
     }
   });
+  // 打つたびに表を作り直すと、入力欄ごと作り直されて
+  //   1文字しか書けなくなる（とくに日本語入力で変換中に消える）。
+  //   そこで、打っている間は<b>金額のところだけ</b>を書き換える。
   tb.querySelectorAll("[data-smp]").forEach(el=>{
-    el[el.tagName==="SELECT"?"onchange":"oninput"]=()=>{
+    const redraw=()=>{
       const s=(OPS.samples||[]).find(x=>x.id===el.dataset.smp); if(!s) return;
-      s[el.dataset.f]=el.value; saveOps(); drawSamples();
-    };});
+      s[el.dataset.f]=el.value; saveOps();
+      const tr=el.closest("tr"); if(!tr) return;
+      const td=tr.children[7];
+      if(td) td.textContent=(!smpPaid(s)||smpTanka(s)==null)?"—":"¥"+yen(smpAmount(s));
+    };
+    if(el.tagName==="SELECT"){ el.onchange=redraw; }
+    else {
+      el.oninput=redraw;
+      // 打ち終わって欄を離れたときだけ、全角を半角に直して見た目を整える
+      el.onchange=()=>{
+        const s=(OPS.samples||[]).find(x=>x.id===el.dataset.smp); if(!s) return;
+        if(el.dataset.f==="tanka"){ const h=smpHan(el.value); if(h!==el.value){ el.value=h; s.tanka=h; saveOps(); } }
+        redraw();
+      };
+    }
+  });
   tb.querySelectorAll("[data-smpadd]").forEach(b=>b.onclick=()=>smpAdd(b.dataset.smpadd));
   tb.querySelectorAll("[data-smpundo]").forEach(a=>a.onclick=e=>{e.preventDefault();smpUndo(a.dataset.smpundo);});
 }
@@ -2278,18 +2303,18 @@ function smpAdd(id){
     +"GASの pullYuusho を実行してください。"); return; }
   const miss=[];
   if(!String(s.bill||"").trim()) miss.push("・請求先を選んでください");
-  if(numOr(s.tanka,null)==null||numOr(s.tanka,0)<=0) miss.push("・単価（円/kg）を入れてください");
+  if(smpTanka(s)==null||smpTanka(s)<=0) miss.push("・単価（円/kg）を入れてください");
   if(miss.length){ alert("請求書に足せません。\n\n"+miss.join("\n")); return; }
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   if(!y){ alert("対象月を選んでください。"); return; }
   const key=docKey("inv",s.bill,y,m);
   const line={tekiyo:"有償サンプル "+s.date+"　"+(s.size||""),
-    qty:numOr(s.kg,0), unit:"kg", tanka:numOr(s.tanka,0), tax:"8%", smp:s.id};
+    qty:numOr(s.kg,0), unit:"kg", tanka:smpTanka(s)||0, tax:"8%", smp:s.id};
   if(!OPS.extra[key]) OPS.extra[key]=[];
   OPS.extra[key].push(line);
   s.done={ym:y+"-"+p2(m), bill:s.bill, at:nowStr()};
   saveOps(); logOp("有償サンプルを請求書に足しました",
-    s.date+" "+(s.size||"")+" "+s.kg+"kg × "+s.tanka+"円 → "+s.bill+"（"+y+"年"+m+"月分）");
+    s.date+" "+(s.size||"")+" "+s.kg+"kg × "+(smpTanka(s)||0)+"円 → "+s.bill+"（"+y+"年"+m+"月分）");
   drawSamples(); drawInvList();
   alert(s.bill+" の "+y+"年"+m+"月分の請求書に、追加行として足しました。");
 }
