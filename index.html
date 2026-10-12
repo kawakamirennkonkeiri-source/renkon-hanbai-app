@@ -2229,7 +2229,9 @@ function smpOrphans(){
       if(!e.smp) return;
       const k=String(e.smp);
       if(done[k]&&!seen[k]){ seen[k]=1; return; }      // 印と対になる正しい 1 本
-      out.push({key:key, smp:k, tekiyo:e.tekiyo||"", amount:Number(e.amount)||0});
+      // 追加行は単価と数量だけ持っているので、金額はここで出す
+      out.push({key:key, smp:k, tekiyo:e.tekiyo||"",
+                amount:Math.round(numOr(e.qty,1)*numOr(e.tanka,0))});
     });
   });
   return out;
@@ -2388,15 +2390,11 @@ function drawSamples(){
   const card=document.getElementById("smpCard"); if(!card) return;
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   const end=new Date(y,m,0);
-  // この月のぶん＋まだ足していない前の月のぶん
+  // この月までに出したサンプルを全部並べます。
+  //   計上したとたんに行が消えると、取消す手段がなくなるため、隠しません。
   const list=(OPS.samples||[]).filter(s=>{
     const d=parseDate(s.date); if(!d) return false;
-    const [sy,sm]=smpYm(s);
-    if(sy===y&&sm===m) return true;                 // この月に出したぶん
-    // 前の月のぶんでも、この月に計上したなら残す（分けた行も見る）
-    const dn=smpHasParts(s)?s.parts.map(p=>p.done).filter(Boolean):(s.done?[s.done]:[]);
-    if(dn.length) return dn.some(d2=>d2.ym===(y+"-"+p2(m)));
-    return d<=end;                                  // まだ計上していない前の月のぶん
+    return d<=end;
   }).sort((a,b)=>(parseDate(a.date)-parseDate(b.date)));
   // 0件でもカードは隠しません。隠すと「仕組みが無い」と見えてしまうため、
   //   何が起きているのか（この月に無いのか、そもそも受け取っていないのか）を書きます。
@@ -2426,12 +2424,16 @@ function drawSamples(){
   const yet=vr.filter(v=>smpPaid(v.u)&&!v.u.done).length;
   const nPaid=vr.filter(v=>smpPaid(v.u)).length;
   const bad=list.filter(s=>smpHasParts(s)&&Math.abs(smpPartSum(s)-numOr(s.kg,0))>=0.001).length;
-  document.getElementById("smpCnt").textContent="("+vr.length+"件　有償 "+nPaid+"・無償 "+(vr.length-nPaid)+"件"
+  document.getElementById("smpCnt").textContent="(この月まで "+vr.length+"件　有償 "+nPaid+"・無償 "+(vr.length-nPaid)+"件"
     +(yet?"／請求未処理 "+yet+"件":"")+(bad?"／要確認 "+bad+"件":"")+")";
-  // 品目ごとの合計（シーズン終わりの振り返り用）
+  // 品目ごとの合計（シーズン終わりの振り返り用）。
+  //   並べているのはこの月まで全部ですが、合計は「この月に出したぶん」だけ数えます。
   (function(){
     const g={};
-    vr.forEach(v=>{const k=(v.s.size||"（品目なし）");
+    vr.forEach(v=>{
+      const sy2=smpYm(v.s)[0], sm2=smpYm(v.s)[1];
+      if(!(sy2===y&&sm2===m)) return;
+      const k=(v.s.size||"（品目なし）");
       if(!g[k])g[k]={p:0,f:0};
       g[k][smpPaid(v.u)?"p":"f"]+=numOr(v.u.kg,0);});
     const ks=Object.keys(g).sort((a,b)=>a.localeCompare(b,"ja"));
@@ -2626,6 +2628,17 @@ function drawInvList(){
   document.getElementById("invMonth").textContent="("+y+"-"+p2(m)+"分)";
   const agg={};
   rows.forEach(t=>{(agg[t.customer]||(agg[t.customer]=[])).push(t);});
+  // れんこんの取引が 1 件も無くても、追加行（サンプル・値引きなど）があれば請求書を出す。
+  //   これが無いと、サンプルだけの請求先は画面に出てこない。
+  (function(){
+    const ym=y+"-"+p2(m);
+    Object.keys(OPS.extra||{}).forEach(k2=>{
+      const pz=String(k2).split("|");
+      if(pz[0]!=="inv"||pz[2]!==ym) return;
+      if(!(OPS.extra[k2]||[]).length) return;
+      if(!agg[pz[1]]) agg[pz[1]]=[];
+    });
+  })();
   const sel=document.getElementById("invCust"), keep=sel.value;
   sel.innerHTML='<option value="all">全て</option>';
   Object.keys(agg).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=k;sel.appendChild(o);});
@@ -2647,7 +2660,9 @@ function drawInvList(){
     const d=document.createElement("div"); d.className="prev";
     const op=!!INVOPEN[k];
     d.innerHTML='<div class="prev-h"><div class="hd" data-tg="'+esc(k)+'" title="押すと明細を開け閉めできます">'
-      +'<div class="ttl"><span class="cv">'+(op?'\u25be':'\u25b8')+'</span>'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
+      +'<div class="ttl"><span class="cv">'+(op?'\u25be':'\u25b8')+'</span>'+esc(p?p.name:k)
+      +(list.length?' - '+list.length+'明細'
+                   :' <span class="badge b-wait">追加行だけ</span>')+'</div>'
       +'<div class="cond">[請求基準: '+kijunLabel(r)+' ／ '+esc(r.shime)+'締め ／ 期間: '+termText(k,y,m)+']'
       +((nmCnt[p?p.name:k]||0)>1
         ? ' <span class="badge b-ng">同じ名前で '+nmCnt[p?p.name:k]+' 枚に分かれています</span>'
@@ -3902,7 +3917,9 @@ async function issueInvoice(custKey){
   // 発行の直前に、いまの状態から請求行を作り直す
   const rows=invOrder(TX.filter(t=>t.kind==="sale"&&!t.shanai&&!t.nobill&&t.customer===custKey
       &&t.y===y&&t.m===m&&t.sale&&!OPS.invLines[t.no]));
-  if(!rows.length){ alert("請求できる明細がありません。\n（すでに全て請求済みの可能性があります）"); return; }
+  // れんこんの明細が無くても、追加行（サンプルなど）だけで発行できます。
+  if(!rows.length&&!(OPS.extra[docKey("inv",custKey,y,m)]||[]).length){
+    alert("請求できる明細がありません。\n（すでに全て請求済みの可能性があります）"); return; }
   const lines=[];
   rows.forEach(t=>{
     const d=t.deliv||t.date;                       // 明細に出すのは納品（店着）日
@@ -3928,13 +3945,15 @@ async function issueInvoice(custKey){
   if(syncOn()){
     try{
       // ① この明細を先に取り置く（他のPCが同じ明細を出せないようにする）
-      const cl=await syncApi("claim",{kind:"inv",docId:invId,txNos:rows.map(t=>t.no),by:CFG.userName||""});
-      if(cl.result&&cl.result.ok===false){
-        const c=cl.result.conflicts||[];
-        alert("次の明細は、すでに別の請求書に入っています。\n発行を中止しました。\n\n"
-          +c.slice(0,8).map(x=>x.txNo+(x.by?"（"+x.by+" さんが発行）":"")).join("\n")
-          +(c.length>8?"\n…ほか":"")+"\n\n画面を最新にしてから、もう一度お試しください。");
-        await syncTick(true); return;
+      if(rows.length){
+        const cl=await syncApi("claim",{kind:"inv",docId:invId,txNos:rows.map(t=>t.no),by:CFG.userName||""});
+        if(cl.result&&cl.result.ok===false){
+          const c=cl.result.conflicts||[];
+          alert("次の明細は、すでに別の請求書に入っています。\n発行を中止しました。\n\n"
+            +c.slice(0,8).map(x=>x.txNo+(x.by?"（"+x.by+" さんが発行）":"")).join("\n")
+            +(c.length>8?"\n…ほか":"")+"\n\n画面を最新にしてから、もう一度お試しください。");
+          await syncTick(true); return;
+        }
       }
       // ② 番号をGoogle側でもらう（重複しない）
       invNo=(await syncApi("issueNo",{kind:"INV",ym:y+"-"+p2(m)})).no;
