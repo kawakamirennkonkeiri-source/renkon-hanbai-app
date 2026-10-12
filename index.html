@@ -1819,7 +1819,9 @@ function openInvEditor(k){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   const key=docKey("inv",k,y,m), tf=TF();
   const rows=invOrder(curOf("invYm").filter(t=>t.kind==="sale"&&t.customer===k&&!OPS.invLines[t.no]));
-  if(!rows.length){ alert("この月に、まだ請求していない明細がありません。\n発行済みの請求書を直すときは「この月の発行済請求書」の「取消して修正」を使います。"); return; }
+  // れんこんの明細が無くても、追加行（サンプル・送料など）だけなら開けます。
+  if(!rows.length&&!(OPS.extra[key]||[]).length){
+    alert("この月に、まだ請求していない明細がありません。\n発行済みの請求書を直すときは「この月の発行済請求書」の「取消して修正」を使います。"); return; }
   const p=partnerOf(k), hd=OPS.head[key]||{};
   const bs=boardSubject(rows.map(t=>t.sell),p?p.name:k,k);
   const defSub=(bs?bs+"　":"")+y+"年"+m+"月分 ご請求";
@@ -1827,6 +1829,7 @@ function openInvEditor(k){
   let h='<h3>請求書の修正　'+esc(p?p.name:k)+'<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span>'
     +(hd.fromNo?'<span class="badge b-wait">'+esc(hd.fromNo)+' の出し直し</span>':'')+'</h3>'
     +'<div class="sub">まだ請求していない明細が対象です。<b>数量を0にすると、その明細は今回の請求から外れます</b>。空欄にした項目はマスタの値に戻ります。<br>'
+    +(rows.length?'':'<b style="color:#C62828">この月はれんこんの取引がありません。下の「追加する行」だけで請求書を作ります。</b><br>')
     +'値引きは「追加する行」に<b>マイナスの単価</b>で入れます。ここで直した内容は、納品タブの取引にも反映されます。</div>'
     +'<div class="grid"><label>件名<input id="iv_sub" value="'+esc(hd.subject||defSub)+'"></label></div>'
     +'<h4 style="margin:14px 0 6px;font-size:13px">明細</h4><div class="scroll" style="max-height:38vh"><table><thead><tr>'
