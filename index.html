@@ -395,10 +395,13 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <label>対象月：<select id="invYm"></select></label>
       <label>お客様：<select id="invCust"><option value="all">全て</option></select></label>
       <div class="sp" style="flex:1"></div>
+      <button class="btn sm" id="btnOtherInv">その他請求書作成</button>
       <button class="btn sub sm" id="btnInvOpen">すべて開く</button>
       <button class="btn sub sm" id="btnInvClose">すべて閉じる</button>
     </div>
-    <p class="hint">💡 <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
+    <p class="hint">💡 <b>「その他請求書作成」</b>は、<b>業務委託費など、れんこんの販売以外</b>の請求書を手入力で作るボタンです。
+      番号は通常の請求書と<b>同じ採番の続き</b>です。<br>
+      <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
       対象は「納品済かつ未請求」の数量のみ（明細単位で判定）。取引先ごとの締め日設定（請求基準日＝納品日／出荷日）に基づき、請求基準日が対象期間に入るものだけを集計します。「請求書PDF発行」を押すとその取引先の請求書を表示します。</p>
   </div>
   <div class="card no-print" id="smpCard" style="display:none">
@@ -407,7 +410,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <b>ピンクの枠</b>が付いたセルが有償、付いていなければ無償です。<br>
       <b>届け先</b>は自由に書けます。まだ取引の無い相手でも構いません。
       発注書のセルにコメントがあれば「ヒント」に出ますが、<b>そのまま請求先として使わず</b>必ず確かめてください。<br>
-      <b>有償の行だけ</b>請求先と単価を入れて「請求書に足す」を押せます。まだ足していないものは、前の月のぶんも下に残します。</p>
+      <b>有償の行だけ</b>請求先と単価を入れて「請求書に足す」を押せます。まだ足していないものは、前の月のぶんも下に残します。<br>
+      発注書の <b>1 つのセルに無償と有償が混ざっている</b>ときは、品目の下の
+      <b>「分ける」</b>で内訳を作ってください（ピンクの枠はセル単位なので、発注書では分けられません）。</p>
     <div id="smpSum" class="note" style="margin-bottom:8px"></div>
     <div class="scroll" style="max-height:44vh"><table id="tSmp"><thead><tr>
       <th style="width:8%">出荷日</th><th style="width:6%">有償</th>
@@ -1770,13 +1775,28 @@ function invTotals(rows,ex){
 function extraRowsHtml(ex,hasF,withTanka){
   // withTanka: 'pre'=数量の前に単価を出す／true=数量の後ろ／false=単価なし
   var pre=(withTanka==='pre');
-  return (ex||[]).map(e=>'<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
-    +' <span class="badge ed">追加・税'+e.tax+'</span></td>'
-    +(pre?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
-    +'<td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
-    +(withTanka===true?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
-    +'<td class="num">¥'+yen(e.amount)+'</td>'+(hasF?'<td></td><td></td>':'')
-    +'<td class="num">¥'+yen(e.amount)+'</td></tr>').join("");
+  var cols=hasF?9:7;
+  // grp（まとまり）が付いている行は、販売先と同じように
+  //   【サンプル】の見出しと合計を出します。
+  var sum={};
+  (ex||[]).forEach(function(e){ var g=String(e.grp||""); if(g) sum[g]=(sum[g]||0)+(Number(e.amount)||0); });
+  var cur=null, out="";
+  (ex||[]).forEach(function(e){
+    var g=String(e.grp||"");
+    if(g!==cur){
+      cur=g;
+      if(g) out+='<tr class="grp"><td colspan="'+cols+'">【'+esc(g)+'】</td>'
+                +'<td class="num">¥'+yen(sum[g])+'</td></tr>';
+    }
+    out+='<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
+      +' <span class="badge ed">追加・税'+e.tax+'</span></td>'
+      +(pre?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
+      +'<td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
+      +(withTanka===true?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
+      +'<td class="num">¥'+yen(e.amount)+'</td>'+(hasF?'<td></td><td></td>':'')
+      +'<td class="num">¥'+yen(e.amount)+'</td></tr>';
+  });
+  return out;
 }
 // 請求書（未発行分）の修正
 function openInvEditor(k){
@@ -1806,8 +1826,9 @@ function openInvEditor(k){
       +'<td class="num" data-amt></td></tr>').join("")
     +'</tbody></table></div>'
     +'<h4 style="margin:14px 0 6px;font-size:13px">追加する行（値引き・調整など）</h4>'
-    +'<table id="iv_ex"><thead><tr><th style="width:34%">品名</th><th class="num" style="width:9%">数量</th>'
-    +'<th style="width:9%">単位</th><th class="num" style="width:12%">単価</th><th style="width:9%">税率</th>'
+    +'<table id="iv_ex"><thead><tr><th style="width:26%">品名</th><th class="num" style="width:8%">数量</th>'
+    +'<th style="width:8%">単位</th><th class="num" style="width:11%">単価</th><th style="width:8%">税率</th>'
+    +'<th style="width:10%">まとまり<br><span style="font-weight:400;font-size:10px;opacity:.85">見出しを付ける</span></th>'
     +'<th class="num">金額</th><th style="width:6%"></th></tr></thead><tbody></tbody></table>'
     +'<button class="btn sm sub" id="iv_exadd" style="margin-top:6px">＋ 行を追加</button>'
     +'<label style="display:block;margin-top:12px;font-size:12px">備考（請求書の下に出ます）'
@@ -1837,6 +1858,10 @@ function openInvEditor(k){
       +'<td><input class="n" data-e="'+i+'" data-f="tanka" inputmode="decimal" value="'+esc(e.tanka==null?"":e.tanka)+'"></td>'
       +'<td><select data-e="'+i+'" data-f="tax"><option'+(e.tax==="10%"?"":" selected")+'>8%</option>'
       +'<option'+(e.tax==="10%"?" selected":"")+'>10%</option></select></td>'
+      +'<td><select data-e="'+i+'" data-f="grp">'
+      +['','サンプル','業務委託費','その他']
+        .map(g=>'<option value="'+esc(g)+'"'+(String(e.grp||"")===g?" selected":"")+'>'
+          +(g?esc(g):'（なし）')+'</option>').join("")+'</select></td>'
       +'<td class="num" data-amt></td><td><button class="del" data-exdel="'+i+'">削除</button></td></tr>').join("");
     tb.querySelectorAll("[data-e]").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
       ex[+el.dataset.e][el.dataset.f]=el.value; recalc(); }));
@@ -1868,7 +1893,12 @@ function openInvEditor(k){
       if(!nm&&tk==null) return;
       if(!nm){ bad.push("追加行"+(i+1)+" の品名が空"); return; }
       if(Number.isNaN(q)||Number.isNaN(tk)||tk==null){ bad.push("追加行"+(i+1)+" の数量・単価"); return; }
-      exOut.push({tekiyo:nm, qty:q==null?1:q, unit:String(e.unit||"式").trim()||"式", tanka:tk, tax:e.tax==="10%"?"10%":"8%"});
+      // smp（どのサンプルか）と grp（まとまり）を落とさない。
+      //   落とすと、サンプルの「取消」がこの行を見つけられなくなる。
+      var eo={tekiyo:nm, qty:q==null?1:q, unit:String(e.unit||"式").trim()||"式", tanka:tk, tax:e.tax==="10%"?"10%":"8%"};
+      if(e.smp) eo.smp=e.smp;
+      if(String(e.grp||"").trim()) eo.grp=String(e.grp).trim();
+      exOut.push(eo);
     });
     if(bad.length){ alert("次の入力を確認してください。\n\n・"+bad.join("\n・")); return; }
     // 2回目：書き込み
@@ -1882,7 +1912,10 @@ function openInvEditor(k){
     if(sj&&sj!==defSub) nh.subject=sj;
     if(mo) nh.memo=mo;
     if(Object.keys(nh).length) OPS.head[key]=nh; else delete OPS.head[key];
-    if(exOut.length) OPS.extra[key]=exOut; else delete OPS.extra[key];
+    // 見出しがばらばらにならないよう、まとまりごとに集めておく（順番は変えない）
+    const exSorted=exOut.filter(e=>!e.grp)
+      .concat(exOut.filter(e=>e.grp).sort((a,b)=>String(a.grp).localeCompare(String(b.grp),"ja")));
+    if(exSorted.length) OPS.extra[key]=exSorted; else delete OPS.extra[key];
     saveOps(); closeModal(); build();
     logOp("請求書を修正",(p?p.name:k)+"／"+y+"年"+m+"月分");
     dlMsg((p?p.name:k)+" の請求書（"+y+"年"+m+"月分）を修正しました","ok");
@@ -2151,6 +2184,30 @@ function smpHan(v){
     .replace(/[,\uFF0C\uFFE5\u00A5\s]/g,"");
 }
 function smpTanka(s){ return numOr(smpHan(s.tanka),null); }
+// 発注書の 1 つのセルに、無償と有償が混ざって入っていることがある。
+//   （例：7kg のうち 2kg が天一へ無償、5kg が東海澱粉へ有償）
+//   ピンクの枠はセル単位なので、発注書では分けられない。アプリ側で内訳（parts）を持つ。
+//   発注書が原本なので、内訳の合計が発注書の kg と合うことを常に見ておく。
+function smpHasParts(s){ return !!(s&&s.parts&&s.parts.length); }
+function smpPartSum(s){ return (s.parts||[]).reduce((a,p)=>a+numOr(p.kg,0),0); }
+function smpKeyOf(s,i){ return i>=0 ? s.id+"#"+i : s.id; }
+function smpFind(key){
+  const k=String(key||""), h=k.indexOf("#");
+  const id=h<0?k:k.slice(0,h), ix=h<0?-1:Number(k.slice(h+1));
+  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s) return null;
+  if(ix<0) return {s:s, i:-1, u:s};
+  const p=(s.parts||[])[ix]; if(!p) return null;
+  return {s:s, i:ix, u:p};
+}
+// 画面に並べる行（分けていれば内訳の行、分けていなければそのまま 1 行）
+function smpViewRows(list){
+  const out=[];
+  (list||[]).forEach(s=>{
+    if(smpHasParts(s)) s.parts.forEach((p,i)=>out.push({s:s,u:p,i:i,first:i===0}));
+    else out.push({s:s,u:s,i:-1,first:true});
+  });
+  return out;
+}
 function smpAmount(s){ return Math.round((numOr(s.kg,0))*(smpTanka(s)||0)); }
 // paid が無い行は、2026/10/10 より前に取り込んだもの（当時は有償だけ）なので有償扱い。
 function smpPaid(s){ return s.paid==null ? true : !!Number(s.paid); }
@@ -2176,7 +2233,9 @@ async function smpRepull(){
       const i=OPS.samples.findIndex(x=>x.id===r.id);
       if(r._del){ if(i>=0){ OPS.samples.splice(i,1); upd++; } return; }
       const rec=Object.assign({},r); delete rec.u;
-      if(i>=0){ OPS.samples[i]=rec; upd++; } else { OPS.samples.push(rec); add++; }
+      // アプリで分けた内訳は、受け取り直しても消さない
+      if(i>=0){ if(!rec.parts&&OPS.samples[i].parts) rec.parts=OPS.samples[i].parts;
+                OPS.samples[i]=rec; upd++; } else { OPS.samples.push(rec); add++; }
     });
     saveOps();
     try{ SNAP=syncSnapshot(); saveSnap(); }catch(e){}
@@ -2189,6 +2248,79 @@ async function smpRepull(){
   }finally{
     if(btn){ btn.disabled=false; btn.textContent="サンプルだけ取り直す"; }
   }
+}
+// 分ける画面
+function smpSplit(id){
+  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s) return;
+  const kg=numOr(s.kg,0);
+  const keys=partnerKeys();
+  let ps=smpHasParts(s)
+    ? s.parts.map(p=>Object.assign({},p))
+    : [{kg:kg, paid:smpPaid(s)?1:0, dest:s.dest||"", bill:s.bill||"", tanka:s.tanka==null?"":s.tanka, done:s.done||null}];
+  const locked=ps.some(p=>p.done);
+  let h='<h3>このセルを分ける<span style="font-size:13px;color:#666">'
+    +esc(s.date)+'　'+esc(s.size||"")+'　発注書の数量 '+dec1(kg)+' kg</span></h3>'
+    +'<div class="note or">発注書の 1 つのセルに、<b>無償と有償が混ざって入っている</b>ときに使います。<br>'
+    +'ピンクの枠はセル単位なので、発注書では分けられません。<b>合計を発注書の '+dec1(kg)+' kg に合わせてください。</b></div>'
+    +(s.hint?'<div class="note" style="font-size:11px">ヒント：'+esc(s.hint)+'</div>':'')
+    +(locked?'<div class="note red">請求書に足した行があるため、ここでは直せません。'
+      +'先にサンプルの一覧で「取消」を押してください。</div>':'')
+    +'<table id="sp_t"><thead><tr><th class="num" style="width:14%">kg</th><th style="width:14%">有償／無償</th>'
+    +'<th>届け先</th><th style="width:6%"></th></tr></thead><tbody></tbody></table>'
+    +'<button class="btn sm sub" id="sp_add" style="margin-top:6px">＋ 行を追加</button>'
+    +'<div class="foot"><span id="sp_sum" style="font-size:13px"></span><span class="sp"></span>'
+    +(smpHasParts(s)?'<button class="btn sub" id="sp_undo">1行に戻す</button>':'')
+    +'<button class="btn" id="sp_save">保存する</button>'
+    +'<button class="btn sub" id="sp_cancel">閉じる</button></div>';
+  const md=openModal(h);
+  const sum=()=>{
+    const t=ps.reduce((a,p)=>a+numOr(smpHan(p.kg),0),0);
+    const ok=Math.abs(t-kg)<0.001;
+    md.querySelector("#sp_sum").innerHTML='内訳の合計 <b>'+dec1(t)+' kg</b>　発注書 '+dec1(kg)+' kg'
+      +(ok?'　<span style="color:#2E7D32">合っています</span>'
+          :'　<span style="color:#C62828"><b>'+dec1(Math.abs(t-kg))+' kg 合いません</b></span>');
+    return ok;
+  };
+  const draw=()=>{
+    md.querySelector("#sp_t tbody").innerHTML=ps.map((p,i)=>
+      '<tr><td><input class="n" data-p="'+i+'" data-f="kg" inputmode="decimal" value="'+esc(p.kg==null?"":p.kg)+'"'+(p.done?" disabled":"")+'></td>'
+      +'<td><select data-p="'+i+'" data-f="paid"'+(p.done?" disabled":"")+'>'
+      +'<option value="0"'+(Number(p.paid)?"":" selected")+'>無償</option>'
+      +'<option value="1"'+(Number(p.paid)?" selected":"")+'>有償</option></select></td>'
+      +'<td><input data-p="'+i+'" data-f="dest" placeholder="例：東海澱粉株式会社 千葉営業所" value="'+esc(p.dest||"")+'"></td>'
+      +'<td>'+(p.done?'<span class="badge b-ok">計上済</span>'
+              :'<button class="del" data-pdel="'+i+'">削除</button>')+'</td></tr>').join("");
+    md.querySelectorAll("[data-p]").forEach(el=>{
+      el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
+        ps[+el.dataset.p][el.dataset.f]=el.value; sum(); });});
+    md.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{
+      ps.splice(+b.dataset.pdel,1); if(!ps.length) ps=[{kg:kg,paid:0,dest:"",bill:"",tanka:"",done:null}]; draw(); });
+    sum();
+  };
+  md.querySelector("#sp_add").onclick=()=>{ ps.push({kg:"",paid:1,dest:"",bill:"",tanka:"",done:null}); draw(); };
+  md.querySelector("#sp_cancel").onclick=closeModal;
+  const un=md.querySelector("#sp_undo");
+  if(un) un.onclick=()=>{
+    if(ps.some(p=>p.done)){ alert("請求書に足した行があるので、戻せません。先に「取消」を押してください。"); return; }
+    if(!confirm("内訳をやめて、1 行（発注書のとおり）に戻します。よろしいですか？")) return;
+    delete s.parts; saveOps(); closeModal(); drawSamples(); drawInvList();
+  };
+  md.querySelector("#sp_save").onclick=()=>{
+    if(locked){ alert("請求書に足した行があるため、保存できません。先に「取消」を押してください。"); return; }
+    const out=ps.map(p=>({kg:numOr(smpHan(p.kg),0), paid:Number(p.paid)?1:0,
+      dest:String(p.dest||"").trim(), bill:p.bill||"", tanka:p.tanka==null?"":p.tanka, done:p.done||null}))
+      .filter(p=>p.kg>0);
+    if(!out.length){ alert("kg を 1 行以上入れてください。"); return; }
+    const t=out.reduce((a,p)=>a+p.kg,0);
+    if(Math.abs(t-kg)>=0.001
+       &&!confirm("内訳の合計（"+dec1(t)+" kg）が発注書（"+dec1(kg)+" kg）と合いません。\n\n"
+         +"このまま保存しますか？（一覧に「要確認」と出ます）")) return;
+    if(out.length===1&&!out[0].dest&&String(out[0].paid)===String(smpPaid(s)?1:0)) delete s.parts;
+    else s.parts=out;
+    saveOps(); closeModal(); drawSamples(); drawInvList();
+    logOp("サンプルの内訳を保存",s.date+" "+(s.size||"")+"　"+out.length+"行");
+  };
+  draw();
 }
 function drawSamples(){
   const card=document.getElementById("smpCard"); if(!card) return;
@@ -2226,16 +2358,18 @@ function drawSamples(){
     const tb0=document.querySelector("#tSmp tbody"); if(tb0) tb0.innerHTML="";
     return;
   }
-  const yet=list.filter(s=>smpPaid(s)&&!s.done).length;
-  const nPaid=list.filter(smpPaid).length;
-  document.getElementById("smpCnt").textContent="("+list.length+"件　有償 "+nPaid+"・無償 "+(list.length-nPaid)+"件"
-    +(yet?"／請求未処理 "+yet+"件":"")+")";
+  const vr=smpViewRows(list);
+  const yet=vr.filter(v=>smpPaid(v.u)&&!v.u.done).length;
+  const nPaid=vr.filter(v=>smpPaid(v.u)).length;
+  const bad=list.filter(s=>smpHasParts(s)&&Math.abs(smpPartSum(s)-numOr(s.kg,0))>=0.001).length;
+  document.getElementById("smpCnt").textContent="("+vr.length+"件　有償 "+nPaid+"・無償 "+(vr.length-nPaid)+"件"
+    +(yet?"／請求未処理 "+yet+"件":"")+(bad?"／要確認 "+bad+"件":"")+")";
   // 品目ごとの合計（シーズン終わりの振り返り用）
   (function(){
     const g={};
-    list.forEach(s=>{const k=(s.size||"（品目なし）");
+    vr.forEach(v=>{const k=(v.s.size||"（品目なし）");
       if(!g[k])g[k]={p:0,f:0};
-      g[k][smpPaid(s)?"p":"f"]+=numOr(s.kg,0);});
+      g[k][smpPaid(v.u)?"p":"f"]+=numOr(v.u.kg,0);});
     const ks=Object.keys(g).sort((a,b)=>a.localeCompare(b,"ja"));
     const tp=ks.reduce((a,k)=>a+g[k].p,0), tf=ks.reduce((a,k)=>a+g[k].f,0);
     document.getElementById("smpSum").innerHTML="<b>この月のサンプル</b>　有償 "
@@ -2244,51 +2378,71 @@ function drawSamples(){
   })();
   const keys=partnerKeys();
   const tb=document.querySelector("#tSmp tbody"); tb.innerHTML="";
-  list.forEach(s=>{
+  vr.forEach(v=>{
+    const s=v.s, u=v.u, key=smpKeyOf(s,v.i);
     const tr=document.createElement("tr");
-    const done=!!s.done, paid=smpPaid(s);
+    const done=!!u.done, paid=smpPaid(u);
     const lock=done||!paid;
-    const sel='<select class="cell" data-smp="'+esc(s.id)+'" data-f="bill"'+(lock?" disabled":"")+'>'
+    const sel='<select class="cell" data-smp="'+esc(key)+'" data-f="bill"'+(lock?" disabled":"")+'>'
       +'<option value="">（選んでください）</option>'
-      +keys.map(k=>'<option value="'+esc(k)+'"'+(String(s.bill||"")===k?" selected":"")+'>'+esc(k)+'</option>').join("")
+      +keys.map(k=>'<option value="'+esc(k)+'"'+(String(u.bill||"")===k?" selected":"")+'>'+esc(k)+'</option>').join("")
       +'</select>';
-    tr.innerHTML='<td>'+esc(s.date)+'</td>'
-      +'<td>'+(paid?'<span class="badge b-wait">有償</span>':'<span class="badge" style="background:#ECEFF1;color:#546E7A">無償</span>')+'</td>'
-      +'<td>'+esc(s.size||"")+'</td>'
-      +'<td class="num">'+dec1(numOr(s.kg,0))+'</td>'
-      +'<td><input class="cell" data-smp="'+esc(s.id)+'" data-f="dest" placeholder="例：○○商事 札幌店" value="'+esc(s.dest||"")+'"></td>'
+    // 内訳に分けているときは、発注書の合計と合っているかを常に見ておく
+    const sumNg=smpHasParts(s)&&Math.abs(smpPartSum(s)-numOr(s.kg,0))>=0.001;
+    // ヒントに「有償」と書いてあるのに無償だと、混ざったセルのことが多い
+    const mixed=!smpHasParts(s)&&!paid&&String(s.hint||"").indexOf("有償")>=0;
+    tr.innerHTML='<td>'+(v.first?esc(s.date):'<span style="color:#bbb">〃</span>')+'</td>'
+      +'<td>'+(paid?'<span class="badge b-wait">有償</span>':'<span class="badge" style="background:#ECEFF1;color:#546E7A">無償</span>')
+      +(mixed?'<br><span class="badge b-ng" style="font-size:9px">要確認</span>':'')+'</td>'
+      +'<td>'+(v.first?esc(s.size||""):'')
+      +(v.first?'<br><a href="#" data-smpsplit="'+esc(s.id)+'" style="font-size:10px">'
+        +(smpHasParts(s)?'内訳を直す':'分ける')+'</a>':'')+'</td>'
+      +'<td class="num">'+dec1(numOr(u.kg,0))
+      +(smpHasParts(s)&&v.first?'<br><span style="font-size:10px;color:'+(sumNg?'#C62828':'#888')+'">発注書 '+dec1(numOr(s.kg,0))+'</span>':'')+'</td>'
+      +'<td><input class="cell" data-smp="'+esc(key)+'" data-f="dest" placeholder="例：○○商事 札幌店" value="'+esc(u.dest||"")+'"></td>'
       +'<td>'+(paid?sel:'<span style="font-size:11px;color:#999">無償なので請求しません</span>')+'</td>'
-      +'<td class="num">'+(paid?'<input class="cell n" style="width:80px" data-smp="'+esc(s.id)+'" data-f="tanka" value="'
-        +(s.tanka==null||s.tanka===""?"":esc(String(s.tanka)))+'"'+(done?" disabled":"")+'>':'—')+'</td>'
-      +'<td class="num">'+(!paid||smpTanka(s)==null?"—":"¥"+yen(smpAmount(s)))+'</td>'
+      +'<td class="num">'+(paid?'<input class="cell n" style="width:80px" data-smp="'+esc(key)+'" data-f="tanka" value="'
+        +(u.tanka==null||u.tanka===""?"":esc(String(u.tanka)))+'"'+(done?" disabled":"")+'>':'—')+'</td>'
+      +'<td class="num">'+(!paid||smpTanka(u)==null?"—":"¥"+yen(smpAmount(u)))+'</td>'
       +'<td>'+(!paid?'':(done
-        ? '<span class="badge b-ok">'+esc(s.done.ym)+' に計上</span> <a href="#" data-smpundo="'+esc(s.id)+'" style="font-size:11px">取消</a>'
-        : '<button class="btn sm" data-smpadd="'+esc(s.id)+'">請求書に足す</button>'))+'</td>';
+        ? '<span class="badge b-ok">'+esc(u.done.ym)+' に計上</span> <a href="#" data-smpundo="'+esc(key)+'" style="font-size:11px">取消</a>'
+        : '<button class="btn sm" data-smpadd="'+esc(key)+'">請求書に足す</button>'))+'</td>';
     tb.appendChild(tr);
-    if(s.hint){
+    if(v.first&&sumNg){
+      const w=document.createElement("tr");
+      w.innerHTML='<td></td><td colspan="8" style="font-size:11px;color:#C62828;padding-top:0">'
+        +'内訳の合計 '+dec1(smpPartSum(s))+' kg が、発注書の '+dec1(numOr(s.kg,0))+' kg と合いません。'
+        +'「内訳を直す」で合わせてください。</td>';
+      tb.appendChild(w);
+    }
+    if(v.first&&s.hint){
       const h=document.createElement("tr");
-      h.innerHTML='<td></td><td colspan="8" style="font-size:11px;color:#666;padding-top:0">ヒント：'+esc(s.hint)+'</td>';
+      h.innerHTML='<td></td><td colspan="8" style="font-size:11px;color:#666;padding-top:0">ヒント：'+esc(s.hint)
+        +(mixed?'<br><b style="color:#C62828">ヒントに「有償」とあるのに、このセルにはピンクの枠がありません。'
+          +'1 つのセルに無償と有償が混ざっているかもしれません。「分ける」をお試しください。</b>':'')
+        +'</td>';
       tb.appendChild(h);
     }
   });
+  tb.querySelectorAll("[data-smpsplit]").forEach(a=>a.onclick=e=>{e.preventDefault();smpSplit(a.dataset.smpsplit);});
   // 打つたびに表を作り直すと、入力欄ごと作り直されて
   //   1文字しか書けなくなる（とくに日本語入力で変換中に消える）。
   //   そこで、打っている間は<b>金額のところだけ</b>を書き換える。
   tb.querySelectorAll("[data-smp]").forEach(el=>{
     const redraw=()=>{
-      const s=(OPS.samples||[]).find(x=>x.id===el.dataset.smp); if(!s) return;
-      s[el.dataset.f]=el.value; saveOps();
+      const f=smpFind(el.dataset.smp); if(!f) return;
+      f.u[el.dataset.f]=el.value; saveOps();
       const tr=el.closest("tr"); if(!tr) return;
       const td=tr.children[7];
-      if(td) td.textContent=(!smpPaid(s)||smpTanka(s)==null)?"—":"¥"+yen(smpAmount(s));
+      if(td) td.textContent=(!smpPaid(f.u)||smpTanka(f.u)==null)?"—":"¥"+yen(smpAmount(f.u));
     };
     if(el.tagName==="SELECT"){ el.onchange=redraw; }
     else {
       el.oninput=redraw;
       // 打ち終わって欄を離れたときだけ、全角を半角に直して見た目を整える
       el.onchange=()=>{
-        const s=(OPS.samples||[]).find(x=>x.id===el.dataset.smp); if(!s) return;
-        if(el.dataset.f==="tanka"){ const h=smpHan(el.value); if(h!==el.value){ el.value=h; s.tanka=h; saveOps(); } }
+        const f=smpFind(el.dataset.smp); if(!f) return;
+        if(el.dataset.f==="tanka"){ const h=smpHan(el.value); if(h!==el.value){ el.value=h; f.u.tanka=h; saveOps(); } }
         redraw();
       };
     }
@@ -2296,38 +2450,41 @@ function drawSamples(){
   tb.querySelectorAll("[data-smpadd]").forEach(b=>b.onclick=()=>smpAdd(b.dataset.smpadd));
   tb.querySelectorAll("[data-smpundo]").forEach(a=>a.onclick=e=>{e.preventDefault();smpUndo(a.dataset.smpundo);});
 }
-function smpAdd(id){
-  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s) return;
-  if(!smpPaid(s)){ alert("この行は無償サンプルなので、請求書には足せません。\n\n"
-    +"有償にするときは、発注書のそのセルにピンクの枠を付けてから、"
+function smpAdd(key0){
+  const f=smpFind(key0); if(!f) return;
+  const s=f.s, u=f.u;
+  if(!smpPaid(u)){ alert("この行は無償サンプルなので、請求書には足せません。\n\n"
+    +"1 つのセルに無償と有償が混ざっているときは「分ける」を使ってください。\n"
+    +"セル丸ごと有償にするときは、発注書のそのセルにピンクの枠を付けてから、"
     +"GASの pullYuusho を実行してください。"); return; }
   const miss=[];
-  if(!String(s.bill||"").trim()) miss.push("・請求先を選んでください");
-  if(smpTanka(s)==null||smpTanka(s)<=0) miss.push("・単価（円/kg）を入れてください");
+  if(!String(u.bill||"").trim()) miss.push("・請求先を選んでください");
+  if(smpTanka(u)==null||smpTanka(u)<=0) miss.push("・単価（円/kg）を入れてください");
   if(miss.length){ alert("請求書に足せません。\n\n"+miss.join("\n")); return; }
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   if(!y){ alert("対象月を選んでください。"); return; }
-  const key=docKey("inv",s.bill,y,m);
-  const line={tekiyo:"有償サンプル "+s.date+"　"+(s.size||""),
-    qty:numOr(s.kg,0), unit:"kg", tanka:smpTanka(s)||0, tax:"8%", smp:s.id};
+  const key=docKey("inv",u.bill,y,m);
+  const line={tekiyo:"有償サンプル "+s.date+"　"+(s.size||"")+(u.dest?"　"+u.dest:""),
+    qty:numOr(u.kg,0), unit:"kg", tanka:smpTanka(u)||0, tax:"8%", smp:smpKeyOf(s,f.i), grp:"サンプル"};
   if(!OPS.extra[key]) OPS.extra[key]=[];
   OPS.extra[key].push(line);
-  s.done={ym:y+"-"+p2(m), bill:s.bill, at:nowStr()};
+  u.done={ym:y+"-"+p2(m), bill:u.bill, at:nowStr()};
   saveOps(); logOp("有償サンプルを請求書に足しました",
-    s.date+" "+(s.size||"")+" "+s.kg+"kg × "+(smpTanka(s)||0)+"円 → "+s.bill+"（"+y+"年"+m+"月分）");
+    s.date+" "+(s.size||"")+" "+u.kg+"kg × "+(smpTanka(u)||0)+"円 → "+u.bill+"（"+y+"年"+m+"月分）");
   drawSamples(); drawInvList();
-  alert(s.bill+" の "+y+"年"+m+"月分の請求書に、追加行として足しました。");
+  alert(u.bill+" の "+y+"年"+m+"月分の請求書に、追加行として足しました。");
 }
-function smpUndo(id){
-  const s=(OPS.samples||[]).find(x=>x.id===id); if(!s||!s.done) return;
-  const [yy,mm]=String(s.done.ym).split("-").map(Number);
-  const key=docKey("inv",s.done.bill,yy,mm);
+function smpUndo(key0){
+  const f=smpFind(key0); if(!f||!f.u.done) return;
+  const s=f.s, u=f.u;
+  const [yy,mm]=String(u.done.ym).split("-").map(Number);
+  const key=docKey("inv",u.done.bill,yy,mm);
   const list=OPS.extra[key]||[];
-  const i=list.findIndex(e=>e.smp===s.id);
+  const i=list.findIndex(e=>e.smp===smpKeyOf(s,f.i));
   if(i<0){
     if(!confirm("請求書の追加行が見つかりませんでした。\n（すでに発行済みの請求書に入っている可能性があります）\n\nこの行の「計上済み」の印だけを外しますか？")) return;
   } else { list.splice(i,1); if(!list.length) delete OPS.extra[key]; }
-  s.done=null; saveOps(); logOp("有償サンプルの計上を取り消しました",s.date+" "+(s.size||""));
+  u.done=null; saveOps(); logOp("有償サンプルの計上を取り消しました",s.date+" "+(s.size||""));
   drawSamples(); drawInvList();
 }
 let INVOPEN={};            // 開いている請求先（画面を開き直すと全部閉じた状態に戻ります）
@@ -3040,6 +3197,7 @@ document.getElementById("btnToBuyAgg").onclick=()=>goTo("buyAgg");
 document.getElementById("btnToMap").onclick=()=>goTo("mapCard");
 document.getElementById("btnToItemName").onclick=()=>goTo("itemNameCard");
 document.getElementById("txYm").onchange=drawTx;
+document.getElementById("btnOtherInv").onclick=()=>openOtherInvoice(null);
 document.getElementById("btnInvOpen").onclick=()=>invFoldAll(true);
 document.getElementById("btnInvClose").onclick=()=>invFoldAll(false);
 document.getElementById("btnNobill").onclick=()=>{
@@ -3385,7 +3543,10 @@ function buildInvoiceHtml(inv){
   const rows=inv.lines.map(l=>{
     let head="";
     const sl=String(l.sell||"");
-    if(sells.length>1&&sl&&sl!==last){ head='<tr><td colspan="6" class="grp">'+esc2(sl)+'　様</td></tr>'; last=sl; }
+    // 【サンプル】のようなまとまりの見出しには「様」を付けません。
+    if(sells.length>1&&sl&&sl!==last){
+      head='<tr><td colspan="6" class="grp">'+esc2(sl)+(sl.charAt(0)==="【"?"":"　様")+'</td></tr>'; last=sl;
+    }
     return head+'<tr><td>'+esc2(l.date||"")+'</td><td>'+esc2(l.tekiyo)+'</td>'
     +'<td class="n">'+yen(l.tanka)+'</td>'
     +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.amount)+'</td></tr>';
@@ -3451,6 +3612,150 @@ function freeeNotReady(what){
   }
 }
 // 請求書の番号
+// ===== その他の請求書（業務委託費など、れんこんの販売以外） =====
+//   取引の明細からではなく、手で書いた行だけで1枚作ります。
+//   番号は通常の請求書と同じ採番の続き。発行したら書き換えません（取消して作り直す）。
+function otherInvLines(d){
+  return (d.lines||[]).map(function(l){
+    var q=numOr(smpHan(l.qty),1), tk=numOr(smpHan(l.tanka),0);
+    return {tekiyo:String(l.tekiyo||"").trim(), qty:q, unit:String(l.unit||"式").trim()||"式",
+            tanka:tk, tax:(l.tax==="8%"?"8%":"10%"), amount:Math.round(q*tk)};
+  });
+}
+function openOtherInvoice(src){
+  if(!CFG.partners.length){ alert("先に取引先マスタに請求先を登録してください。"); return; }
+  const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
+  if(!y){ alert("対象月を選んでください。"); return; }
+  const keys=partnerKeys();
+  const d=src?{customer:src.customer, subject:src.subject||"", memo:src.memo||"",
+               issueDate:src.issueDate||ymd(y,m,lastDayOf(y,m)),
+               lines:(src.otherLines||[]).map(l=>Object.assign({},l))}
+            :{customer:"", subject:y+"年"+m+"月分 ご請求（業務委託費）", memo:"",
+               issueDate:ymd(y,m,lastDayOf(y,m)),
+               lines:[{tekiyo:"業務委託費",qty:1,unit:"式",tanka:null,tax:"10%"}]};
+  if(!d.lines.length) d.lines=[{tekiyo:"",qty:1,unit:"式",tanka:null,tax:"10%"}];
+
+  let h='<h3>その他の請求書を作る'
+    +'<span style="font-size:13px;color:#666">'+y+'年'+m+'月分</span></h3>'
+    +'<div class="note or">れんこんの取引は入りません。<b>書いた行だけ</b>で 1 枚作ります。<br>'
+    +'対象月は請求タブで選んでいる月（<b>'+y+'年'+m+'月</b>）です。変えるときは一度閉じてから対象月を選び直してください。</div>'
+    +'<div class="flex" style="margin:10px 0 6px">'
+    +'<label>請求先：<select id="oi_cust"><option value="">（選んでください）</option>'
+    + keys.map(k=>'<option value="'+esc(k)+'"'+(d.customer===k?" selected":"")+'>'+esc(k)+'</option>').join("")
+    +'</select></label>'
+    +'<label>請求日：<input type="date" id="oi_date" value="'+esc(d.issueDate)+'"></label></div>'
+    +'<label style="display:block;font-size:12px">件名'
+    +'<input id="oi_sub" style="width:100%" value="'+esc(d.subject)+'"></label>'
+    +'<h4 style="margin:14px 0 6px;font-size:13px">明細</h4>'
+    +'<table id="oi_ln"><thead><tr><th style="width:38%">品名</th><th class="num" style="width:10%">数量</th>'
+    +'<th style="width:10%">単位</th><th class="num" style="width:14%">単価</th><th style="width:10%">税率</th>'
+    +'<th class="num">金額</th><th style="width:6%"></th></tr></thead><tbody></tbody></table>'
+    +'<button class="btn sm sub" id="oi_add" style="margin-top:6px">＋ 行を追加</button>'
+    +'<label style="display:block;margin-top:12px;font-size:12px">備考（請求書の下に出ます）'
+    +'<textarea id="oi_memo" style="width:100%;min-height:54px">'+esc(d.memo)+'</textarea></label>'
+    +'<div class="foot"><span id="oi_tot" style="font-size:13px"></span><span class="sp"></span>'
+    +'<button class="btn" id="oi_issue">請求書を発行</button>'
+    +'<button class="btn sub" id="oi_cancel">閉じる</button></div>';
+  const md=openModal(h);
+  const recalc=()=>{
+    const tf=TF(), ls=otherInvLines(d);
+    let b8=0,b10=0;
+    md.querySelectorAll("#oi_ln tbody tr").forEach((tr,i)=>{
+      const a=ls[i]?ls[i].amount:0;
+      tr.querySelector("[data-amt]").textContent="¥"+yen(a);
+      if(ls[i]&&ls[i].tax==="8%") b8+=a; else b10+=a; });
+    const tot=b8+b10+Math.floor(b8*tf.food)+Math.floor(b10*tf.fre);
+    md.querySelector("#oi_tot").innerHTML='税抜 <b>¥'+yen(b8+b10)+'</b>　税込 <b style="font-size:16px">¥'+yen(tot)+'</b>';
+  };
+  const draw=()=>{
+    md.querySelector("#oi_ln tbody").innerHTML=d.lines.map((l,i)=>
+      '<tr><td><input data-l="'+i+'" data-f="tekiyo" value="'+esc(l.tekiyo||"")+'" placeholder="例：業務委託費（'+m+'月分）"></td>'
+      +'<td><input class="n" data-l="'+i+'" data-f="qty" inputmode="decimal" value="'+esc(l.qty==null?1:l.qty)+'"></td>'
+      +'<td><input data-l="'+i+'" data-f="unit" value="'+esc(l.unit||"式")+'"></td>'
+      +'<td><input class="n" data-l="'+i+'" data-f="tanka" inputmode="decimal" value="'+esc(l.tanka==null?"":l.tanka)+'"></td>'
+      +'<td><select data-l="'+i+'" data-f="tax"><option'+(l.tax==="8%"?" selected":"")+'>8%</option>'
+      +'<option'+(l.tax==="8%"?"":" selected")+'>10%</option></select></td>'
+      +'<td class="num" data-amt></td>'
+      +'<td><button class="del" data-ldel="'+i+'">削除</button></td></tr>').join("");
+    // 打つたびに表を作り直すと 1 文字しか書けなくなるので、金額だけ更新する
+    md.querySelectorAll("[data-l]").forEach(el=>{
+      el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
+        d.lines[+el.dataset.l][el.dataset.f]=el.value; recalc(); });});
+    md.querySelectorAll("[data-ldel]").forEach(b=>b.onclick=()=>{
+      d.lines.splice(+b.dataset.ldel,1);
+      if(!d.lines.length) d.lines=[{tekiyo:"",qty:1,unit:"式",tanka:null,tax:"10%"}];
+      draw(); });
+    recalc();
+  };
+  md.querySelector("#oi_add").onclick=()=>{ d.lines.push({tekiyo:"",qty:1,unit:"式",tanka:null,tax:"10%"}); draw(); };
+  md.querySelector("#oi_cancel").onclick=closeModal;
+  md.querySelector("#oi_issue").onclick=()=>{
+    d.customer=md.querySelector("#oi_cust").value;
+    d.subject=md.querySelector("#oi_sub").value.trim();
+    d.memo=md.querySelector("#oi_memo").value.trim();
+    d.issueDate=md.querySelector("#oi_date").value;
+    const bad=[];
+    if(!d.customer) bad.push("・請求先を選んでください");
+    if(!d.issueDate) bad.push("・請求日を入れてください");
+    const ls=otherInvLines(d).filter(l=>l.tekiyo||l.tanka);
+    if(!ls.length) bad.push("・明細を 1 行以上入れてください");
+    ls.forEach((l,i)=>{
+      if(!l.tekiyo) bad.push("・"+(i+1)+" 行目の品名が空です");
+      if(!(l.tanka>0)) bad.push("・"+(i+1)+" 行目の単価を入れてください"); });
+    if(bad.length){ alert("次の入力を確かめてください。\n\n"+bad.join("\n")); return; }
+    const p=partnerOf(d.customer);
+    if(!confirm((p?p.name:d.customer)+"　御中\n"
+      +y+"年"+m+"月分　"+ls.length+"行\n\nこの内容で請求書を発行します。\n"
+      +"発行した請求書は書き換えられません（直すときは取消して作り直します）。")) return;
+    closeModal();
+    issueOtherInvoice(d,y,m,ls);
+  };
+  draw();
+}
+async function issueOtherInvoice(d,y,m,ls){
+  if(syncOn()){
+    try{ await syncApi("ping",{}); }
+    catch(e){ alert("共有データベースにつながりません。発行を中止しました。\n\n"+e.message); return; }
+  }
+  const p=partnerOf(d.customer), tf=TF();
+  const b8=ls.filter(l=>l.tax==="8%").reduce((a,l)=>a+l.amount,0);
+  const b10=ls.filter(l=>l.tax!=="8%").reduce((a,l)=>a+l.amount,0);
+  const taxF=Math.floor(b8*tf.food), taxS=Math.floor(b10*tf.fre);
+  const total=b8+b10+taxF+taxS;
+  let invNo=nextInvoiceNo(y,m);
+  if(syncOn()){
+    try{ invNo=(await syncApi("issueNo",{kind:"INV",ym:y+"-"+p2(m)})).no; }
+    catch(e){ alert("番号をもらえなかったため、発行を中止しました。\n\n"+e.message); return; }
+  }
+  const inv={ id:"iv"+Date.now(), docKind:"other", invoiceNo:invNo, customer:d.customer,
+    partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:d.customer},
+    subject:d.subject||(y+"年"+m+"月分 ご請求"), boardName:"",
+    targetMonth:y+"-"+p2(m), issueDate:d.issueDate, dueDate:calcDueDate(p,d.issueDate),
+    basisLabel:"その他のご請求（手入力）",
+    lines:ls.map(l=>({txNo:"", date:"", sell:"", tekiyo:l.tekiyo+(l.tax==="8%"?" ※":""),
+                      qty:l.qty, unit:l.unit, tanka:l.tanka, amount:l.amount, kind:"other", tax:l.tax})),
+    shohin:b8, soryo:b10, taxF:taxF, taxS:taxS, total:total,
+    memo:d.memo||"", originalInvoiceNo:"",
+    otherLines:ls.map(l=>({tekiyo:l.tekiyo,qty:l.qty,unit:l.unit,tanka:l.tanka,tax:l.tax})),
+    issuedAt:nowStr(), issuedBy:CFG.userName||"", status:"issued", pdfUrl:"", pdfName:"" };
+  dlMsg("請求書PDFを作成しています…","wait");
+  let res;
+  try{
+    const fname=(p?p.name:d.customer)+"_"+inv.targetMonth+"_"+inv.invoiceNo;
+    res=await gasSavePdf("inv", fname, inv.targetMonth, buildInvoiceHtml(inv));
+  }catch(e){
+    dlMsg("PDFを保存できませんでした："+e.message+"（発行していません）","ng");
+    alert("PDFを保存できなかったため、発行を中止しました。\n\n"+e.message); return;
+  }
+  inv.pdfUrl=res.url||""; inv.pdfName=res.name||"";
+  OPS.invoices.push(inv);
+  saveOps(); build(); drawIssuedInvoices();
+  const c=document.getElementById("issuedCard");
+  if(c) c.scrollIntoView({behavior:"smooth", block:"start"});
+  logOp("その他の請求書を発行",
+    inv.invoiceNo+"／"+((inv.partner&&inv.partner.name)||inv.customer)+"／"+inv.targetMonth+"分／税込 ¥"+yen(inv.total));
+  dlMsg("その他の請求書を発行しました："+inv.invoiceNo+"（ドライブに保存済み）","ok");
+}
 function nextInvoiceNo(y,m){
   const pre="INV-"+y+p2(m)+"-";
   let n=0;
@@ -3485,7 +3790,8 @@ async function issueInvoice(custKey){
   });
   // 追加行・件名・備考も、発行の直前に読み直す
   const ekey=docKey("inv",custKey,y,m), ex=invExtras(custKey,y,m), hd=OPS.head[ekey]||{};
-  ex.forEach(e=>lines.push({txNo:"", date:"", tekiyo:e.tekiyo+(e.tax==="10%"?"":" ※"),
+  ex.forEach(e=>lines.push({txNo:"", date:"", sell:e.grp?"【"+e.grp+"】":"",
+    tekiyo:e.tekiyo+(e.tax==="10%"?"":" ※"),
     qty:e.qty, unit:e.unit, tanka:e.tanka, amount:e.amount, kind:"extra", tax:e.tax}));
   const tt=invTotals(rows,ex);
   const shohin=tt.shohin, soryo=tt.soryo, taxF=tt.taxF, taxS=tt.taxS, total=tt.total;
@@ -3520,7 +3826,8 @@ async function issueInvoice(custKey){
     basisLabel:kijunLabel(r)+"／"+r.shime+"締め",
     lines:lines, shohin:shohin, soryo:soryo, taxF:taxF, taxS:taxS, total:total,
     memo:hd.memo||"", originalInvoiceNo:hd.fromNo||"",
-    extraLines:ex.map(e=>({tekiyo:e.tekiyo,qty:e.qty,unit:e.unit,tanka:e.tanka,tax:e.tax})),
+    extraLines:ex.map(e=>({tekiyo:e.tekiyo,qty:e.qty,unit:e.unit,tanka:e.tanka,tax:e.tax,
+                           grp:e.grp||"", smp:e.smp||""})),
     headSaved:{subject:hd.subject||"", memo:hd.memo||""},
     issuedAt:nowStr(), issuedBy:CFG.userName||"", status:"issued", pdfUrl:"", pdfName:"" };
 
@@ -3747,7 +4054,9 @@ function drawIssuedInvoices(){
       :'<span class="badge b-ok">発行済</span>';
     tr.innerHTML='<td style="font-family:Consolas,monospace">'+esc(i.invoiceNo)
       +(i.originalInvoiceNo?'<br><span style="font-size:10px;color:#888;font-family:inherit">'+esc(i.originalInvoiceNo)+' の出し直し</span>':'')+'</td>'
-      +'<td>'+esc((i.partner&&i.partner.name)||i.customer)+'</td><td>'+esc(i.targetMonth)+'</td>'
+      +'<td>'+esc((i.partner&&i.partner.name)||i.customer)
+      +(i.docKind==="other"?' <span class="badge ed">その他</span>':'')
+      +'</td><td>'+esc(i.targetMonth)+'</td>'
       +'<td>'+esc(i.issueDate)+'</td><td>'+esc(i.dueDate)+'</td>'
       +'<td class="num">¥'+yen(i.total)+'</td><td>'+esc(i.issuedBy||"—")+'</td>'
       +'<td>'+(i.pdfUrl?'<a href="'+esc(i.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
@@ -3763,6 +4072,7 @@ function drawIssuedInvoices(){
     if(!cancelInvoice(inv.id)) return;
     const [yy,mm]=inv.targetMonth.split("-").map(Number);
     document.getElementById("invYm").value=yy+"/"+mm; drawInvList();
+    if(inv.docKind==="other"){ openOtherInvoice(inv); return; }
     openInvEditor(inv.customer);
   });
 }
@@ -3776,6 +4086,15 @@ function cancelInvoice(id){
   inv.status="cancelled"; inv.cancelledAt=nowStr(); inv.cancelReason=reason;
   inv.cancelledBy=CFG.userName||"";
   Object.keys(OPS.invLines).forEach(k=>{ if(OPS.invLines[k]===id) delete OPS.invLines[k]; });
+  // その他の請求書は、れんこんの請求書とは別物です。
+  //   追加行を戻すと、れんこんの請求書に混ざってしまうので戻しません。
+  if(inv.docKind==="other"){
+    if(syncOn()) syncApi("release",{kind:"inv",docId:id}).catch(()=>{});
+    logOp("その他の請求書を取消",inv.invoiceNo+(reason?"／理由："+reason:""));
+    saveOps(); build(); drawIssuedInvoices();
+    dlMsg("請求書 "+inv.invoiceNo+" を取り消しました","wait");
+    return true;
+  }
   // 追加行・件名・備考を未発行側へ戻す（出し直しで同じ内容から直せるように）
   const ek="inv|"+inv.customer+"|"+inv.targetMonth;
   if((inv.extraLines||[]).length&&!(OPS.extra[ek]||[]).length) OPS.extra[ek]=inv.extraLines.map(e=>Object.assign({},e));
