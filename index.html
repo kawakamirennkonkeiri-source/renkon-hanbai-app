@@ -399,6 +399,10 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button class="btn sub sm" id="btnInvOpen">すべて開く</button>
       <button class="btn sub sm" id="btnInvClose">すべて閉じる</button>
     </div>
+    <p class="hint">⚠️ <b>「同じ名前で 2 枚に分かれています」</b>と出たときは、
+      <b>対応表の「請求先」（空なら「取引先」）が 2 通りになっています</b>。
+      バッジに出ている<b>行先</b>を対応表で探して、呼び名をどちらかに揃えてください（半角・全角も別物です）。
+      直すとすぐに 1 枚にまとまります。<b>発行済みの請求書は変わりません。</b></p>
     <p class="hint">💡 <b>「その他請求書作成」</b>は、<b>業務委託費など、れんこんの販売以外</b>の請求書を手入力で作るボタンです。
       番号は通常の請求書と<b>同じ採番の続き</b>です。<br>
       <b>「✎ この請求書を修正」</b>で、明細の数量・単価・品名・送料、値引きなどの追加行、件名・備考を直せます。<b>発行済みの請求書は書き換えません</b>。直すときは下の一覧の「取消して修正」→ もう一度発行（新しい番号になります）。<br>
@@ -1219,13 +1223,22 @@ function applyRemote(data){
     if(i>=0) Object.assign(list[i],rec); else list.push(rec); }); };
   arr("partners",CFG.partners); arr("price",CFG.price); arr("freight",CFG.freight);
   arr("map",CFG.map); arr("shime",CFG.shime);
-  const docs=(e,list)=>{ (data[e]||[]).forEach(r=>{ n++;
+  // keep ＝ 共有DB側が空なら、このPCの値を残す項目。
+  //   サンプルの届け先・請求先・単価・計上の印・内訳は、このPCでしか入れられない。
+  //   消すと「計上済」の印が外れ、もう一度足して二重になる。
+  const docs=(e,list,keep)=>{ (data[e]||[]).forEach(r=>{ n++;
     const i=list.findIndex(x=>x.id===r.id);
     if(r._del){ if(i>=0) list.splice(i,1); return; }
     const rec=Object.assign({},r); delete rec.u;
-    if(i>=0) list[i]=rec; else list.push(rec); }); };
+    if(i>=0){
+      if(keep){ const o=list[i]||{};
+        keep.forEach(fd=>{ const nv=rec[fd];
+          if(nv==null||nv===""||(Array.isArray(nv)&&!nv.length)){
+            if(o[fd]!=null&&o[fd]!=="") rec[fd]=o[fd]; } }); }
+      list[i]=rec;
+    } else list.push(rec); }); };
   docs("invoices",OPS.invoices); docs("buyDocs",OPS.buyDocs); docs("quotes",OPS.quotes);
-  docs("samples",OPS.samples);
+  docs("samples",OPS.samples,["dest","memo","bill","tanka","done","parts"]);
   const kv=(e,o)=>{ (data[e]||[]).forEach(r=>{ n++;
     if(r._del) delete o[r.id]; else o[r.id]=r.v; }); };
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
@@ -1758,10 +1771,13 @@ function bySanchi(a,b){
   return (da-db)||String(a.no||"").localeCompare(String(b.no||""));
 }
 function invExtras(k,y,m){
+  // grp（【サンプル】などの見出し）と smp（どのサンプルか）を落とさない。
+  //   落とすと見出しが出ず、発行した請求書の控えからも結びつきが消える。
   return (OPS.extra[docKey("inv",k,y,m)]||[]).map(e=>{
     const q=numOr(e.qty,1), tk=numOr(e.tanka,0);
     return {tekiyo:e.tekiyo||"", qty:q, unit:e.unit||"式", tanka:tk,
-      amount:Math.round(q*tk), tax:e.tax==="10%"?"10%":"8%"};
+      amount:Math.round(q*tk), tax:e.tax==="10%"?"10%":"8%",
+      grp:e.grp||"", smp:e.smp||""};
   });
 }
 // 税率ごとに小計してから消費税（切り捨て）
@@ -2199,6 +2215,45 @@ function smpFind(key){
   const p=(s.parts||[])[ix]; if(!p) return null;
   return {s:s, i:ix, u:p};
 }
+// 請求書の追加行のうち、サンプルの「計上済」の印と結びついていないもの（残骸）を探す。
+//   同じサンプルが 2 本入っているときも、1 本を正しいものとして残りを残骸にする。
+function smpUnits(s){
+  return smpHasParts(s) ? s.parts.map((p,i)=>({u:p,k:smpKeyOf(s,i)})) : [{u:s,k:s.id}];
+}
+function smpOrphans(){
+  const done={};
+  (OPS.samples||[]).forEach(s=>smpUnits(s).forEach(x=>{ if(x.u.done) done[x.k]=1; }));
+  const seen={}, out=[];
+  Object.keys(OPS.extra||{}).forEach(key=>{
+    (OPS.extra[key]||[]).forEach(e=>{
+      if(!e.smp) return;
+      const k=String(e.smp);
+      if(done[k]&&!seen[k]){ seen[k]=1; return; }      // 印と対になる正しい 1 本
+      out.push({key:key, smp:k, tekiyo:e.tekiyo||"", amount:Number(e.amount)||0});
+    });
+  });
+  return out;
+}
+function smpDropOrphans(){
+  const og=smpOrphans(); if(!og.length) return;
+  if(!confirm("請求書に残っているサンプルの行を "+og.length+" 本消します。\n\n"
+    +og.slice(0,8).map(o=>"・"+o.tekiyo).join("\n")+(og.length>8?"\n…ほか":"")
+    +"\n\n発行済みの請求書には触りません。よろしいですか？")) return;
+  const want={};
+  og.forEach(o=>{ if(!want[o.key]) want[o.key]=[]; want[o.key].push(o.smp); });
+  let n=0;
+  Object.keys(want).forEach(key=>{
+    const keep=[], drop=want[key].slice();
+    (OPS.extra[key]||[]).forEach(e=>{
+      const j=e.smp?drop.indexOf(String(e.smp)):-1;
+      if(j>=0){ drop.splice(j,1); n++; } else keep.push(e);
+    });
+    if(keep.length) OPS.extra[key]=keep; else delete OPS.extra[key];
+  });
+  saveOps(); logOp("請求書に残っていたサンプルの行を消しました",n+"本");
+  drawSamples(); drawInvList();
+  alert(n+" 本消しました。");
+}
 // 画面に並べる行（分けていれば内訳の行、分けていなければそのまま 1 行）
 function smpViewRows(list){
   const out=[];
@@ -2233,9 +2288,16 @@ async function smpRepull(){
       const i=OPS.samples.findIndex(x=>x.id===r.id);
       if(r._del){ if(i>=0){ OPS.samples.splice(i,1); upd++; } return; }
       const rec=Object.assign({},r); delete rec.u;
-      // アプリで分けた内訳は、受け取り直しても消さない
-      if(i>=0){ if(!rec.parts&&OPS.samples[i].parts) rec.parts=OPS.samples[i].parts;
-                OPS.samples[i]=rec; upd++; } else { OPS.samples.push(rec); add++; }
+      // このPCで手入力したもの（届け先・請求先・単価・計上の印・内訳）は消さない。
+      //   ここで消すと「計上済」の印が外れ、もう一度足して二重になる。
+      if(i>=0){
+        const o=OPS.samples[i];
+        ["dest","memo","bill","tanka","done","parts"].forEach(fd=>{
+          const nv=rec[fd];
+          if(nv==null||nv===""||(Array.isArray(nv)&&!nv.length)){ if(o[fd]!=null&&o[fd]!=="") rec[fd]=o[fd]; }
+        });
+        OPS.samples[i]=rec; upd++;
+      } else { OPS.samples.push(rec); add++; }
     });
     saveOps();
     try{ SNAP=syncSnapshot(); saveSnap(); }catch(e){}
@@ -2331,7 +2393,9 @@ function drawSamples(){
     const d=parseDate(s.date); if(!d) return false;
     const [sy,sm]=smpYm(s);
     if(sy===y&&sm===m) return true;                 // この月に出したぶん
-    if(s.done) return s.done.ym===(y+"-"+p2(m));    // 前の月のぶんでも、この月に計上したなら残す
+    // 前の月のぶんでも、この月に計上したなら残す（分けた行も見る）
+    const dn=smpHasParts(s)?s.parts.map(p=>p.done).filter(Boolean):(s.done?[s.done]:[]);
+    if(dn.length) return dn.some(d2=>d2.ym===(y+"-"+p2(m)));
     return d<=end;                                  // まだ計上していない前の月のぶん
   }).sort((a,b)=>(parseDate(a.date)-parseDate(b.date)));
   // 0件でもカードは隠しません。隠すと「仕組みが無い」と見えてしまうため、
@@ -2375,6 +2439,18 @@ function drawSamples(){
     document.getElementById("smpSum").innerHTML="<b>この月のサンプル</b>　有償 "
       +dec1(tp)+" kg　無償 "+dec1(tf)+" kg　合計 "+dec1(tp+tf)+" kg<br>"
       +ks.map(k=>esc(k)+"　有償 "+dec1(g[k].p)+"・無償 "+dec1(g[k].f)+" kg").join("　／　");
+  })();
+  // 請求書に残っている行があれば知らせる（黙って残ると二重請求になる）
+  (function(){
+    const og=smpOrphans();
+    const el=document.getElementById("smpSum");
+    if(!og.length||!el) return;
+    el.innerHTML+='<div style="margin-top:8px;padding:7px 10px;background:#FBE9E7;border-left:4px solid #C62828">'
+      +'<b style="color:#C62828">請求書に、印の無いサンプルの行が '+og.length+' 本残っています。</b><br>'
+      +'<span style="font-size:11px">'+og.slice(0,5).map(o=>esc(o.tekiyo)+"　¥"+yen(o.amount)).join("<br>")
+      +(og.length>5?"<br>…ほか":"")+'</span>'
+      +'<div style="margin-top:6px"><button class="btn sm" id="smpOrphFix">残っている行を消す</button></div></div>';
+    const b=document.getElementById("smpOrphFix"); if(b) b.onclick=smpDropOrphans;
   })();
   const keys=partnerKeys();
   const tb=document.querySelector("#tSmp tbody"); tb.innerHTML="";
@@ -2463,13 +2539,42 @@ function smpAdd(key0){
   if(miss.length){ alert("請求書に足せません。\n\n"+miss.join("\n")); return; }
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   if(!y){ alert("対象月を選んでください。"); return; }
+  // すでに入っていないか見る。入っているのに印が外れていたら、印の方を直す。
+  const k0=smpKeyOf(s,f.i);
+  let dupKey="";
+  Object.keys(OPS.extra||{}).forEach(k2=>{
+    (OPS.extra[k2]||[]).forEach(e=>{ if(String(e.smp||"")===k0&&!dupKey) dupKey=k2; });});
+  if(dupKey){
+    const pz=dupKey.split("|");
+    const [dy,dm]=String(pz[2]||"").split("-").map(Number);
+    u.done={ym:pz[2]||"", bill:pz[1]||"", at:nowStr()};
+    saveOps(); drawSamples(); drawInvList();
+    alert("この行は、すでに "+(pz[1]||"")+" の "+(dy||"")+"年"+(dm||"")+"月分の請求書に入っています。\n\n"
+      +"二重にならないよう、足さずに「計上済」の印を付け直しました。\n"
+      +"消したいときは「取消」を押してください。");
+    return;
+  }
   const key=docKey("inv",u.bill,y,m);
   const line={tekiyo:"有償サンプル "+s.date+"　"+(s.size||"")+(u.dest?"　"+u.dest:""),
     qty:numOr(u.kg,0), unit:"kg", tanka:smpTanka(u)||0, tax:"8%", smp:smpKeyOf(s,f.i), grp:"サンプル"};
   if(!OPS.extra[key]) OPS.extra[key]=[];
   OPS.extra[key].push(line);
   u.done={ym:y+"-"+p2(m), bill:u.bill, at:nowStr()};
-  saveOps(); logOp("有償サンプルを請求書に足しました",
+  saveOps();
+  // 本当にこのPCに保存できたか確かめる。
+  //   保存場所がいっぱいだと黙って失敗し、「計上済」の印が次に開いたとき消える。
+  (function(){
+    try{
+      const back=JSON.parse(localStorage.getItem(OPS_KEY)||"{}");
+      const bs=(back.samples||[]).find(x=>x.id===s.id);
+      const bu=(f.i>=0)?((bs&&bs.parts)||[])[f.i]:bs;
+      if(!bu||!bu.done) alert("このPCに保存できませんでした。\n\n"
+        +"請求書には足しましたが、「計上済」の印が残っていません。\n"
+        +"画面を開き直すと印が消えて、二重に足してしまう恐れがあります。\n\n"
+        +"設定タブの「データ保存・バックアップ」で控えを取ってから、ご連絡ください。");
+    }catch(e){}
+  })();
+  logOp("有償サンプルを請求書に足しました",
     s.date+" "+(s.size||"")+" "+u.kg+"kg × "+(smpTanka(u)||0)+"円 → "+u.bill+"（"+y+"年"+m+"月分）");
   drawSamples(); drawInvList();
   alert(u.bill+" の "+y+"年"+m+"月分の請求書に、追加行として足しました。");
@@ -2479,11 +2584,19 @@ function smpUndo(key0){
   const s=f.s, u=f.u;
   const [yy,mm]=String(u.done.ym).split("-").map(Number);
   const key=docKey("inv",u.done.bill,yy,mm);
-  const list=OPS.extra[key]||[];
-  const i=list.findIndex(e=>e.smp===smpKeyOf(s,f.i));
-  if(i<0){
+  // 同じサンプルの行が 2 本以上入っていることがあるので、見つかった分を全部消す。
+  //   1 本だけ消すと、印を外したあとに残りの行を消す手段がなくなる。
+  const k0=smpKeyOf(s,f.i);
+  let hit=0;
+  Object.keys(OPS.extra||{}).forEach(k2=>{
+    const keep=(OPS.extra[k2]||[]).filter(e=>{ if(String(e.smp||"")===k0){ hit++; return false; } return true; });
+    if(hit&&keep.length!==(OPS.extra[k2]||[]).length){
+      if(keep.length) OPS.extra[k2]=keep; else delete OPS.extra[k2];
+    }
+  });
+  if(!hit){
     if(!confirm("請求書の追加行が見つかりませんでした。\n（すでに発行済みの請求書に入っている可能性があります）\n\nこの行の「計上済み」の印だけを外しますか？")) return;
-  } else { list.splice(i,1); if(!list.length) delete OPS.extra[key]; }
+  }
   u.done=null; saveOps(); logOp("有償サンプルの計上を取り消しました",s.date+" "+(s.size||""));
   drawSamples(); drawInvList();
 }
@@ -2518,6 +2631,11 @@ function drawInvList(){
   Object.keys(agg).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=k;sel.appendChild(o);});
   if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
   const only=sel.value;
+  // 請求書は「呼び名」ごとに 1 枚作ります。
+  //   会社名が同じでも呼び名が別なら 2 枚に分かれるので、その印を出します。
+  const nmCnt={};
+  Object.keys(agg).forEach(k=>{ const pp=partnerOf(k); const nm=pp?pp.name:k;
+    nmCnt[nm]=(nmCnt[nm]||0)+1; });
   const box=document.getElementById("invList"); box.innerHTML="";
   Object.entries(agg).sort((a,b)=>b[1].reduce((s,t)=>s+t.sale,0)-a[1].reduce((s,t)=>s+t.sale,0))
    .forEach(([k,list])=>{
@@ -2531,6 +2649,12 @@ function drawInvList(){
     d.innerHTML='<div class="prev-h"><div class="hd" data-tg="'+esc(k)+'" title="押すと明細を開け閉めできます">'
       +'<div class="ttl"><span class="cv">'+(op?'\u25be':'\u25b8')+'</span>'+esc(p?p.name:k)+' - '+list.length+'明細</div>'
       +'<div class="cond">[請求基準: '+kijunLabel(r)+' ／ '+esc(r.shime)+'締め ／ 期間: '+termText(k,y,m)+']'
+      +((nmCnt[p?p.name:k]||0)>1
+        ? ' <span class="badge b-ng">同じ名前で '+nmCnt[p?p.name:k]+' 枚に分かれています</span>'
+          +' <span class="badge b-wait">呼び名「'+esc(k)+'」</span>'
+          +' <span class="badge b-gray">行先：'
+          +esc([...new Set(list.map(t=>t.sell).filter(Boolean))].slice(0,5).join("・"))+'</span>'
+        : '')
       +shimeBadge(k)
       +(hasF?' <span class="badge b-wait">送料別</span>':' <span class="badge b-gray">送料込み</span>')
       +(ex.length?' <span class="badge ed">追加行 '+ex.length+'</span>':'')
