@@ -1234,7 +1234,20 @@ function applyRemote(data){
       if(keep){ const o=list[i]||{};
         keep.forEach(fd=>{ const nv=rec[fd];
           if(nv==null||nv===""||(Array.isArray(nv)&&!nv.length)){
-            if(o[fd]!=null&&o[fd]!=="") rec[fd]=o[fd]; } }); }
+            if(o[fd]!=null&&o[fd]!=="") rec[fd]=o[fd]; } });
+        // 内訳（分けた行）は、中身を 1 本ずつ見る。
+        //   配列ごと入れ替えると、請求先を空欄のまま送ってきたPCの内容で、
+        //   こちらで入れた請求先・単価・計上の印まで消えてしまう。
+        if(keep.indexOf("parts")>=0&&Array.isArray(rec.parts)&&Array.isArray(o.parts)
+           &&rec.parts.length===o.parts.length){
+          rec.parts=rec.parts.map((p,pi)=>{
+            const op=o.parts[pi]||{}, np=Object.assign({},p);
+            ["dest","bill","tanka","memo","done"].forEach(fd=>{
+              const v=np[fd];
+              if(v==null||v===""){ if(op[fd]!=null&&op[fd]!=="") np[fd]=op[fd]; } });
+            return np; });
+        }
+      }
       list[i]=rec;
     } else list.push(rec); }); };
   docs("invoices",OPS.invoices); docs("buyDocs",OPS.buyDocs); docs("quotes",OPS.quotes);
@@ -2204,7 +2217,7 @@ function smpHan(v){
 }
 function smpTanka(s){ return numOr(smpHan(s.tanka),null); }
 // 発注書の 1 つのセルに、無償と有償が混ざって入っていることがある。
-//   （例：7kg のうち 2kg が天一へ無償、5kg が東海澱粉へ有償）
+//   （例：7kg のうち 2kg が A 社へ無償、5kg が B 社へ有償）
 //   ピンクの枠はセル単位なので、発注書では分けられない。アプリ側で内訳（parts）を持つ。
 //   発注書が原本なので、内訳の合計が発注書の kg と合うことを常に見ておく。
 function smpHasParts(s){ return !!(s&&s.parts&&s.parts.length); }
@@ -2237,6 +2250,7 @@ function smpOrphans(){
       if(done[k]&&!seen[k]){ seen[k]=1; return; }      // 印と対になる正しい 1 本
       // 追加行は単価と数量だけ持っているので、金額はここで出す
       out.push({key:key, smp:k, tekiyo:e.tekiyo||"", known:!!know[k]&&!done[k],
+                qty:numOr(e.qty,0), tanka:numOr(e.tanka,0),
                 amount:Math.round(numOr(e.qty,1)*numOr(e.tanka,0))});
     });
   });
@@ -2253,6 +2267,12 @@ function smpFixMarks(){
   og.forEach(o=>{
     const f=smpFind(o.smp); if(!f) return;
     const pz=String(o.key).split("|");
+    // 請求先と単価も、請求書の行から戻す。
+    //   印だけ戻すと「計上済」なのに請求先が空欄のままになり、
+    //   金額も「—」のままで、見た人が入れ忘れと思ってしまう。
+    //   すでに入っている値は触らない（人が入れたものを上書きしない）。
+    if(!String(f.u.bill||"").trim()) f.u.bill=pz[1]||"";
+    if(smpTanka(f.u)==null&&o.tanka>0) f.u.tanka=o.tanka;
     f.u.done={ym:pz[2]||"", bill:pz[1]||"", at:nowStr()};
     n++;
   });
@@ -2382,7 +2402,7 @@ function smpSplit(id){
       +'<td><select data-p="'+i+'" data-f="paid"'+(p.done?" disabled":"")+'>'
       +'<option value="0"'+(Number(p.paid)?"":" selected")+'>無償</option>'
       +'<option value="1"'+(Number(p.paid)?" selected":"")+'>有償</option></select></td>'
-      +'<td><input data-p="'+i+'" data-f="dest" placeholder="例：東海澱粉株式会社 千葉営業所" value="'+esc(p.dest||"")+'"></td>'
+      +'<td><input data-p="'+i+'" data-f="dest" placeholder="例：○○株式会社 ○○営業所" value="'+esc(p.dest||"")+'"></td>'
       +'<td>'+(p.done?'<span class="badge b-ok">計上済</span>'
               :'<button class="del" data-pdel="'+i+'">削除</button>')+'</td></tr>').join("");
     md.querySelectorAll("[data-p]").forEach(el=>{
@@ -2487,6 +2507,7 @@ function drawSamples(){
     if(mark.length) h+='<div style="margin-top:8px;padding:7px 10px;background:#FFF4DB;border-left:4px solid #E0A800">'
       +'<b>請求書に入っているのに、「計上済」の印が無い行が '+mark.length+' 本あります。</b><br>'
       +'<span style="font-size:11px;color:#666">他のPCで足したものが、印だけこのPCに届いていないときに出ます。'
+      +'「印を付け直す」を押すと、請求先と単価も請求書の行から戻します。'
       +'<b>消さないでください。</b>消すと他のPCからも消えます。</span><br>'
       +li(mark)
       +'<div style="margin-top:6px"><button class="btn sm" id="smpMarkFix">印を付け直す</button></div></div>';
