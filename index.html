@@ -2224,8 +2224,11 @@ function smpUnits(s){
   return smpHasParts(s) ? s.parts.map((p,i)=>({u:p,k:smpKeyOf(s,i)})) : [{u:s,k:s.id}];
 }
 function smpOrphans(){
-  const done={};
-  (OPS.samples||[]).forEach(s=>smpUnits(s).forEach(x=>{ if(x.u.done) done[x.k]=1; }));
+  // know ＝ 元のサンプルがこのPCにあるか。done ＝「計上済」の印があるか。
+  //   元があるのに印だけ無い場合は、他のPCから印が届いていないだけのことがある。
+  //   そのまま消すと、正しい行を全員分消してしまうので分けて扱う。
+  const done={}, know={};
+  (OPS.samples||[]).forEach(s=>smpUnits(s).forEach(x=>{ know[x.k]=1; if(x.u.done) done[x.k]=1; }));
   const seen={}, out=[];
   Object.keys(OPS.extra||{}).forEach(key=>{
     (OPS.extra[key]||[]).forEach(e=>{
@@ -2233,14 +2236,39 @@ function smpOrphans(){
       const k=String(e.smp);
       if(done[k]&&!seen[k]){ seen[k]=1; return; }      // 印と対になる正しい 1 本
       // 追加行は単価と数量だけ持っているので、金額はここで出す
-      out.push({key:key, smp:k, tekiyo:e.tekiyo||"",
+      out.push({key:key, smp:k, tekiyo:e.tekiyo||"", known:!!know[k]&&!done[k],
                 amount:Math.round(numOr(e.qty,1)*numOr(e.tanka,0))});
     });
   });
   return out;
 }
+// 印だけが無い行に、請求書の方から「計上済」の印を付け直す。
+//   何も消しません。他のPCとだけがそろっていないときの直し方です。
+function smpFixMarks(){
+  const og=smpOrphans().filter(o=>o.known);
+  if(!og.length){ alert("印を付け直す行はありませんでした。"); return; }
+  if(!confirm("請求書に入っている "+og.length+" 本に、「計上済」の印を付け直します。\n\n"
+    +"何も消しません。よろしいですか？")) return;
+  let n=0;
+  og.forEach(o=>{
+    const f=smpFind(o.smp); if(!f) return;
+    const pz=String(o.key).split("|");
+    f.u.done={ym:pz[2]||"", bill:pz[1]||"", at:nowStr()};
+    n++;
+  });
+  saveOps(); logOp("サンプルの「計上済」の印を付け直しました",n+"件");
+  drawSamples(); drawInvList();
+  alert(n+" 件に印を付け直しました。");
+}
 function smpDropOrphans(){
-  const og=smpOrphans(); if(!og.length) return;
+  const all=smpOrphans(); if(!all.length) return;
+  // 元のサンプルがある行は消しません。印が届いていないだけの可能性が高いため。
+  const og=all.filter(o=>!o.known);
+  if(!og.length){
+    alert("消すべき行はありませんでした。\n\n"
+      +"残っているのはすべて「元のサンプルはあるが印だけ無い」行です。\n"
+      +"「印を付け直す」を押してください。"); return;
+  }
   if(!confirm("請求書に残っているサンプルの行を "+og.length+" 本消します。\n\n"
     +og.slice(0,8).map(o=>"・"+o.tekiyo).join("\n")+(og.length>8?"\n…ほか":"")
     +"\n\n発行済みの請求書には触りません。よろしいですか？")) return;
@@ -2447,15 +2475,28 @@ function drawSamples(){
   })();
   // 請求書に残っている行があれば知らせる（黙って残ると二重請求になる）
   (function(){
-    const og=smpOrphans();
+    const all=smpOrphans();
     const el=document.getElementById("smpSum");
-    if(!og.length||!el) return;
-    el.innerHTML+='<div style="margin-top:8px;padding:7px 10px;background:#FBE9E7;border-left:4px solid #C62828">'
-      +'<b style="color:#C62828">請求書に、印の無いサンプルの行が '+og.length+' 本残っています。</b><br>'
-      +'<span style="font-size:11px">'+og.slice(0,5).map(o=>esc(o.tekiyo)+"　¥"+yen(o.amount)).join("<br>")
-      +(og.length>5?"<br>…ほか":"")+'</span>'
+    if(!all.length||!el) return;
+    const mark=all.filter(o=>o.known);    // 元はあるが印だけ無い
+    const lost=all.filter(o=>!o.known);   // 元のサンプルが見当たらない
+    const li=a=>'<span style="font-size:11px">'
+      +a.slice(0,5).map(o=>esc(o.tekiyo)+"　¥"+yen(o.amount)).join("<br>")
+      +(a.length>5?"<br>…ほか":"")+'</span>';
+    let h="";
+    if(mark.length) h+='<div style="margin-top:8px;padding:7px 10px;background:#FFF4DB;border-left:4px solid #E0A800">'
+      +'<b>請求書に入っているのに、「計上済」の印が無い行が '+mark.length+' 本あります。</b><br>'
+      +'<span style="font-size:11px;color:#666">他のPCで足したものが、印だけこのPCに届いていないときに出ます。'
+      +'<b>消さないでください。</b>消すと他のPCからも消えます。</span><br>'
+      +li(mark)
+      +'<div style="margin-top:6px"><button class="btn sm" id="smpMarkFix">印を付け直す</button></div></div>';
+    if(lost.length) h+='<div style="margin-top:8px;padding:7px 10px;background:#FBE9E7;border-left:4px solid #C62828">'
+      +'<b style="color:#C62828">元のサンプルが見当たらない行が '+lost.length+' 本残っています。</b><br>'
+      +li(lost)
       +'<div style="margin-top:6px"><button class="btn sm" id="smpOrphFix">残っている行を消す</button></div></div>';
-    const b=document.getElementById("smpOrphFix"); if(b) b.onclick=smpDropOrphans;
+    el.innerHTML+=h;
+    const b1=document.getElementById("smpMarkFix"); if(b1) b1.onclick=smpFixMarks;
+    const b2=document.getElementById("smpOrphFix"); if(b2) b2.onclick=smpDropOrphans;
   })();
   const keys=partnerKeys();
   const tb=document.querySelector("#tSmp tbody"); tb.innerHTML="";
