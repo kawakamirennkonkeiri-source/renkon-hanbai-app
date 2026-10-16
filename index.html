@@ -3688,11 +3688,34 @@ function busyOn(msg){
 function busyOff(){
   BUSY=false;
   const el=document.getElementById("busyVeil"); if(el) el.style.display="none";
+  // 「〜しています…」のまま終わったときだけ、下の知らせも消します。
+  //   終わりの知らせ（発行しました・失敗しました）は消しません。
+  if(typeof dlToast==="function"&&dlToast._wait) dlToast("");
+}
+// 画面の下に貼り付く知らせ。
+//   いままでの知らせは画面の上（タブのすぐ下）にあり、
+//   下へスクロールしていると見えませんでした。こちらは常に見えます。
+function dlToast(t,k){
+  let el=document.getElementById("dlToast");
+  if(!el){
+    el=document.createElement("div"); el.id="dlToast";
+    el.style.cssText="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);"
+      +"z-index:9998;pointer-events:none;max-width:92vw";
+    document.body.appendChild(el);
+  }
+  dlToast._wait=(k==="wait");
+  if(!t){ el.innerHTML=""; return; }
+  el.innerHTML='<div style="background:'+(k==="ng"?"#C62828":k==="wait"?"#0F7FA8":"#1E7D34")
+    +';color:#fff;border-radius:22px;padding:10px 22px;font-size:14px;font-weight:600;'
+    +'box-shadow:0 4px 16px rgba(0,0,0,.3);white-space:nowrap;overflow:hidden;'
+    +'text-overflow:ellipsis">'+(k==="wait"?"&#9679; ":"")+esc(t)+'</div>';
 }
 function dlMsg(t,k){
   const el=document.getElementById("dlMsg");
   el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":k==="wait"?"b-wait":"b-ok")+'">'+esc(t)+'</span>';
-  clearTimeout(dlMsg._t); if(k!=="wait") dlMsg._t=setTimeout(()=>el.innerHTML="",8000);
+  dlToast(t,k);
+  clearTimeout(dlMsg._t);
+  if(k!=="wait") dlMsg._t=setTimeout(()=>{ el.innerHTML=""; dlToast(""); },8000);
   // 幕が出ているときは、同じ文面を幕にも出します。
   //   ボタンのそばの知らせは画面の上にあるので、下へスクロールしていると見えないためです。
   const v=document.getElementById("busyVeilMsg"); if(v&&BUSY) v.textContent=t;
