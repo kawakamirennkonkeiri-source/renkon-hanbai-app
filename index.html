@@ -1333,6 +1333,35 @@ async function syncTick(force){
   catch(e){ SYNCERR=e.message||String(e); }
   SYNCBUSY=false; drawSyncBadge(); drawSyncCard();
 }
+// 発行の直前は「受け取る」だけにします。
+//   送る方は10秒ごとに勝手に動くので、ここで待つ必要がありません。
+//   送るものが多い日は、ここだけで何秒もかかっていました（2026-10-16）。
+async function syncPullOnly(){
+  if(!syncOn()) return;
+  for(let i=0;i<30&&SYNCBUSY;i++) await new Promise(r=>setTimeout(r,100));  // 動いている同期を待つ（最大3秒）
+  SYNCBUSY=true; drawSyncBadge();
+  try{ await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
+  catch(e){ SYNCERR=e.message||String(e); }
+  SYNCBUSY=false; drawSyncBadge(); drawSyncCard();
+}
+// 取り置きと番号もらいを、1回のやりとりで済ませます。
+//   共有DB側がまだ新しくないときは、今までどおり2回に分けて呼びます。
+async function claimAndNo(kind,noKind,docId,txNos,by,ym){
+  try{
+    return await syncApi("claimAndNo",
+      {kind:kind,noKind:noKind,docId:docId,txNos:txNos||[],by:by||"",ym:ym});
+  }catch(e){
+    if(!/\u4e0d\u660e\u306aaction/.test(e.message||"")) throw e;   // 「不明なaction」以外は、そのまま失敗にします
+    let r={};
+    if(txNos&&txNos.length){
+      const c=await syncApi("claim",{kind:kind,docId:docId,txNos:txNos,by:by||""});
+      if(c.result&&c.result.ok===false) return c;
+      r.result=c.result;
+    }
+    r.no=(await syncApi("issueNo",{kind:noKind,ym:ym})).no;
+    return r;
+  }
+}
 function syncSoon(){ if(!syncOn()) return; clearTimeout(SYNCSOON); SYNCSOON=setTimeout(()=>syncTick(),1500); }
 function startSync(){
   clearInterval(SYNCTIMER); SYNCTIMER=null;
@@ -3568,7 +3597,7 @@ async function issueQuote_run(){
   const q=qtBuild(); if(!q) return;
   if(syncOn()){
     try{
-      await syncTick(true);
+      await syncPullOnly();
       q.quoteNo=(await syncApi("issueNo",{kind:"EST",ym:(q.date||todayStr()).slice(0,7)})).no;
     }catch(e){
       dlMsg("共有データベースの処理に失敗しました："+e.message,"ng");
@@ -4043,7 +4072,7 @@ async function issueInvoice_run(custKey){
   // 共有しているときは、発行の直前にいちど最新を取り込む（他のPCの修正を反映してから出す）
   if(syncOn()){
     dlMsg("共有データベースから最新を取り込んでいます…","wait");
-    await syncTick(true);
+    await syncPullOnly();
     if(SYNCERR){ dlMsg("共有データベースに接続できないため発行を中止しました","ng");
       alert("共有データベースに接続できないため、発行を中止しました。\n\n"+SYNCERR
         +"\n\nつながらない状態で発行すると、他のPCと番号が重なる恐れがあります。"); return; }
@@ -4079,19 +4108,17 @@ async function issueInvoice_run(custKey){
   let invNo=nextInvoiceNo(y,m);
   if(syncOn()){
     try{
-      // ① この明細を先に取り置く（他のPCが同じ明細を出せないようにする）
-      if(rows.length){
-        const cl=await syncApi("claim",{kind:"inv",docId:invId,txNos:rows.map(t=>t.no),by:CFG.userName||""});
-        if(cl.result&&cl.result.ok===false){
-          const c=cl.result.conflicts||[];
-          alert("次の明細は、すでに別の請求書に入っています。\n発行を中止しました。\n\n"
-            +c.slice(0,8).map(x=>x.txNo+(x.by?"（"+x.by+" さんが発行）":"")).join("\n")
-            +(c.length>8?"\n…ほか":"")+"\n\n画面を最新にしてから、もう一度お試しください。");
-          await syncTick(true); return;
-        }
+      // ①この明細を取り置く ②番号をもらう を、1回のやりとりで両方やります。
+      //   往復が減って速くなり、途中で止まる隙間も無くなります。
+      const cl=await claimAndNo("inv","INV",invId,rows.map(t=>t.no),CFG.userName||"",y+"-"+p2(m));
+      if(cl.result&&cl.result.ok===false){
+        const c=cl.result.conflicts||[];
+        alert("次の明細は、すでに別の請求書に入っています。\n発行を中止しました。\n\n"
+          +c.slice(0,8).map(x=>x.txNo+(x.by?"（"+x.by+" さんが発行）":"")).join("\n")
+          +(c.length>8?"\n…ほか":"")+"\n\n画面を最新にしてから、もう一度お試しください。");
+        await syncPullOnly(); return;
       }
-      // ② 番号をGoogle側でもらう（重複しない）
-      invNo=(await syncApi("issueNo",{kind:"INV",ym:y+"-"+p2(m)})).no;
+      invNo=cl.no;
     }catch(e){
       // 取り置きだけ済んで番号の取得で失敗すると、明細が押さえられたまま残ります。
       //   そのままもう一度押すと「すでに別の請求書に入っています」と出て、
@@ -4217,7 +4244,7 @@ async function issueBuyDoc_run(k){
   const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
   if(syncOn()){
     dlMsg("共有データベースから最新を取り込んでいます…","wait");
-    await syncTick(true);
+    await syncPullOnly();
     if(SYNCERR){ dlMsg("共有データベースに接続できないため発行を中止しました","ng");
       alert("共有データベースに接続できないため、発行を中止しました。\n\n"+SYNCERR); return; }
   }
@@ -4237,15 +4264,15 @@ async function issueBuyDoc_run(k){
   let bdNo=nextBuyNo(y,m);
   if(syncOn()){
     try{
-      const cl=await syncApi("claim",{kind:"buy",docId:bdId,txNos:rows.map(t=>t.no),by:CFG.userName||""});
+      const cl=await claimAndNo("buy","BUY",bdId,rows.map(t=>t.no),CFG.userName||"",y+"-"+p2(m));
       if(cl.result&&cl.result.ok===false){
         const c=cl.result.conflicts||[];
         alert("次の明細は、すでに別の買取書に入っています。\n発行を中止しました。\n\n"
           +c.slice(0,8).map(x=>x.txNo+(x.by?"（"+x.by+" さんが発行）":"")).join("\n")
           +(c.length>8?"\n…ほか":""));
-        await syncTick(true); return;
+        await syncPullOnly(); return;
       }
-      bdNo=(await syncApi("issueNo",{kind:"BUY",ym:y+"-"+p2(m)})).no;
+      bdNo=cl.no;
     }catch(e){
       // 請求書と同じ理由で、中止するときは取り置きを外します。
       try{ await syncApi("release",{kind:"buy",docId:bdId}); }catch(e2){}
