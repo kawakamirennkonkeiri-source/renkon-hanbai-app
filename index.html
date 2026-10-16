@@ -3560,6 +3560,11 @@ function qtBuild(){
     issuedAt:nowStr(), issuedBy:CFG.userName||"", pdfUrl:"", pdfName:"" };
 }
 async function issueQuote(){
+  // 幕を出してから本体を動かします。すでに動いているときは、押しても何もしません。
+  if(!busyOn('見積書を発行しています…')) return;
+  try{ return await issueQuote_run(); } finally { busyOff(); }
+}
+async function issueQuote_run(){
   const q=qtBuild(); if(!q) return;
   if(syncOn()){
     try{
@@ -3655,10 +3660,42 @@ document.getElementById("qtCust").onchange=e=>{QT.customer=e.target.value; qtSav
   document.getElementById(id).oninput=e=>{QT[k]=e.target.value; qtSave();};});
 
 // ===== 帳票HTML・PDF保存（GASでPDF化） =====
+// ===== 送信中の幕 =====
+//   発行は「①明細を取り置く → ②番号をもらう → ③PDFを作る」と何回かやりとりします。
+//   その間ボタンが無反応に見えるので、何度も押されて明細が二重に押さえられていました
+//   （2026-10-16、17秒のあいだに3回押されて取り置きが5件残りました）。
+//   画面全体に幕をかけて、終わるまで押せないようにします。
+let BUSY=false;
+function busyOn(msg){
+  if(BUSY) return false;                 // すでに動いているときは、はじく
+  BUSY=true;
+  let el=document.getElementById("busyVeil");
+  if(!el){
+    el=document.createElement("div"); el.id="busyVeil";
+    el.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.35);"
+      +"display:flex;align-items:center;justify-content:center";
+    el.innerHTML='<div style="background:#fff;border-radius:8px;padding:20px 28px;'
+      +'box-shadow:0 6px 24px rgba(0,0,0,.3);max-width:80vw;text-align:center">'
+      +'<div style="font-size:16px;font-weight:600" id="busyVeilMsg">送信中です…</div>'
+      +'<div style="font-size:12px;color:#888;margin-top:8px;line-height:1.7">'
+      +'終わるまでお待ちください。<br>二重に発行されるのを防いでいます。</div></div>';
+    document.body.appendChild(el);
+  }
+  const m=document.getElementById("busyVeilMsg"); if(m) m.textContent=msg||"送信中です…";
+  el.style.display="flex";
+  return true;
+}
+function busyOff(){
+  BUSY=false;
+  const el=document.getElementById("busyVeil"); if(el) el.style.display="none";
+}
 function dlMsg(t,k){
   const el=document.getElementById("dlMsg");
   el.innerHTML='<span class="badge '+(k==="ng"?"b-ng":k==="wait"?"b-wait":"b-ok")+'">'+esc(t)+'</span>';
   clearTimeout(dlMsg._t); if(k!=="wait") dlMsg._t=setTimeout(()=>el.innerHTML="",8000);
+  // 幕が出ているときは、同じ文面を幕にも出します。
+  //   ボタンのそばの知らせは画面の上にあるので、下へスクロールしていると見えないためです。
+  const v=document.getElementById("busyVeilMsg"); if(v&&BUSY) v.textContent=t;
 }
 const esc2 = s => String(s==null?"":s)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -3917,6 +3954,11 @@ function openOtherInvoice(src){
   draw();
 }
 async function issueOtherInvoice(d,y,m,ls){
+  // 幕を出してから本体を動かします。すでに動いているときは、押しても何もしません。
+  if(!busyOn('請求書を発行しています…')) return;
+  try{ return await issueOtherInvoice_run(d,y,m,ls); } finally { busyOff(); }
+}
+async function issueOtherInvoice_run(d,y,m,ls){
   if(syncOn()){
     try{ await syncApi("ping",{}); }
     catch(e){ alert("共有データベースにつながりません。発行を中止しました。\n\n"+e.message); return; }
@@ -3969,6 +4011,11 @@ function nextInvoiceNo(y,m){
 }
 // 請求書を発行する（PDF保存 → 成功したら請求済みにする）
 async function issueInvoice(custKey){
+  // 幕を出してから本体を動かします。すでに動いているときは、押しても何もしません。
+  if(!busyOn('請求書を発行しています…')) return;
+  try{ return await issueInvoice_run(custKey); } finally { busyOff(); }
+}
+async function issueInvoice_run(custKey){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   // 共有しているときは、発行の直前にいちど最新を取り込む（他のPCの修正を反映してから出す）
   if(syncOn()){
@@ -4023,8 +4070,14 @@ async function issueInvoice(custKey){
       // ② 番号をGoogle側でもらう（重複しない）
       invNo=(await syncApi("issueNo",{kind:"INV",ym:y+"-"+p2(m)})).no;
     }catch(e){
+      // 取り置きだけ済んで番号の取得で失敗すると、明細が押さえられたまま残ります。
+      //   そのままもう一度押すと「すでに別の請求書に入っています」と出て、
+      //   二度と出せなくなります（押さえた請求書の番号はどこにも無いため）。
+      //   中止するときは必ず取り置きを外します。
+      try{ await syncApi("release",{kind:"inv",docId:invId}); }catch(e2){}
       dlMsg("共有データベースの処理に失敗しました："+e.message,"ng");
-      alert("共有データベースの処理に失敗したため、発行を中止しました。\n\n"+e.message); return;
+      alert("共有データベースの処理に失敗したため、発行を中止しました。\n\n"+e.message
+        +"\n\n取り置きは外したので、そのままもう一度お試しください。"); return;
     }
   }
   const inv={ id:invId, invoiceNo:invNo, customer:custKey,
@@ -4133,6 +4186,11 @@ function buildBuyHtml(doc){
 }
 // 買取書を発行する（PDF保存 → 成功したら発行済みにする）
 async function issueBuyDoc(k){
+  // 幕を出してから本体を動かします。すでに動いているときは、押しても何もしません。
+  if(!busyOn('買取書を発行しています…')) return;
+  try{ return await issueBuyDoc_run(k); } finally { busyOff(); }
+}
+async function issueBuyDoc_run(k){
   const [y,m]=(document.getElementById("buyYm").value||"0/0").split("/").map(Number);
   if(syncOn()){
     dlMsg("共有データベースから最新を取り込んでいます…","wait");
@@ -4166,8 +4224,11 @@ async function issueBuyDoc(k){
       }
       bdNo=(await syncApi("issueNo",{kind:"BUY",ym:y+"-"+p2(m)})).no;
     }catch(e){
+      // 請求書と同じ理由で、中止するときは取り置きを外します。
+      try{ await syncApi("release",{kind:"buy",docId:bdId}); }catch(e2){}
       dlMsg("共有データベースの処理に失敗しました："+e.message,"ng");
-      alert("共有データベースの処理に失敗したため、発行を中止しました。\n\n"+e.message); return;
+      alert("共有データベースの処理に失敗したため、発行を中止しました。\n\n"+e.message
+        +"\n\n取り置きは外したので、そのままもう一度お試しください。"); return;
     }
   }
   const doc={ id:bdId, docNo:bdNo, supplier:k, targetMonth:y+"-"+p2(m),
