@@ -1251,12 +1251,17 @@ async function syncPush(){
   const cur=syncSnapshot();
   for(const e of SYNC_ENT){
     const now=cur[e]||{}, old=SNAP[e]||{}, ch=[], del=[];
-    Object.keys(now).forEach(id=>{ if(JSON.stringify(now[id])!==JSON.stringify(old[id])) ch.push(now[id]); });
+    // 予定（plan）は共有データベース側でだけ作ります。こちらからは送りません。
+    //   まだ受け取っていないPCが送ると、共有DBの予定を空っぽで上書きしてしまうためです。
+    //   （控えとしては手元に持っておくので、スナップショットからは外しません）
+    const skipPlan=id=>(e==="rows"&&String(id).indexOf("plan#")===0);
+    Object.keys(now).forEach(id=>{ if(skipPlan(id)) return;
+      if(JSON.stringify(now[id])!==JSON.stringify(old[id])) ch.push(now[id]); });
     // マスタは、画面の「削除」で消した行だけを消す。
     // 手元に無いというだけで消すと、共有DBにあとから足された行（GASで入れた行など）が、
     // 設定の保存が間に合わなかったPCの送信で消えてしまう。
     if(MASTER_ENT.indexOf(e)>=0) Object.keys(DELQ[e]||{}).forEach(id=>{ if(!now[id]) del.push(id); });
-    else Object.keys(old).forEach(id=>{ if(!now[id]) del.push(id); });
+    else Object.keys(old).forEach(id=>{ if(skipPlan(id)) return; if(!now[id]) del.push(id); });
     if(ch.length) await syncApi("pushBatch",{entity:e,records:ch});
     if(del.length){ await syncApi("deleteBatch",{entity:e,ids:del});
       if(DELQ[e]){ del.forEach(id=>{ delete DELQ[e][id]; }); saveDelq(); } }
