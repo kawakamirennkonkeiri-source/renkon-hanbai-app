@@ -48,6 +48,16 @@ main{padding:16px;max-width:1700px;margin:0 auto}
 .card h2 .cnt{font-size:12px;font-weight:400;color:#777}
 .card h2 .sp{flex:1}
 .hint{font-size:11.5px;color:#777;margin-bottom:10px;line-height:1.7}
+/* 分析タブ：横棒グラフ。実績は濃い色、予定は薄い色で出します */
+.bz-bar{position:relative;height:17px;background:#F2F3F5;border-radius:3px;overflow:hidden}
+.bz-bar i{position:absolute;top:0;bottom:0;left:0;display:block}
+.bz-bar i.a{background:var(--or)}
+.bz-bar i.p{background:#BFE2F1}
+.bz-lg{display:flex;gap:14px;align-items:center;font-size:11.5px;color:#666;margin:2px 0 10px}
+.bz-lg s{text-decoration:none;display:inline-block;width:13px;height:11px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.bz-sub{font-size:10.5px;color:#999}
+table.bz td,table.bz th{font-variant-numeric:tabular-nums}
+table.bz tr.plan td{color:#7FA3B4;background:#FAFDFF}
 .kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .kpi{background:#fff;border:1px solid #E3E3E5;border-radius:5px;padding:10px 16px;min-width:150px;flex:1}
 .kpi .l{font-size:11.5px;color:#777}
@@ -278,6 +288,42 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
+</section>
+
+<!-- 分析 -->
+<section class="panel" id="bunseki">
+  <div class="card">
+    <h2>分析<span class="cnt" id="bzHead"></span><span class="sp"></span>
+      <button class="btn sm sub" id="bzRe">計算し直す</button></h2>
+    <p class="hint">💡 このページは<b>見るだけ</b>のページです。請求書にも売上にも何も書きません。<br>
+      <b>濃い色＝実績</b>（取り込みずみの取引）、<b>薄い色＝予定</b>（発注書の明日以降）です。<br>
+      予定は発注書の数字をそのまま読んだものなので、単価が入っていない行は金額に入りません。</p>
+    <div id="bzNote"></div>
+    <div class="kpis" id="bzKpi"></div>
+  </div>
+
+  <div class="card"><h2>区分別の売上と数量 <span class="cnt">（洗い・土付き・真空 など）</span></h2>
+    <p class="hint">「円/kg」は<b>運賃を入れていない</b>商品だけの平均です。売上の列には送料別の送料が入っています。</p>
+    <div id="bzKubun"></div></div>
+
+  <div class="card"><h2>シーズンはじめからの累計売上 <span class="cnt" id="bzCumHead"></span></h2>
+    <div id="bzCum"></div></div>
+
+  <div class="card"><h2>売上の内訳<span class="sp"></span>
+      <button class="btn sm" id="bzBySell">販売先ごと</button>
+      <button class="btn sm sub" id="bzByTori">取引先ごと</button></h2>
+    <p class="hint">「販売先」は<b>発注書の行先の呼び名</b>、
+      「取引先」は<b>単価マスタでまとめている先</b>です。<br>
+      ひとつの取引先に、いくつもの販売先がぶら下がっていることがあります。<br>
+      「円/kg」は<b>運賃を入れていない</b>商品だけの平均です。</p>
+    <div id="bzRank"></div></div>
+
+  <div class="card"><h2>1kgあたりの平均単価</h2>
+    <p class="hint">商品の金額 ÷ kg です（<b>運賃は入れていません</b>）。<br>
+      <b>送料込みの取引は、運賃が単価に溶け込んでいるので、商品代だけには分けられません。</b>
+      そのため「送料別のぶん」と「送料込みのぶん」を分けて並べています。<br>
+      容量（1ケース何kg）が発注書に入っていない行は、kgが出せないので平均から外しています。</p>
+    <div id="bzTanka"></div></div>
 </section>
 
 <!-- 見積 -->
@@ -779,8 +825,11 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 const DATA = {"price": [], "map": [], "shime": [], "shanai": [], "kaitori": [], "partners": [], "prod": [], "sample": [], "tmv3": []};
 const TAX = 0.08;
 const CFG_KEY="krs_cfg_v2", ROW_KEY="krs_rows", ROWB_KEY="krs_rows_buy";
+// 発注書の「予定」（明日以降）。分析のグラフで薄い色で出すためのものです。
+//   請求にも売上にも使いません。
+const ROWP_KEY="krs_rows_plan";
 const COMPANY_DEFAULT={name:"",addr:"",bank:"",invoiceNo:""};
-const TABS=[["dashboard","ダッシュボード"],["quote","見積"],["tx","取引 (受注＋発注)"],["deliv","納品"],
+const TABS=[["dashboard","ダッシュボード"],["bunseki","分析"],["quote","見積"],["tx","取引 (受注＋発注)"],["deliv","納品"],
   ["invoicing","請求"],["buying","買取 (生産者)"],["partners","取引先マスタ"],
   ["prices","単価マスタ"],["freight","運賃マスタ"],["settings","設定"]];
 const PFROM="2026-04-01", PTO="2027-03-31";
@@ -1191,7 +1240,8 @@ function syncSnapshot(){
   const kv=(e,o)=>{const m={};Object.keys(o||{}).forEach(k=>{m[k]={id:k,v:o[k]};});s[e]=m;};
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
   kv("doc",OPS.doc); kv("invLines",OPS.invLines); kv("buyLines",OPS.buyLines);
-  s.rows=Object.assign(rowChunks("sale",SRC),rowChunks("buy",SRCB));
+  // 予定（plan）も入れておかないと、送るときに共有DBから消えてしまいます。
+  s.rows=Object.assign(rowChunks("sale",SRC),rowChunks("buy",SRCB),rowChunks("plan",SRCP));
   const meta={}; META_KEYS.forEach(k=>{ meta[k]={id:k,v:CFG[k]}; }); s.meta=meta;
   const lg={}; (OPS.log||[]).forEach(l=>{ if(l&&l.id) lg[l.id]=l; }); s.auditLog=lg;
   return s;
@@ -1262,8 +1312,9 @@ function applyRemote(data){
     data.rows.forEach(r=>{ n++; if(r._del) delete cache[r.id]; else cache[r.id]=r; });
     const pick=k=>Object.keys(cache).filter(x=>x.indexOf(k+"#")===0).sort()
       .reduce((a,x)=>a.concat(cache[x].rows||[]),[]);
-    SRC=pick("sale"); SRCB=pick("buy");
-    try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB)); }catch(e){}
+    SRC=pick("sale"); SRCB=pick("buy"); SRCP=pick("plan");
+    try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB));
+         localStorage.setItem(ROWP_KEY,JSON.stringify(SRCP)); }catch(e){}
   }
   (data.meta||[]).forEach(r=>{ n++; if(!r._del&&META_KEYS.indexOf(r.id)>=0) CFG[r.id]=r.v; });
   if((data.auditLog||[]).length){
@@ -1287,7 +1338,8 @@ function syncAdoptLocal_(){
   OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[]; OPS.samples=[];
   ["adj","extra","head","st","qty","doc","invLines","buyLines"].forEach(k=>{ OPS[k]={}; });
   SRC=[]; SRCB=[]; SNAP={};
-  try{ localStorage.setItem(ROW_KEY,"[]"); localStorage.setItem(ROWB_KEY,"[]"); }catch(e){}
+  try{ localStorage.setItem(ROW_KEY,"[]"); localStorage.setItem(ROWB_KEY,"[]");
+       localStorage.setItem(ROWP_KEY,"[]"); }catch(e){}
 }
 async function syncPull(){
   const first=!SINCE;
@@ -1384,12 +1436,41 @@ function dvStatus(t){
   if(st) return st;
   return t.deliv<=TODAY?"delivered":"created";
 }
-let SRC=[],SRCB=[],TX=[];
+let SRC=[],SRCB=[],SRCP=[],TX=[];
+// 発注書の明日以降（予定）。分析タブでだけ使います。
+let TXP=[];
 function build(sale,buy){
   if(sale)SRC=sale; if(buy)SRCB=buy;
   indexCfg(); TX=[];
   const sq={},bq={};
-  SRC.forEach(r=>{
+  SRC.forEach(r=>{ const o=saleTx(r,sq); if(o) TX.push(o); });
+  // 予定（明日以降）。同じ計算をそのまま通すので、単価も運賃も実績と同じ引き方になります。
+  TXP=[]; const pq={};
+  SRCP.forEach(r=>{ const o=saleTx(r,pq); if(o&&!o.shanai&&!isFune(o)) TXP.push(o); });
+  SRCB.forEach(r=>{
+    const d=parseDate(r.date); if(!d) return;
+    const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
+    const _pno=r.no||txNo("P",d,bq[key]), aj=OPS.adj[_pno]||null;
+    const cs=numOr(aj&&aj.qty,parseFloat(r.cs)||0), kg=numOr(aj&&aj.kg,parseFloat(r.kg)||0);
+    const cap=parseFloat(r.size);
+    const sh=SHANAI.has(r.seisansha);
+    const hit=sh?null:lookup("仕入",r.seisansha,r.kubun,cap,d);
+    const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
+    const ku=(aj&&aj.unit)?aj.unit:(hit?hit.unit:"円/kg");
+    const kin=tk!=null?tk*(ku==="円/kg"?kg:cs):null;
+    const isOut=CFG.price.some(p=>p.kind==="対象外"&&N(p.t)===N(r.seisansha)&&N(p.item)===N(r.kubun));
+    TX.push({kind:"buy",no:_pno,date:d,deliv:d,customer:"",supplier:r.seisansha,edited:!!aj,memo:aj?(aj.memo||""):"",
+      sanchi:"熊本",item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
+      cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:tk,
+      kunit:tk!=null?ku:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
+      shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
+      why:(sh||isOut)?"買取の対象外":(tk==null)?"買取単価が未設定":""});
+  });
+  fillYM(); render();
+}
+
+// 発注書の1行 → 取引1件。実績と予定で同じものを使います（dq は日付ごとの連番）
+function saleTx(r,dq){
     const se=parseDate(r.seisan);            // 電子黒板の日付＝出荷日
     if(!se) return;
     let cs=parseFloat(r.cs); if(!(cs>0)) return;
@@ -1398,8 +1479,8 @@ function build(sale,buy){
     const nb=!sh&&NOBILL.has(r.tori);   // 売上には数えるが請求書は作らない
     const mp=MAPI[r.tori+"\u0001"+(r.kubun||"")];
     const cap=parseFloat(r.nyusu);
-    const key=se.toDateString(); sq[key]=(sq[key]||0)+1;
-    const _no=r.no||txNo("S",se,sq[key]);   // 自動取込で番号が決まっていればそれを使う
+    const key=se.toDateString(); dq[key]=(dq[key]||0)+1;
+    const _no=r.no||txNo("S",se,dq[key]);   // 自動取込で番号が決まっていればそれを使う
     if(OPS.qty[_no]!=null) cs=OPS.qty[_no];
     const aj=OPS.adj[_no]||null;
     if(aj&&aj.qty!=null) cs=Number(aj.qty);
@@ -1421,7 +1502,7 @@ function build(sale,buy){
     const frNote=betsu?freightNote(fr,cs,kgTot,cap,frPref):"";
     const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
     const shohin=tk!=null?tk*cs:null;
-    TX.push({kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
+    return {kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
       customer:sh?"":bill,priceKey:mp?mp.tori:"",supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
       frNote:frNote, frPref:frPref,
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
@@ -1436,28 +1517,7 @@ function build(sale,buy){
       sale:(shohin!=null)?shohin+frAmt:null,buy:null,y:ym[0],m:ym[1],shanai:sh,nobill:nb,
       status:sh?"off":(no<=TODAY?"delivered":"created"),
       why:sh?"対象外":!mp?"対応表に未登録":(tk==null)?"単価マスタに該当なし"
-        :(betsu&&!fr&&!(aj&&aj.freight!=null))?"運賃マスタに該当なし":""});
-  });
-  SRCB.forEach(r=>{
-    const d=parseDate(r.date); if(!d) return;
-    const key=d.toDateString(); bq[key]=(bq[key]||0)+1;
-    const _pno=r.no||txNo("P",d,bq[key]), aj=OPS.adj[_pno]||null;
-    const cs=numOr(aj&&aj.qty,parseFloat(r.cs)||0), kg=numOr(aj&&aj.kg,parseFloat(r.kg)||0);
-    const cap=parseFloat(r.size);
-    const sh=SHANAI.has(r.seisansha);
-    const hit=sh?null:lookup("仕入",r.seisansha,r.kubun,cap,d);
-    const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
-    const ku=(aj&&aj.unit)?aj.unit:(hit?hit.unit:"円/kg");
-    const kin=tk!=null?tk*(ku==="円/kg"?kg:cs):null;
-    const isOut=CFG.price.some(p=>p.kind==="対象外"&&N(p.t)===N(r.seisansha)&&N(p.item)===N(r.kubun));
-    TX.push({kind:"buy",no:_pno,date:d,deliv:d,customer:"",supplier:r.seisansha,edited:!!aj,memo:aj?(aj.memo||""):"",
-      sanchi:"熊本",item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
-      cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:tk,
-      kunit:tk!=null?ku:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
-      shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
-      why:(sh||isOut)?"買取の対象外":(tk==null)?"買取単価が未設定":""});
-  });
-  fillYM(); render();
+        :(betsu&&!fr&&!(aj&&aj.freight!=null))?"運賃マスタに該当なし":""};
 }
 function fillYM(){
   const set=new Set(TX.filter(t=>!t.shanai).map(t=>t.y+"/"+t.m));
@@ -1552,6 +1612,256 @@ function render(){
     drawBuyList(); showBuy(b.dataset.buy);});
 
   drawTx(); drawDv(); drawInvList(); drawBuyList();
+}
+
+// ============================================================
+//  分析タブ（2026-10-22 追加）
+//    見るだけのページです。請求書にも売上にも、何も書きません。
+//    実績 … 取り込みずみの取引（TX）。請求書と同じ計算を通っています。
+//    予定 … 発注書の明日以降（TXP）。単価も運賃も実績と同じ引き方です。
+//  売上は「商品の金額＋送料」で、ダッシュボードの受注合計と同じ数え方です。
+//  1kgあたりの平均単価だけは、送料を入れずに「商品の金額 ÷ kg」で出します。
+// ============================================================
+let BZ_MODE="sell";                      // sell=販売先ごと / tori=取引先ごと
+const bzOK=t=>t.kind==="sale"&&!t.shanai&&!isFune(t)&&t.shohin!=null;
+const bzKg=t=>(t.cap>0?t.cap:0)*(t.qty||0);
+const BZ_LG='<div class="bz-lg"><span><s style="background:var(--or)"></s>実績</span>'
+  +'<span><s style="background:#BFE2F1"></s>予定（発注書の明日以降）</span></div>';
+
+// 1億2,345万 のように読みやすくする
+function bzMan(n){
+  if(n==null) return "-";
+  const a=Math.abs(n);
+  if(a>=1e8) return (Math.round(n/1e6)/100).toFixed(2)+"億";
+  if(a>=1e4) return Math.round(n/1e4).toLocaleString("ja-JP")+"万";
+  return yen(n);
+}
+// 横棒。予定を先に長く描いて、その上に実績を重ねます
+function bzBar(a,p,max){
+  const w=x=>(max>0&&x>0)?Math.max(0.6,x/max*100):0;
+  return '<div class="bz-bar"><i class="p" style="width:'+w(a+p).toFixed(2)+'%"></i>'
+    +'<i class="a" style="width:'+w(a).toFixed(2)+'%"></i></div>';
+}
+const bzEl=id=>document.getElementById(id);
+
+function drawBunseki(){
+  const act=TX.filter(bzOK), pl=TXP.filter(bzOK);
+  bzNoteDraw(act,pl); bzKpiDraw(act,pl); bzKubunDraw(act,pl);
+  bzCumDraw(act,pl); bzRankDraw(act,pl); bzTankaDraw(act,pl);
+}
+
+// ---------- 注意書き ----------
+function bzNoteDraw(act,pl){
+  const out=[];
+  if(!TXP.length) out.push('<div class="note">まだ<b>予定</b>が入っていません。'
+    +'共有データベースの Apps Script で <b>pullHachu</b> を実行すると、'
+    +'発注書の明日以降を読み込んで、薄い色のぶんが出るようになります。</div>');
+  const plNG=TXP.filter(t=>t.shohin==null).length;
+  if(plNG) out.push('<div class="note">予定のうち <b>'+plNG+'行</b> は単価が引けなかったので、'
+    +'金額に入れていません（数量だけの行です）。単価マスタの期間を伸ばすと入ります。</div>');
+  const noCap=act.filter(t=>!(t.cap>0)).length;
+  if(noCap) out.push('<div class="note">実績のうち <b>'+noCap+'行</b> は容量（1ケース何kg）が'
+    +'発注書に入っていないため、kgと平均単価の計算から外しています。</div>');
+  bzEl("bzNote").innerHTML=out.join("");
+}
+
+// ---------- 上の数字 ----------
+function bzKpiDraw(act,pl){
+  const sA=act.reduce((s,t)=>s+(t.sale||0),0), sP=pl.reduce((s,t)=>s+(t.sale||0),0);
+  const kA=act.reduce((s,t)=>s+bzKg(t),0), kP=pl.reduce((s,t)=>s+bzKg(t),0);
+  const shA=act.filter(t=>t.cap>0).reduce((s,t)=>s+(t.shohin||0),0);
+  const kOk=act.filter(t=>t.cap>0).reduce((s,t)=>s+bzKg(t),0);
+  const kpi=(cls,l,v,sub)=>'<div class="kpi '+cls+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'
+    +(sub?'<div class="bz-sub">'+sub+'</div>':'')+'</div>';
+  bzEl("bzKpi").innerHTML=
+     kpi("sale","売上　実績（税抜）","¥"+yen(sA),act.length+"件　"+bzMan(sA)+"円")
+    +kpi("","売上　予定（明日以降）",sP?"¥"+yen(sP):"—",pl.length?pl.length+"件　"+bzMan(sP)+"円":"予定なし")
+    +kpi("gp","シーズン見通し（実績＋予定）","¥"+yen(sA+sP),bzMan(sA+sP)+"円")
+    +kpi("buy","数量　実績",""+yen(kA)+" kg",kP?"予定 "+yen(kP)+" kg":"")
+    +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg");
+  bzEl("bzHead").textContent=act.length+"件の実績"+(pl.length?"／"+pl.length+"件の予定":"");
+}
+
+// ---------- 区分別 ----------
+function bzKubunDraw(act,pl){
+  const g={},ord=[];
+  const get=k=>{ if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0}; ord.push(k); } return g[k]; };
+  act.forEach(t=>{ const a=get(t.kubun||"（区分なし）");
+    a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
+    if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); } });
+  pl.forEach(t=>{ const a=get(t.kubun||"（区分なし）"); a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; });
+  if(!ord.length){ bzEl("bzKubun").innerHTML='<p class="hint">まだデータがありません。</p>'; return; }
+  ord.sort((x,y)=>(g[y].aY+g[y].pY)-(g[x].aY+g[x].pY));
+  const max=Math.max.apply(null,ord.map(k=>g[k].aY+g[k].pY));
+  let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0};
+  ord.forEach(k=>{ const v=g[k];
+    for(const f in T) T[f]+=v[f];
+    rows+='<tr><td><b>'+esc(k)+'</b><div class="bz-sub">'+v.n+'件'
+      +(v.pn?'　＋予定 '+v.pn+'件':'')+'</div></td>'
+      +'<td style="width:28%">'+bzBar(v.aY,v.pY,max)+'</td>'
+      +'<td class="num">'+yen(v.aY)+'</td>'
+      +'<td class="num">'+(v.pY?yen(v.pY):"—")+'</td>'
+      +'<td class="num"><b>'+yen(v.aY+v.pY)+'</b></td>'
+      +'<td class="num">'+yen(v.aK)+'</td>'
+      +'<td class="num">'+(v.pK?yen(v.pK):"—")+'</td>'
+      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td></tr>'; });
+  rows+='<tr class="total"><td>合計</td><td></td><td class="num">'+yen(T.aY)+'</td>'
+    +'<td class="num">'+(T.pY?yen(T.pY):"—")+'</td><td class="num"><b>'+yen(T.aY+T.pY)+'</b></td>'
+    +'<td class="num">'+yen(T.aK)+'</td><td class="num">'+(T.pK?yen(T.pK):"—")+'</td>'
+    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td></tr>';
+  bzEl("bzKubun").innerHTML=BZ_LG+'<div class="scroll" style="max-height:52vh">'
+    +'<table class="bz"><thead><tr><th>区分</th><th>グラフ</th>'
+    +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
+    +'<th class="num">kg 実績</th><th class="num">kg 予定</th><th class="num">円/kg</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+// ---------- シーズンはじめからの累計 ----------
+function bzCumDraw(act,pl){
+  const all=act.concat(pl);
+  if(!all.length){ bzEl("bzCum").innerHTML='<p class="hint">まだデータがありません。</p>';
+    bzEl("bzCumHead").textContent=""; return; }
+  const t0=Math.min.apply(null,all.map(t=>+t.date)), t1=Math.max.apply(null,all.map(t=>+t.date));
+  const d0=new Date(t0); d0.setHours(0,0,0,0);
+  const d1=new Date(t1); d1.setHours(0,0,0,0);
+  const day={};
+  all.forEach(t=>{ const k=ymdOf(t.date); day[k]=(day[k]||0)+(t.sale||0); });
+  // 1日ずつ足していきます（今日までが実績、今日からが予定）
+  const seq=[]; let cum=0;
+  for(let d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){
+    cum+=(day[ymdOf(d)]||0);
+    seq.push({d:new Date(d), v:cum});
+  }
+  const n=seq.length, maxY=cum||1;
+  const W=960,H=300,L=86,R=16,T=14,B=40;
+  const X=i=>L+(n<2?0:i/(n-1))*(W-L-R);
+  const Y=v=>H-B-(v/maxY)*(H-B-T);
+  // 今日の位置
+  let iToday=-1;
+  for(let i=0;i<n;i++){ if(seq[i].d<=TODAY) iToday=i; }
+  if(iToday<0) iToday=0;
+  const seg=(a,b)=>seq.slice(a,b+1).map((p,j)=>X(a+j).toFixed(1)+","+Y(p.v).toFixed(1)).join(" ");
+  const area=(a,b)=>'M'+X(a).toFixed(1)+','+(H-B)+' L'+seg(a,b).replace(/ /g," L")
+    +' L'+X(b).toFixed(1)+','+(H-B)+' Z';
+  let g="";
+  for(let s=0;s<=4;s++){ const v=maxY*s/4, y=Y(v);
+    g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-R)+'" y2="'+y.toFixed(1)
+      +'" stroke="#EEE"/><text x="'+(L-8)+'" y="'+(y+4).toFixed(1)
+      +'" text-anchor="end" font-size="11" fill="#999">'+bzMan(v)+'</text>'; }
+  let xl="";
+  for(let i=0;i<n;i++){ if(seq[i].d.getDate()!==1&&i!==0) continue;
+    xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-B+16)+'" text-anchor="middle" font-size="11" fill="#999">'
+      +(seq[i].d.getMonth()+1)+'月</text>'; }
+  const vA=seq[iToday].v, vT=cum;
+  const svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'
+    +g+xl
+    +'<path d="'+area(0,iToday)+'" fill="#0F7FA8" opacity="0.10"/>'
+    +(iToday<n-1?'<path d="'+area(iToday,n-1)+'" fill="#0F7FA8" opacity="0.04"/>':'')
+    +(iToday<n-1?'<polyline points="'+seg(iToday,n-1)+'" fill="none" stroke="#BFE2F1" stroke-width="3"/>':'')
+    +'<polyline points="'+seg(0,iToday)+'" fill="none" stroke="#0F7FA8" stroke-width="2.4"/>'
+    +'<line x1="'+X(iToday).toFixed(1)+'" y1="'+T+'" x2="'+X(iToday).toFixed(1)+'" y2="'+(H-B)
+    +'" stroke="#DC3545" stroke-dasharray="4 3"/>'
+    +'<circle cx="'+X(iToday).toFixed(1)+'" cy="'+Y(vA).toFixed(1)+'" r="4" fill="#0F7FA8"/>'
+    +'<text x="'+Math.min(W-R-4,X(iToday)+8).toFixed(1)+'" y="'+Math.max(T+12,Y(vA)-10).toFixed(1)
+    +'" font-size="12" font-weight="bold" fill="#0F7FA8">今日 '+bzMan(vA)+'円</text>'
+    +(iToday<n-1?'<circle cx="'+X(n-1).toFixed(1)+'" cy="'+Y(vT).toFixed(1)+'" r="4" fill="#7FBEDB"/>'
+      +'<text x="'+(W-R)+'" y="'+Math.max(T+12,Y(vT)-10).toFixed(1)
+      +'" text-anchor="end" font-size="12" fill="#5A9FBF">見通し '+bzMan(vT)+'円</text>':'')
+    +'<line x1="'+L+'" y1="'+(H-B)+'" x2="'+(W-R)+'" y2="'+(H-B)+'" stroke="#CCC"/>'
+    +'</svg>';
+  bzEl("bzCum").innerHTML=BZ_LG+svg
+    +'<p class="hint">赤い点線が今日です。左が実績、右が発注書に入っている予定です。'
+    +'日付は<b>出荷日</b>（発注書の日付）でならべています。</p>';
+  bzEl("bzCumHead").textContent="（"+fmtY(d0)+" 〜 "+fmtY(d1)+"）";
+}
+
+// ---------- 販売先ごと／取引先ごと ----------
+function bzRankDraw(act,pl){
+  const bs=bzEl("bzBySell"), bt=bzEl("bzByTori");
+  bs.className="btn sm"+(BZ_MODE==="sell"?"":" sub");
+  bt.className="btn sm"+(BZ_MODE==="tori"?"":" sub");
+  const key=t=>BZ_MODE==="sell"?(t.sell||"（名前なし）"):(t.priceKey||"（対応表に未登録）");
+  const g={},ord=[];
+  const get=k=>{ if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0}; ord.push(k); } return g[k]; };
+  act.forEach(t=>{ const a=get(key(t)); a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
+    if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); } });
+  pl.forEach(t=>{ const a=get(key(t)); a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; });
+  if(!ord.length){ bzEl("bzRank").innerHTML='<p class="hint">まだデータがありません。</p>'; return; }
+  ord.sort((x,y)=>(g[y].aY+g[y].pY)-(g[x].aY+g[x].pY));
+  const max=g[ord[0]].aY+g[ord[0]].pY;
+  let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0};
+  ord.forEach((k,i)=>{ const v=g[k];
+    for(const f in T) T[f]+=v[f];
+    rows+='<tr><td class="num" style="color:#AAA">'+(i+1)+'</td>'
+      +'<td><b>'+esc(k)+'</b><div class="bz-sub">'+v.n+'件'+(v.pn?'　＋予定 '+v.pn+'件':'')+'</div></td>'
+      +'<td style="width:24%">'+bzBar(v.aY,v.pY,max)+'</td>'
+      +'<td class="num">'+yen(v.aY)+'</td>'
+      +'<td class="num">'+(v.pY?yen(v.pY):"—")+'</td>'
+      +'<td class="num"><b>'+yen(v.aY+v.pY)+'</b></td>'
+      +'<td class="num">'+yen(v.aK)+'</td>'
+      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td></tr>'; });
+  rows+='<tr class="total"><td></td><td>合計 '+ord.length+'先</td><td></td>'
+    +'<td class="num">'+yen(T.aY)+'</td><td class="num">'+(T.pY?yen(T.pY):"—")+'</td>'
+    +'<td class="num"><b>'+yen(T.aY+T.pY)+'</b></td><td class="num">'+yen(T.aK)+'</td>'
+    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td></tr>';
+  bzEl("bzRank").innerHTML=BZ_LG+'<div class="scroll" style="max-height:60vh">'
+    +'<table class="bz"><thead><tr><th></th><th>'
+    +(BZ_MODE==="sell"?"販売先（発注書の行先）":"取引先（単価マスタ）")+'</th><th>グラフ</th>'
+    +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
+    +'<th class="num">kg 実績</th><th class="num">円/kg</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+// ---------- 1kgあたりの平均単価 ----------
+function bzTankaDraw(act,pl){
+  // 月は請求年月（ダッシュボードの月と同じ）でまとめます
+  const g={},ord=[];
+  const get=k=>{ if(!g[k]){ g[k]={sh:0,kg:0,bSh:0,bKg:0,cSh:0,cKg:0,plan:0,pSh:0,pKg:0}; ord.push(k); } return g[k]; };
+  const put=(t,isPlan)=>{
+    if(!(t.cap>0)) return;
+    const a=get(t.y+"/"+p2(t.m)), kg=bzKg(t), sh=t.shohin||0;
+    if(isPlan){ a.pSh+=sh; a.pKg+=kg; a.plan=1; return; }
+    a.sh+=sh; a.kg+=kg;
+    if(t.soryoKbn==="送料別"){ a.bSh+=sh; a.bKg+=kg; } else { a.cSh+=sh; a.cKg+=kg; }
+  };
+  act.forEach(t=>put(t,false)); pl.forEach(t=>put(t,true));
+  if(!ord.length){ bzEl("bzTanka").innerHTML='<p class="hint">まだデータがありません。</p>'; return; }
+  ord.sort();
+  const av=(s,k)=>k>0?"¥"+yen(s/k):"—";
+  let rows="",T={sh:0,kg:0,bSh:0,bKg:0,cSh:0,cKg:0,pSh:0,pKg:0};
+  ord.forEach(k=>{ const v=g[k], [y,m]=k.split("/");
+    for(const f in T) T[f]+=v[f];
+    const act1=v.kg>0;
+    rows+='<tr'+(act1?'':' class="plan"')+'><td><b>'+y+'年'+m+'月</b>'
+      +(act1?'':'<div class="bz-sub">予定</div>')+'</td>'
+      +'<td class="num">'+(act1?yen(v.sh):"—")+'</td>'
+      +'<td class="num">'+(act1?yen(v.kg):"—")+'</td>'
+      +'<td class="num"><b>'+av(v.sh,v.kg)+'</b></td>'
+      +'<td class="num">'+(v.bKg?yen(v.bKg):"—")+'</td>'
+      +'<td class="num">'+av(v.bSh,v.bKg)+'</td>'
+      +'<td class="num">'+(v.cKg?yen(v.cKg):"—")+'</td>'
+      +'<td class="num">'+av(v.cSh,v.cKg)+'</td>'
+      +'<td class="num" style="color:#7FA3B4">'+(v.pKg?yen(v.pKg)+' kg<br>'+av(v.pSh,v.pKg):"—")+'</td>'
+      +'</tr>'; });
+  rows+='<tr class="total"><td>年間（実績）</td>'
+    +'<td class="num">'+yen(T.sh)+'</td><td class="num">'+yen(T.kg)+'</td>'
+    +'<td class="num"><b>'+av(T.sh,T.kg)+'</b></td>'
+    +'<td class="num">'+yen(T.bKg)+'</td><td class="num">'+av(T.bSh,T.bKg)+'</td>'
+    +'<td class="num">'+yen(T.cKg)+'</td><td class="num">'+av(T.cSh,T.cKg)+'</td>'
+    +'<td class="num" style="color:#7FA3B4">'+(T.pKg?yen(T.pKg)+' kg<br>'+av(T.pSh,T.pKg):"—")+'</td></tr>'
+    +'<tr class="total"><td>年間（実績＋予定）</td>'
+    +'<td class="num">'+yen(T.sh+T.pSh)+'</td><td class="num">'+yen(T.kg+T.pKg)+'</td>'
+    +'<td class="num"><b>'+av(T.sh+T.pSh,T.kg+T.pKg)+'</b></td>'
+    +'<td class="num" colspan="5" style="color:#999">※ 予定は発注書の数量と単価マスタで計算した見通しです</td></tr>';
+  bzEl("bzTanka").innerHTML='<div class="scroll" style="max-height:60vh">'
+    +'<table class="bz"><thead>'
+    +'<tr><th rowspan="2">月</th><th class="num" colspan="3">ぜんぶ（実績）</th>'
+    +'<th class="num" colspan="2">うち 送料別</th><th class="num" colspan="2">うち 送料込み</th>'
+    +'<th class="num" rowspan="2">予定</th></tr>'
+    +'<tr><th class="num">商品金額</th><th class="num">kg</th><th class="num">円/kg</th>'
+    +'<th class="num">kg</th><th class="num">円/kg</th>'
+    +'<th class="num">kg</th><th class="num">円/kg</th></tr>'
+    +'</thead><tbody>'+rows+'</tbody></table></div>';
 }
 const fmt=d=>d?(d.getMonth()+1)+"/"+d.getDate():"";
 const fmtY=d=>d?d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate():"";
@@ -4631,9 +4941,13 @@ TABS.forEach(([id,label],i)=>{
   b.onclick=()=>{document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));
     document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
     b.classList.add("active"); document.getElementById(id).classList.add("active");
-    document.getElementById("ymBox").style.display=(id==="dashboard")?"":"none";};
+    document.getElementById("ymBox").style.display=(id==="dashboard")?"":"none";
+    if(id==="bunseki") drawBunseki();};
   nav.appendChild(b);});
 document.getElementById("ym").onchange=render;
+bzEl("bzRe").onclick=drawBunseki;
+bzEl("bzBySell").onclick=()=>{BZ_MODE="sell";drawBunseki();};
+bzEl("bzByTori").onclick=()=>{BZ_MODE="tori";drawBunseki();};
 document.getElementById("btnFullExport").onclick=fullExport;
 ["syncUrl","syncCode"].forEach(id=>{ const el=document.getElementById(id);
   el.value=CFG[id]||"";
@@ -4703,7 +5017,8 @@ document.getElementById("buySei").onchange=drawBuyList;
 // ===== 起動 =====
 let iA=DATA.sample,iB=DATA.prod;
 try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
-    const b=localStorage.getItem(ROWB_KEY); if(b) iB=JSON.parse(b);}catch(e){}
+    const b=localStorage.getItem(ROWB_KEY); if(b) iB=JSON.parse(b);
+    const p=localStorage.getItem(ROWP_KEY); if(p) SRCP=JSON.parse(p);}catch(e){}
 document.getElementById("verLabel").textContent=new Date().toISOString().slice(0,10)+" 版";
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
