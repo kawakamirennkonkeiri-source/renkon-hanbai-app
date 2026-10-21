@@ -1427,6 +1427,7 @@ function build(sale,buy){
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
       priceItem:(aj&&aj.item)?aj.item:(hit?hit.item:(mp?mp.item:"")),
       qty:cs,unitLabel:"c/s",tanka:tk,edited:!!aj,memo:aj?(aj.memo||""):"",
+      note:aj?(aj.note||""):"",          // 請求書の明細に出る備考（先方の伝票番号など）
       soryoKbn:hit?(hit.soryo||"送料込み"):"",
       carrier:(fr||lead||frow)?((fr||lead||frow).carrier||""):"",
       hai:(fr||lead||frow)?((fr||lead||frow).hai||"自社"):"",
@@ -1717,7 +1718,9 @@ function openTxEditor(no, after){
       +'<label>届け先の都道府県<select id="ed_pref"><option value=""></option>'
       +PREF_LIST.map(p=>'<option'+(a.pref===p?" selected":"")+'>'+p+'</option>').join("")
       +'</select><span class="was">'+esc(t.frNote||"宅配便のときだけ使います")+'</span></label>'
-      +'<label>納品（店着）日<input id="ed_deliv" type="date" value="'+v("deliv",ymdOf(t.deliv))+'"><span class="was">いま：'+esc(t.delivSrc||"")+'</span></label>';
+      +'<label>納品（店着）日<input id="ed_deliv" type="date" value="'+v("deliv",ymdOf(t.deliv))+'"><span class="was">いま：'+esc(t.delivSrc||"")+'</span></label>'
+      +'<label>備考（請求書に出ます）<input id="ed_note" value="'+v("note","")+'">'
+      +'<span class="was">先方の伝票番号など。空欄なら請求書に備考の欄は出ません</span></label>';
   }else{
     h+='<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"></label>'
       +'<label>数量（kg）<input id="ed_kg" inputmode="decimal" value="'+v("kg",t.kg)+'"></label>'
@@ -1757,6 +1760,9 @@ function openTxEditor(no, after){
       if(a.kg==null&&n.kg!=null&&n.kg===t.kg) delete n.kg;
       const u=md.querySelector("#ed_unit").value; if(a.unit||u!==(t.kunit||"円/kg")) n.unit=u;
     }
+    // 備考は「社内用（memo）」と「請求書に出る（note）」で分けています。
+    //   修正の理由をお客様に見せないためです。
+    if(sale){ const nt=md.querySelector("#ed_note").value.trim(); if(nt) n.note=nt; }
     const memo=md.querySelector("#ed_memo").value.trim(); if(memo) n.memo=memo;
     const changed=Object.keys(n).length>0;
     if(changed){ n.at=nowStr(); n.by=CFG.userName||""; OPS.adj[no]=n; }
@@ -1876,7 +1882,8 @@ function openInvEditor(k){
     +'<div class="grid"><label>件名<input id="iv_sub" value="'+esc(hd.subject||defSub)+'"></label></div>'
     +'<h4 style="margin:14px 0 6px;font-size:13px">明細</h4><div class="scroll" style="max-height:38vh"><table><thead><tr>'
     +'<th>納品日</th><th>取引No.</th><th style="width:28%">品名</th><th class="num" style="width:9%">数量c/s</th>'
-    +'<th class="num" style="width:11%">単価</th><th class="num" style="width:10%">送料</th><th class="num">金額(税抜)</th></tr></thead><tbody>'
+    +'<th class="num" style="width:11%">単価</th><th class="num" style="width:10%">送料</th><th class="num">金額(税抜)</th>'
+    +'<th style="width:15%">備考<br><span style="font-weight:400;font-size:10px;opacity:.85">請求書に出ます</span></th></tr></thead><tbody>'
     +rows.map((t,i)=>'<tr data-r="'+i+'"><td>'+fmtY(t.deliv)+'</td>'
       +'<td style="font-family:Consolas,monospace;font-size:11px">'+esc(t.no)+edBadge(t)+'</td>'
       +'<td><input data-f="item" value="'+esc(t.priceItem||"")+'"></td>'
@@ -1884,7 +1891,8 @@ function openInvEditor(k){
       +'<td><input class="n" data-f="tanka" inputmode="decimal" value="'+esc(t.tanka==null?"":t.tanka)+'"'
         +(t.tanka==null?' style="background:#FFF4DB" placeholder="単価なし"':'')+'></td>'
       +'<td><input class="n" data-f="freight" inputmode="decimal" value="'+esc(t.freight||0)+'"></td>'
-      +'<td class="num" data-amt></td></tr>').join("")
+      +'<td class="num" data-amt></td>'
+      +'<td><input data-f="note" value="'+esc(t.note||"")+'" placeholder="先方の伝票No など"></td></tr>').join("")
     +'</tbody></table></div>'
     +'<h4 style="margin:14px 0 6px;font-size:13px">追加する行（値引き・調整など）</h4>'
     +'<table id="iv_ex"><thead><tr><th style="width:26%">品名</th><th class="num" style="width:8%">数量</th>'
@@ -1938,7 +1946,7 @@ function openInvEditor(k){
     const bad=[], plan=[];
     rows.forEach((t,i)=>{
       const tr=md.querySelector('tr[data-r="'+i+'"]'), a=OPS.adj[t.no]||{};
-      const n=Object.assign({},a); ["item","qty","tanka","freight","at","by"].forEach(x=>delete n[x]);
+      const n=Object.assign({},a); ["item","qty","tanka","freight","note","at","by"].forEach(x=>delete n[x]);
       [["qty",t.qty],["tanka",t.tanka],["freight",t.freight||0]].forEach(([f,cur])=>{
         const x=numIn(fv(tr,f));
         if(Number.isNaN(x)){ bad.push(t.no+" の"+({qty:"数量",tanka:"単価",freight:"送料"})[f]); return; }
@@ -1946,6 +1954,7 @@ function openInvEditor(k){
         if(x!=null&&(a[f]!=null||x!==cur)) n[f]=x;
       });
       const it=fv(tr,"item").trim(); if(it&&(a.item||it!==t.priceItem)) n.item=it;
+      const nt=fv(tr,"note").trim(); if(nt) n.note=nt;
       plan.push([t.no,n]);
     });
     const exOut=[];
@@ -2791,7 +2800,8 @@ function drawInvList(){
         return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td>'
           +'<td class="num">¥'+yen(gp.rows.reduce((a,t)=>a+(Number(t.sale)||0),0))+'</td></tr>':'')
           +gp.rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)
-        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+edBadge(t)+'</td>'
+        +'</td><td>'+t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+edBadge(t)
+        +(t.note?'<div style="font-size:11px;color:#0F7FA8">備考：'+esc(t.note)+'</div>':'')+'</td>'
         +'<td class="num">'+(t.tanka==null?'<span style="color:#C62828">要確認</span>':'¥'+yen(t.tanka))+'</td>'+'<td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
         +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
         +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")).join(""); })()
@@ -3832,17 +3842,20 @@ function buildInvoiceHtml(inv){
   const p=inv.partner||{};
   // 販売先が変わったところで見出しを入れる（2つ以上あるときだけ）
   const sells=[...new Set(inv.lines.map(l=>String(l.sell||"")).filter(Boolean))];
+  // 備考が1つも入っていない請求書では、備考の列そのものを出しません。
+  const hasNote=inv.lines.some(l=>String(l.note||"").trim());
   let last="";
   const rows=inv.lines.map(l=>{
     let head="";
     const sl=String(l.sell||"");
     // 【サンプル】のようなまとまりの見出しには「様」を付けません。
     if(sells.length>1&&sl&&sl!==last){
-      head='<tr><td colspan="6" class="grp">'+esc2(sl)+(sl.charAt(0)==="【"?"":"　様")+'</td></tr>'; last=sl;
+      head='<tr><td colspan="'+(hasNote?7:6)+'" class="grp">'+esc2(sl)+(sl.charAt(0)==="【"?"":"　様")+'</td></tr>'; last=sl;
     }
     return head+'<tr><td>'+esc2(l.date||"")+'</td><td>'+esc2(l.tekiyo)+'</td>'
     +'<td class="n">'+yen(l.tanka)+'</td>'
-    +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.amount)+'</td></tr>';
+    +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.amount)+'</td>'
+    +(hasNote?'<td>'+esc2(l.note||"")+'</td>':'')+'</tr>';
   }).join("");
   return docHead("請求書 "+inv.invoiceNo)
     +'<div class="ttl">請 求 書</div><div class="top"><div class="to">'
@@ -3857,7 +3870,8 @@ function buildInvoiceHtml(inv){
     +'<div class="sub">お支払期日：'+esc2(inv.dueDate)+'<br>'+esc2(CO().bank||"")+'</div></div>'
     +'<h2>内訳</h2><table><thead><tr><th style="width:16mm">納品日</th><th>品名</th>'
     +'<th class="n">単価</th>'
-    +'<th class="n">数量</th><th>単位</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<th class="n">数量</th><th>単位</th><th class="n">金額</th>'
+    +(hasNote?'<th style="width:26mm">備考</th>':'')+'</tr></thead><tbody>'+rows+'</tbody></table>'
     +sumTable(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total)
     +'<div class="note">'+(inv.memo?esc2(inv.memo).replace(/\n/g,"<br>")+'<br>':'')
     +'※印は軽減税率対象です。</div></body></html>';
@@ -4089,7 +4103,8 @@ async function issueInvoice_run(custKey){
     const d=t.deliv||t.date;                       // 明細に出すのは納品（店着）日
     const dt=(d.getMonth()+1)+"/"+d.getDate();
     lines.push({txNo:t.no, date:dt, sell:t.sell||"", tekiyo:invItem(t)+" ※",
-        qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin, kind:"shohin"});
+        qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin, kind:"shohin",
+        note:t.note||""});
     if(t.freight) lines.push({txNo:t.no, date:dt, sell:t.sell||"", tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
         qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
   });
