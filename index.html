@@ -3886,23 +3886,29 @@ function drawQt(){
 function buildQuoteHtml(q){
   const p=q.partner||{};
   const rows=q.lines.map(l=>'<tr><td>'+esc2(l.item)+(l.tax==="10%"?"":" ※")+'</td>'
-    +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td>'
+    +'<td class="n">'+yen(l.qty)+' '+esc2(l.unit)+'</td>'
     +'<td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
-  return docHead("見積書 "+q.quoteNo)
-    +'<div class="ttl">御 見 積 書</div><div class="top"><div class="to">'
-    +'<span class="nm">'+esc2(p.name||q.customer)+'　御中</span>'
-    +(p.zip||p.addr?'<div class="ad">〒'+esc2(p.zip||"")+'　'+esc2(p.addr||"")
-      +(p.person?'　'+esc2(p.person)+' 様':'')+'</div>':'')
-    +'<div class="meta">件名：'+esc2(q.subject||"お見積り")+'<br>'
-    +'見積書番号：'+esc2(q.quoteNo)+'<br>見積日：'+esc2(q.date)
-    +(q.valid?'<br>有効期限：'+esc2(q.valid):'')+'</div></div>'+meBlock()+'</div>'
-    +'<div class="box"><div class="lbl">お見積金額（税込）</div>'
-    +'<div class="amt">￥ '+yen(q.total)+' －</div></div>'
-    +'<h2>内訳</h2><table><thead><tr><th>品名</th><th class="n">数量</th><th>単位</th>'
-    +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +sumTable(q.s8, q.t8, q.s10, q.t10, q.total)
-    +'<div class="note">※印は軽減税率対象です。'
-    +(q.memo?'<br>'+esc2(q.memo).replace(/\n/g,"<br>"):'')+'</div></body></html>';
+  const pad=Math.max(0, 10-q.lines.length);
+  return docHead("見積書 "+q.quoteNo,"fr")
+    +'<div class="ttl">御見積書</div><div class="top">'
+    +frTo(p,q.customer)
+    +frHead([["見積日",q.date],["見積書番号",q.quoteNo],
+             ["有効期限",q.valid||""],["登録番号",regNoOf()]])
+    +'</div>'
+    +'<div class="lead">下記の通りお見積り申し上げます。</div>'
+    +'<div class="subj"><b>件名</b>'+esc2(q.subject||"お見積り")+'</div>'
+    // 上の金額の枠は出しません（2026-10-24 社長指示）。
+    //   金額は明細の右下の「内訳」で見ていただきます。
+    +'<table class="dt"><thead><tr><th>摘要</th>'
+    +'<th class="n" style="width:20mm">数量</th>'
+    +'<th class="n" style="width:24mm">単価</th>'
+    +'<th class="n" style="width:28mm">明細金額</th></tr></thead><tbody>'
+    +rows+frPad(pad,3)+'</tbody></table>'
+    +'<div class="foot"><div class="kgn">※印は軽減税率対象です。</div>'
+    +frUchi(q.s8, q.t8, q.s10, q.t10, q.total, true)+'</div>'
+    +'<div class="bik"><div class="l">備考</div>'
+    +(q.memo?esc2(q.memo).replace(/\n/g,"<br>"):'')+'</div>'
+    +'</body></html>';
 }
 function nextQuoteNo(){
   const d=new Date(), pre="EST-"+d.getFullYear()+p2(d.getMonth()+1)+"-";
@@ -4132,7 +4138,50 @@ td.n,th.n{text-align:right}
 .sum table{width:78mm}
 .sum td{border:0;border-bottom:.5pt solid #ccc;padding:1.4mm 2mm}
 .sum tr.t td{border-top:1.2pt solid #000;border-bottom:0;font-weight:bold;font-size:11pt;padding-top:2mm}
-.note{margin-top:5mm;font-size:8.5pt;line-height:1.7}`;
+.note{margin-top:5mm;font-size:8.5pt;line-height:1.7}
+
+/* ===== ここから下は freee の体裁に合わせた請求書・見積書だけで使います =====
+   （2026-10-24 社長指示。freeeで発行した請求書のPDFに合わせました）
+   納品書・買取書は上のままなので、ここを触っても変わりません。 */
+body.fr{padding:13mm 14mm;font-size:10.5pt}
+.fr .ttl{font-size:17pt;letter-spacing:0;text-indent:0;margin:1mm 0 5mm}
+.fr .top{align-items:flex-start}
+.fr .to .nm{font-size:14pt;border-bottom:0;padding-bottom:0}
+.fr .to .ad{font-size:9.5pt;margin-top:1.5mm;line-height:1.65}
+.fr .to .pn{font-size:10.5pt;margin-top:7mm}
+.fr .rt{width:76mm}
+.fr .rt table{width:100%;border-collapse:collapse;font-size:9.5pt}
+.fr .rt td{border:0;padding:.9mm 0;background:none}
+.fr .rt td.n{text-align:right}
+.fr .me{width:auto;margin-top:6mm;font-size:9.5pt;line-height:1.7}
+.fr .me .nm{font-size:13pt;font-weight:bold;letter-spacing:.05em;margin-bottom:1mm}
+.fr .lead{margin:4mm 0 2.5mm;font-size:10pt}
+.fr .subj{margin:0 0 3mm;font-size:12pt}
+.fr .subj b{font-weight:bold;margin-right:9mm}
+.fr table.amt{width:auto;border-collapse:collapse;margin:0 0 2.5mm}
+.fr table.amt th{background:#fff;border:.7pt solid #333;padding:1.2mm 4mm;
+  font-size:9.5pt;font-weight:normal;text-align:center}
+.fr table.amt td{border:.7pt solid #333;padding:1.4mm 4mm;font-size:10.5pt;text-align:right}
+.fr table.amt td.big{font-size:15pt;font-weight:bold}
+.fr table.amt td.l{text-align:left}
+.fr table.dt{margin-top:4mm}
+.fr table.dt th{background:#fff;border:.7pt solid #333;padding:1.2mm 2mm;
+  text-align:center;font-weight:normal}
+.fr table.dt td{border:.7pt solid #333;padding:1mm 2mm;height:3.8mm}
+.fr table.dt td.grp{background:#F4F4F4;font-weight:bold}
+.fr table.dt thead{display:table-header-group}
+.fr .foot{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:8mm;margin-top:2.5mm}
+.fr .kgn{font-size:8.5pt;padding-top:1.5mm;line-height:1.7}
+.fr .uch{border:.7pt solid #333;width:86mm}
+.fr .uch table{width:100%;border-collapse:collapse}
+.fr .uch td{border:0;padding:.8mm 3mm;font-size:10pt;background:none}
+.fr .uch td.s{font-size:8pt;padding-top:0;padding-bottom:1.4mm}
+.fr .uch td.n{text-align:right}
+.fr .uch tr.t td{border-top:.7pt solid #333;font-weight:bold}
+.fr .bik{border:.7pt solid #333;margin-top:5mm;padding:2mm 3.5mm;
+  min-height:10mm;font-size:9pt;line-height:1.7}
+.fr .bik .l{margin-bottom:1.5mm}`;
 
 // 黒板の販売先名が請求先取引先名と違うときだけ件名に出す
 function boardSubject(sells, partnerName, custKey){
@@ -4141,9 +4190,53 @@ function boardSubject(sells, partnerName, custKey){
     .filter(x=>KEYNAME(x)!==a&&KEYNAME(x)!==b);
   return l.join("・");
 }
-function docHead(title){
+function docHead(title,cls){
+  // cls に "fr" を渡すと、freee の体裁（請求書・見積書）になります。
+  //   納品書・買取書は今までどおりなので、引数なしで呼びます。
   return '<!doctype html><html lang="ja"><head><meta charset="UTF-8"><title>'+esc2(title)
-    +'</title><style>'+DOC_CSS+'</style></head><body>';
+    +'</title><style>'+DOC_CSS+'</style></head><body'+(cls?' class="'+cls+'"':'')+'>';
+}
+
+// freee と同じ「右上のならび」（請求日・番号・登録番号）と、その下の自社情報
+function frHead(rows){
+  const c=CO();
+  return '<div class="rt"><table>'
+    + rows.filter(r=>r&&r[1]).map(r=>'<tr><td>'+esc2(r[0])+'</td><td class="n">'
+        +esc2(r[1])+'</td></tr>').join("")
+    + '</table><div class="me"><div class="nm">'+esc2(c.name)+'</div>'
+    + (c.addr?'<div>'+esc2(c.addr)+'</div>':'')
+    + '</div></div>';
+}
+// freee と同じ宛名（社名／住所／担当者さま）
+function frTo(p,fallback){
+  return '<div class="to"><div class="nm">'+esc2((p&&p.name)||fallback)+'　御中</div>'
+    + ((p&&(p.zip||p.addr))?'<div class="ad">'+esc2(p.zip||"")
+        +(p.zip&&p.addr?'<br>':'')+esc2(p.addr||"")+'</div>':'')
+    + ((p&&p.person)?'<div class="pn">'+esc2(p.person)+'　様</div>':'')
+    + '</div>';
+}
+// 明細が少ないときは、freee と同じように空の行で枠を埋めます
+function frPad(n,cols){
+  let h="";
+  for(let i=0;i<n;i++){ h+='<tr>'; for(let j=0;j<cols;j++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
+  return h;
+}
+// freee と同じ右下の「内訳」。10%が先、軽減8%があと。
+//   請求書は上の枠が合計なので合計行を出しません（showTotal=false）。
+function frUchi(s8,t8,s10,t10,total,showTotal){
+  const tf=TF(), f8=Math.round(tf.food*100), f10=Math.round(tf.fre*100);
+  let h='<div class="uch"><table>';
+  let first=true;
+  const blk=(lbl,amt,sub,tax)=>{
+    h+='<tr><td>'+(first?'内訳':'')+'</td><td>'+lbl+'</td><td class="n">'+yen(amt)+'円</td></tr>'
+      +'<tr><td></td><td class="s">'+sub+'</td><td class="n s">'+yen(tax)+'円</td></tr>';
+    first=false;
+  };
+  if(s10) blk(f10+'%対象(税抜)', s10, f10+'%消費税', t10);
+  if(s8||!s10) blk('軽減税率'+f8+'%対象(税抜)', s8, '軽減税率'+f8+'%消費税', t8);
+  if(showTotal) h+='<tr class="t"><td></td><td>合計（税込）</td><td class="n">'
+    +yen(total)+'円</td></tr>';
+  return h+'</table></div>';
 }
 function meBlock(){
   const c=CO(), r=regNoOf();
@@ -4176,31 +4269,46 @@ function buildInvoiceHtml(inv){
     const sl=String(l.sell||"");
     // 【サンプル】のようなまとまりの見出しには「様」を付けません。
     if(sells.length>1&&sl&&sl!==last){
-      head='<tr><td colspan="'+(hasNote?7:6)+'" class="grp">'+esc2(sl)+(sl.charAt(0)==="【"?"":"　様")+'</td></tr>'; last=sl;
+      head='<tr><td colspan="'+(hasNote?5:4)+'" class="grp">'+esc2(sl)+(sl.charAt(0)==="【"?"":"　様")+'</td></tr>'; last=sl;
     }
-    return head+'<tr><td>'+esc2(l.date||"")+'</td><td>'+esc2(l.tekiyo)+'</td>'
-    +'<td class="n">'+yen(l.tanka)+'</td>'
-    +'<td class="n">'+yen(l.qty)+'</td><td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.amount)+'</td>'
+    // freee と同じで、日付は摘要のあたまに入れます（日付の列は作りません）
+    const tk=(l.date?l.date+"納品 ":"")+l.tekiyo;
+    return head+'<tr><td>'+esc2(tk)+'</td>'
+    +'<td class="n">'+yen(l.qty)+' '+esc2(l.unit)+'</td>'
+    +'<td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td>'
     +(hasNote?'<td>'+esc2(l.note||"")+'</td>':'')+'</tr>';
   }).join("");
-  return docHead("請求書 "+inv.invoiceNo)
-    +'<div class="ttl">請 求 書</div><div class="top"><div class="to">'
-    +'<span class="nm">'+esc2(p.name||inv.customer)+'　御中</span>'
-    +(p.zip||p.addr?'<div class="ad">〒'+esc2(p.zip||"")+'　'+esc2(p.addr||"")
-      +(p.person?'　'+esc2(p.person)+' 様':'')+'</div>':'')
-    +'<div class="meta">件名：'+esc2(inv.subject||(inv.targetMonth+" 分 ご請求"))+'<br>'
-    +'請求書番号：'+esc2(inv.invoiceNo)+'<br>請求日：'+esc2(inv.issueDate)+'<br>'
-    +'請求基準：'+esc2(inv.basisLabel)+'</div></div>'+meBlock()+'</div>'
-    +'<div class="box"><div class="lbl">ご請求金額（税込）</div>'
-    +'<div class="amt">￥ '+yen(inv.total)+' －</div>'
-    +'<div class="sub">お支払期日：'+esc2(inv.dueDate)+'<br>'+esc2(CO().bank||"")+'</div></div>'
-    +'<h2>内訳</h2><table><thead><tr><th style="width:16mm">納品日</th><th>品名</th>'
-    +'<th class="n">単価</th>'
-    +'<th class="n">数量</th><th>単位</th><th class="n">金額</th>'
-    +(hasNote?'<th style="width:26mm">備考</th>':'')+'</tr></thead><tbody>'+rows+'</tbody></table>'
-    +sumTable(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total)
-    +'<div class="note">'+(inv.memo?esc2(inv.memo).replace(/\n/g,"<br>")+'<br>':'')
-    +'※印は軽減税率対象です。</div></body></html>';
+  // 【お振込先】の見出しは、freee と同じく欄の名前で出すので外します
+  const bank=String(CO().bank||"").replace(/^【[^】]*】/,"").trim();
+  const nCol=hasNote?4:3;                       // 摘要のうしろにいくつ列があるか
+  const pad=Math.max(0, 10-inv.lines.length);   // freee と同じで、少ないときは空の行で埋めます
+  return docHead("請求書 "+inv.invoiceNo,"fr")
+    +'<div class="ttl">請求書</div><div class="top">'
+    +frTo(p,inv.customer)
+    +frHead([["請求日",inv.issueDate],["請求書番号",inv.invoiceNo],
+             ["登録番号",regNoOf()],["請求基準",inv.basisLabel]])
+    +'</div>'
+    +'<div class="lead">下記の通りご請求申し上げます。</div>'
+    +'<div class="subj"><b>件名</b>'
+    +esc2(inv.subject||(inv.targetMonth+" 分 ご請求"))+'</div>'
+    +'<table class="amt"><tr><th style="width:34mm">小計</th>'
+    +'<th style="width:34mm">消費税</th><th style="width:54mm">請求金額</th></tr>'
+    +'<tr><td>'+yen(inv.shohin+inv.soryo)+'円</td><td>'+yen(inv.taxF+inv.taxS)+'円</td>'
+    +'<td class="big">'+yen(inv.total)+'円</td></tr></table>'
+    +'<table class="amt"><tr><th style="width:34mm">入金期日</th>'
+    +'<th style="width:88mm">振込先</th></tr>'
+    +'<tr><td>'+esc2(inv.dueDate)+'</td><td class="l">'+esc2(bank)+'</td></tr></table>'
+    +'<table class="dt"><thead><tr><th>摘要</th>'
+    +'<th class="n" style="width:20mm">数量</th>'
+    +'<th class="n" style="width:24mm">単価</th>'
+    +'<th class="n" style="width:28mm">明細金額</th>'
+    +(hasNote?'<th style="width:26mm">備考</th>':'')+'</tr></thead><tbody>'
+    +rows+frPad(pad,nCol+1)+'</tbody></table>'
+    +'<div class="foot"><div class="kgn">※印は軽減税率対象です。</div>'
+    +frUchi(inv.shohin, inv.taxF, inv.soryo, inv.taxS, inv.total, false)+'</div>'
+    +'<div class="bik"><div class="l">備考</div>'
+    +(inv.memo?esc2(inv.memo).replace(/\n/g,"<br>"):'')+'</div>'
+    +'</body></html>';
 }
 // 納品書HTML
 function buildDeliveryNoteHtml(doc){
