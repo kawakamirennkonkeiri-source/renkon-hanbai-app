@@ -2009,28 +2009,57 @@ function drawDv(){
 function showDv(no){
   const t=TX.find(x=>x.kind==="sale"&&x.no===no); if(!t) return;
   const p=partnerOf(t.customer);
-  const ad=p?'<span class="ad">〒'+esc(p.zip)+'　'+esc(p.addr)+(p.person?'　'+esc(p.person)+' 様':'')+'</span>'
-           :'<span class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</span>';
-  const rows=[{item:esc(invItem(t)),qty:yen(t.qty)+'c/s',
+  // 上の枠まわりは、発行するPDFと同じならびにしています（2026-10-24）。
+  //   税は発行するときと同じ Math.floor で出しています。
+  const tf=TF(), regNo=regNoOf();
+  const shohin=t.shohin||0, soryo=t.freight||0;
+  const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
+  const total=shohin+soryo+taxF+taxS;
+  const ad=p?'<div class="ad">'+esc(p.zip||"")+(p.zip&&p.addr?'<br>':'')+esc(p.addr||"")+'</div>'
+             +(p.person?'<div class="pn">'+esc(p.person)+'　様</div>':'')
+           :'<div class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</div>';
+  const rows=[{item:esc(invItem(t))+' ※',qty:yen(t.qty)+' c/s',
     tanka:t.tanka!=null?'¥'+yen(t.tanka):'—',kin:t.shohin?'¥'+yen(t.shohin):'—'}];
-  if(t.freight) rows.push({item:'送料 '+esc(t.carrier||"")+'向け',qty:'1c/s',tanka:'—',kin:'¥'+yen(t.freight)});
+  if(t.freight) rows.push({item:'運賃'+(t.carrier?'　'+esc(t.carrier):''),qty:'1 式',
+    tanka:'¥'+yen(t.freight),kin:'¥'+yen(t.freight)});
   document.getElementById("dvdoc").innerHTML=
-    '<div class="doc-head"><div><div style="font-weight:bold;font-size:14px">'+esc(CO().name)+'</div>'
-    +'<div style="font-size:11.5px;color:#666">'+esc(CO().addr)+'</div></div><div class="doc-meta">取引No.：'
-    +t.no+'<br>取引日：'+fmtY(t.date)+'<br>納品日：'+fmtY(t.deliv)+'<br>産地：'+esc(t.sanchi)
-    +(t.carrier?'<br>運送：'+esc(t.carrier)+(t.hai?'（'+esc(t.hai)+'便立て）':'')
-      +(t.lead?'（'+esc(t.lead)+'）':''):'')+'</div></div>'
-    +'<div class="doc-title">納品書</div><div class="doc-to">'+esc(p?p.name:t.customer)+'　御中'+ad+'</div>'
+    '<div class="doc-title" style="letter-spacing:0;text-indent:0">納品書</div>'
+    +'<div class="iv-top"><div class="iv-to"><div class="nm">'+esc(p?p.name:t.customer)+'　御中</div>'+ad+'</div>'
+    +'<div class="iv-rt"><table>'
+    +'<tr><td>納品日</td><td class="num">'+fmtY(t.deliv)+'</td></tr>'
+    +'<tr><td>納品書番号</td><td class="num">DN-'+esc(t.no)+'</td></tr>'
+    +'<tr><td>取引No.</td><td class="num">'+esc(t.no)+'</td></tr>'
+    +'<tr><td>出荷日</td><td class="num">'+fmtY(t.date)+'</td></tr>'
+    +'<tr><td>産地</td><td class="num">'+esc(t.sanchi)+'</td></tr>'
+    +(t.carrier?'<tr><td>運送</td><td class="num">'+esc(t.carrier)
+      +(t.hai?'（'+esc(t.hai)+'便立て）':'')+(t.lead?'（'+esc(t.lead)+'）':'')+'</td></tr>':'')
+    +(regNo?'<tr><td>登録番号</td><td class="num">'+esc(regNo)+'</td></tr>':'')
+    +'</table><div class="iv-me"><div class="nm">'+esc(CO().name)+'</div>'
+    +'<div class="ad">'+esc(CO().addr)+'</div></div></div></div>'
+    +'<p class="iv-lead">下記の通り納品いたしました。</p>'
     +(function(){const bs=boardSubject([t.sell],p?p.name:t.customer,t.customer);
-      return bs?'<p style="font-size:12.5px;margin-top:10px"><b>件名：'+esc(bs)+'</b></p>':'';})()
-    +'<p style="font-size:12.5px;color:#666;margin-top:14px">下記の通り納品いたしました。</p>'
-    +'<table><thead><tr><th>品名</th><th class="num">数量</th>'
-    +'<th class="num">単価</th><th class="num">金額(税抜)</th></tr></thead><tbody>'
+      return bs?'<div class="iv-subj"><b>件名</b>'+esc(bs)+'</div>':'';})()
+    +'<table class="iv-amt"><tr><th style="width:130px">小計</th>'
+    +'<th style="width:130px">消費税</th><th style="width:190px">納品金額</th></tr>'
+    +'<tr><td>¥'+yen(shohin+soryo)+'</td><td>¥'+yen(taxF+taxS)+'</td>'
+    +'<td class="big">¥'+yen(total)+'</td></tr></table>'
+    +'<table><thead><tr><th>摘要</th><th class="num">数量</th>'
+    +'<th class="num">単価</th><th class="num">明細金額</th></tr></thead><tbody>'
     +rows.map(r=>'<tr><td>'+r.item+'</td><td class="num">'+r.qty+'</td><td class="num">'+r.tanka
       +'</td><td class="num">'+r.kin+'</td></tr>').join("")
-    +'</tbody></table><div class="doc-foot"><table>'
-    +'<tr class="total"><td>合計（税抜）</td><td class="num">¥'+yen(t.sale||0)+'</td></tr></table></div>'
-    +'<div class="bank">※ この納品書は数量のご確認用です。ご請求は締め日ごとの請求書にてお願いいたします。</div>';
+    +'</tbody></table>'
+    +'<div class="iv-foot"><div class="iv-kgn">※印は軽減税率対象です。</div>'
+    +'<div class="iv-uch"><table>'
+    +(soryo?'<tr><td>内訳</td><td>'+(tf.fre*100)+'%対象(税抜)</td><td class="num">¥'+yen(soryo)+'</td></tr>'
+      +'<tr><td></td><td class="s">'+(tf.fre*100)+'%消費税</td><td class="num s">¥'+yen(taxS)+'</td></tr>':'')
+    +'<tr><td>'+(soryo?'':'内訳')+'</td><td>軽減税率'+(tf.food*100)+'%対象(税抜)</td>'
+    +'<td class="num">¥'+yen(shohin)+'</td></tr>'
+    +'<tr><td></td><td class="s">軽減税率'+(tf.food*100)+'%消費税</td>'
+    +'<td class="num s">¥'+yen(taxF)+'</td></tr>'
+    +'<tr class="t"><td></td><td>合計（税込）</td><td class="num">¥'+yen(total)+'</td></tr>'
+    +'</table></div></div>'
+    +'<div class="iv-bik"><div class="l">備考</div>'
+    +'この納品書は請求書ではありません。ご請求は別途、月次の請求書にてご案内いたします。</div>';
   document.querySelector("#deliv .card").style.display="none";
   document.getElementById("dvdoc").style.display="";
   document.getElementById("dvBack").style.display="";
@@ -3270,7 +3299,7 @@ function showInv(k){
              +(p.person?'<div class="pn">'+esc(p.person)+'　様</div>':'')
            :'<div class="ad" style="color:#C62828">※住所が未登録です（取引先マスタ）</div>';
   document.getElementById("inv").innerHTML=
-    '<div class="doc-title">請求書</div>'
+    '<div class="doc-title" style="letter-spacing:0;text-indent:0">請求書</div>'
     +'<div class="iv-top"><div class="iv-to"><div class="nm">'+esc(p?p.name:k)+'　御中</div>'+ad+'</div>'
     +'<div class="iv-rt"><table>'
     +'<tr><td>請求日</td><td class="num">'+esc(issueDate)+'</td></tr>'
@@ -4372,24 +4401,36 @@ function buildInvoiceHtml(inv){
 // 納品書HTML
 function buildDeliveryNoteHtml(doc){
   const p=doc.partner||{};
-  const rows=doc.lines.map(l=>'<tr><td>'+esc2(l.tekiyo)+'</td><td class="n">'+yen(l.qty)+'</td>'
-    +'<td>'+esc2(l.unit)+'</td><td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
-  return docHead("納品書 "+doc.docNo)
-    +'<div class="ttl">納 品 書</div><div class="top"><div class="to">'
-    +'<span class="nm">'+esc2(p.name||doc.customer)+'　御中</span>'
-    +(p.zip||p.addr?'<div class="ad">〒'+esc2(p.zip||"")+'　'+esc2(p.addr||"")
-      +(p.person?'　'+esc2(p.person)+' 様':'')+'</div>':'')
-    +'<div class="meta">'+(doc.subject?'件名：'+esc2(doc.subject)+'<br>':'')
-    +'納品書番号：'+esc2(doc.docNo)+'<br>取引No.：'+esc2(doc.txNo)+'<br>'
-    +'納品日：'+esc2(doc.delivDate)+'<br>産地：'+esc2(doc.sanchi||"")
-    +(doc.carrier?'<br>運送：'+esc2(doc.carrier)+(doc.hai?'（'+esc2(doc.hai)+'便立て）':''):'')+'</div></div>'+meBlock()+'</div>'
-    +'<div class="box"><div class="lbl">納品金額（税込）</div>'
-    +'<div class="amt">￥ '+yen(doc.total)+' －</div></div>'
-    +'<h2>内訳</h2><table><thead><tr><th>品名</th><th class="n">数量</th><th>単位</th>'
-    +'<th class="n">単価</th><th class="n">金額</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +sumTable(doc.shohin, doc.taxF, doc.soryo, doc.taxS, doc.total)
-    +'<div class="note">※印は軽減税率対象です。<br>'
-    +'この納品書は請求書ではありません。ご請求は別途、月次の請求書にてご案内いたします。</div></body></html>';
+  // 納品書は1回の納品の記録なので、摘要に日付は入れません（請求書とはそこが違います）。
+  //   入金期日と振込先も出しません。請求ではないためです。
+  const rows=doc.lines.map(l=>'<tr><td>'+esc2(l.tekiyo)+'</td>'
+    +'<td class="n">'+yen(l.qty)+' '+esc2(l.unit)+'</td>'
+    +'<td class="n">'+yen(l.tanka)+'</td><td class="n">'+yen(l.amount)+'</td></tr>').join("");
+  const pad=Math.max(0, 10-doc.lines.length);
+  return docHead("納品書 "+doc.docNo,"fr")
+    +'<div class="ttl">納品書</div><div class="top">'
+    +frTo(p,doc.customer)
+    +frHead([["納品日",doc.delivDate],["納品書番号",doc.docNo],["取引No.",doc.txNo],
+             ["産地",doc.sanchi||""],
+             ["運送",doc.carrier?(doc.carrier+(doc.hai?'（'+doc.hai+'便立て）':'')):""],
+             ["登録番号",regNoOf()]])
+    +'</div>'
+    +'<div class="lead">下記の通り納品いたしました。</div>'
+    +(doc.subject?'<div class="subj"><b>件名</b>'+esc2(doc.subject)+'</div>':'')
+    +'<table class="amt"><tr><th style="width:34mm">小計</th>'
+    +'<th style="width:34mm">消費税</th><th style="width:54mm">納品金額</th></tr>'
+    +'<tr><td>'+yen(doc.shohin+doc.soryo)+'円</td><td>'+yen(doc.taxF+doc.taxS)+'円</td>'
+    +'<td class="big">'+yen(doc.total)+'円</td></tr></table>'
+    +'<table class="dt"><thead><tr><th>摘要</th>'
+    +'<th class="n" style="width:20mm">数量</th>'
+    +'<th class="n" style="width:24mm">単価</th>'
+    +'<th class="n" style="width:28mm">明細金額</th></tr></thead><tbody>'
+    +rows+frPad(pad,3)+'</tbody></table>'
+    +'<div class="foot"><div class="kgn">※印は軽減税率対象です。</div>'
+    +frUchi(doc.shohin, doc.taxF, doc.soryo, doc.taxS, doc.total, true)+'</div>'
+    +'<div class="bik"><div class="l">備考</div>'
+    +'この納品書は請求書ではありません。ご請求は別途、月次の請求書にてご案内いたします。</div>'
+    +'</body></html>';
 }
 // GASへ送ってPDF化・保存（Content-Typeは付けない：CORSのプリフライトを避ける）
 async function gasSavePdf(kind, fileName, subFolder, html, rootFolder){
