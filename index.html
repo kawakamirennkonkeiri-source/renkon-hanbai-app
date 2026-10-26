@@ -1665,6 +1665,35 @@ function render(){
 //  1kgあたりの平均単価だけは、送料を入れずに「商品の金額 ÷ kg」で出します。
 // ============================================================
 let BZ_MODE="sell";                      // sell=販売先ごと / tori=取引先ごと
+
+// 分析タブだけの「区分のまとめ方」（2026-10-26 社長指示）
+//   発注書の区分はこまかく分かれているので、見るときだけまとめます。
+//   売上にも請求にも影響しません。ここを変えても帳票は変わりません。
+const BZ_KUBUN_FIX={ "C":"CS", "S":"CS", "土":"土付き" };
+//   最後に残したい区分。ここに無い区分は「まだ決めていない区分」として、
+//   どの販売先から来ているかを画面に出します。
+const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽"];
+
+function bzKubun(t){
+  const k=String(t.kubun==null?"":t.kubun).trim();
+  if(!k) return "（区分なし）";
+  const f=BZ_KUBUN_FIX[N(k)], name=f||k;
+  // 「新芽」は発注書の区分ではなく、単価マスタの商品名で分かれています。
+  //   真空のうち、商品名に「新芽」が入るものを別立てにします。
+  if(N(name)===N("真空")&&N(t.priceItem||"").indexOf(N("新芽"))>=0) return "新芽";
+  return name;
+}
+// まとめた区分に、元の区分名を小さく添えます（CS ← C・S など）
+function bzKubunNote(name,srcSet){
+  const src=[...srcSet].filter(x=>N(x)!==N(name));
+  if(!src.length) return "";
+  // 新芽だけは「まとめた」のではなく「分けた」ものなので、書き方を変えます
+  if(N(name)===N("新芽"))
+    return '<div class="bz-sub">'+esc(src.join("・"))
+      +' から、商品名が「新芽」のものを分けています</div>';
+  return '<div class="bz-sub">'+esc(src.join("・"))+' をまとめています</div>';
+}
+const bzPct=(v,t)=>(t>0?(v/t*100).toFixed(1)+"%":"—");
 const bzOK=t=>t.kind==="sale"&&!t.shanai&&!isFune(t)&&t.shohin!=null;
 const bzKg=t=>(t.cap>0?t.cap:0)*(t.qty||0);
 const BZ_LG='<div class="bz-lg"><span><s style="background:var(--or)"></s>実績</span>'
@@ -1735,34 +1764,57 @@ function bzKpiDraw(act,pl){
 // ---------- 区分別 ----------
 function bzKubunDraw(act,pl){
   const g={},ord=[];
-  const get=k=>{ if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0}; ord.push(k); } return g[k]; };
-  act.forEach(t=>{ const a=get(t.kubun||"（区分なし）");
+  const get=k=>{ if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0,
+    src:new Set(), sell:new Set()}; ord.push(k); } return g[k]; };
+  const put=(t,isPlan)=>{
+    const name=bzKubun(t), a=get(name);
+    a.src.add(String(t.kubun||"").trim()||"（区分なし）");
+    if(BZ_KUBUN_OK.indexOf(name)<0) a.sell.add(t.sell||"（行先なし）");
+    if(isPlan){ a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; return; }
     a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
-    if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); } });
-  pl.forEach(t=>{ const a=get(t.kubun||"（区分なし）"); a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; });
+    if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); }
+  };
+  act.forEach(t=>put(t,false)); pl.forEach(t=>put(t,true));
   if(!ord.length){ bzEl("bzKubun").innerHTML='<p class="hint">まだデータがありません。</p>'; return; }
   ord.sort((x,y)=>(g[y].aY+g[y].pY)-(g[x].aY+g[x].pY));
   const max=Math.max.apply(null,ord.map(k=>g[k].aY+g[k].pY));
-  let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0};
+  const grand=ord.reduce((s,k)=>s+g[k].aY+g[k].pY,0);
+  let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0},todo=[];
   ord.forEach(k=>{ const v=g[k];
-    for(const f in T) T[f]+=v[f];
-    rows+='<tr><td><b>'+esc(k)+'</b><div class="bz-sub">'+v.n+'件'
-      +(v.pn?'　＋予定 '+v.pn+'件':'')+'</div></td>'
-      +'<td style="width:28%">'+bzBar(v.aY,v.pY,max)+'</td>'
+    ["aY","pY","aK","pK","aSh","aKo","n","pn"].forEach(f=>{ T[f]+=v[f]; });
+    const ng=BZ_KUBUN_OK.indexOf(k)<0;
+    if(ng) todo.push(k);
+    rows+='<tr><td><b>'+esc(k)+'</b>'
+      +(ng?' <span class="badge b-ng">まだ決めていません</span>':'')
+      +'<div class="bz-sub">'+v.n+'件'+(v.pn?'　＋予定 '+v.pn+'件':'')+'</div>'
+      +bzKubunNote(k,v.src)
+      +(ng?'<div class="bz-sub" style="color:#C62828">行先：'
+         +esc([...v.sell].slice(0,8).join("・"))
+         +([...v.sell].length>8?' ほか':'')+'</div>':'')
+      +'</td>'
+      +'<td style="width:24%">'+bzBar(v.aY,v.pY,max)+'</td>'
       +'<td class="num">'+yen(v.aY)+'</td>'
       +'<td class="num">'+(v.pY?yen(v.pY):"—")+'</td>'
       +'<td class="num"><b>'+yen(v.aY+v.pY)+'</b></td>'
       +'<td class="num">'+yen(v.aK)+'</td>'
       +'<td class="num">'+(v.pK?yen(v.pK):"—")+'</td>'
-      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td></tr>'; });
+      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td>'
+      +'<td class="num"><b>'+bzPct(v.aY+v.pY,grand)+'</b></td></tr>'; });
   rows+='<tr class="total"><td>合計</td><td></td><td class="num">'+yen(T.aY)+'</td>'
     +'<td class="num">'+(T.pY?yen(T.pY):"—")+'</td><td class="num"><b>'+yen(T.aY+T.pY)+'</b></td>'
     +'<td class="num">'+yen(T.aK)+'</td><td class="num">'+(T.pK?yen(T.pK):"—")+'</td>'
-    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td></tr>';
-  bzEl("bzKubun").innerHTML=BZ_LG+'<div class="scroll" style="max-height:52vh">'
+    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td>'
+    +'<td class="num"><b>100.0%</b></td></tr>';
+  bzEl("bzKubun").innerHTML=BZ_LG
+    +(todo.length?'<div class="note">まだどこにまとめるか決めていない区分が '+todo.length+' つあります：<b>'
+      +esc(todo.join("・"))+'</b><br>'
+      +'赤い字の「行先」を見て、どの区分に入れるか決めてください。'
+      +'決まったら、まとめ方の表（BZ_KUBUN_FIX）に足します。</div>':'')
+    +'<div class="scroll" style="max-height:52vh">'
     +'<table class="bz"><thead><tr><th>区分</th><th>グラフ</th>'
     +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
     +'<th class="num">kg 実績</th><th class="num">kg 予定</th><th class="num">円/kg</th>'
+    +'<th class="num">構成比</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
@@ -1830,35 +1882,52 @@ function bzRankDraw(act,pl){
   const bs=bzEl("bzBySell"), bt=bzEl("bzByTori");
   bs.className="btn sm"+(BZ_MODE==="sell"?"":" sub");
   bt.className="btn sm"+(BZ_MODE==="tori"?"":" sub");
+  // 取引先ごとのときは、呼び名の書き方のちがい（半角カナ・全角・空白）で
+  //   同じ先が2行に分かれないように、N() でそろえてからまとめます。
+  //   画面に出す名前は、最初に出てきた書き方をそのまま使います。
   const key=t=>BZ_MODE==="sell"?(t.sell||"（名前なし）"):(t.priceKey||"（対応表に未登録）");
-  const g={},ord=[];
-  const get=k=>{ if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0}; ord.push(k); } return g[k]; };
-  act.forEach(t=>{ const a=get(key(t)); a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
+  const g={},ord=[],nameOf={};
+  const get=t=>{ const raw=key(t), k=N(raw)||raw;
+    if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0,kubun:new Set(),sell:new Set()};
+      nameOf[k]=raw; ord.push(k); }
+    g[k].kubun.add(bzKubun(t));
+    if(BZ_MODE==="tori") g[k].sell.add(t.sell||"（行先なし）");
+    return g[k]; };
+  act.forEach(t=>{ const a=get(t); a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
     if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); } });
-  pl.forEach(t=>{ const a=get(key(t)); a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; });
+  pl.forEach(t=>{ const a=get(t); a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; });
   if(!ord.length){ bzEl("bzRank").innerHTML='<p class="hint">まだデータがありません。</p>'; return; }
   ord.sort((x,y)=>(g[y].aY+g[y].pY)-(g[x].aY+g[x].pY));
   const max=g[ord[0]].aY+g[ord[0]].pY;
+  const grand=ord.reduce((s,k)=>s+g[k].aY+g[k].pY,0);
   let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0};
   ord.forEach((k,i)=>{ const v=g[k];
-    for(const f in T) T[f]+=v[f];
+    ["aY","pY","aK","pK","aSh","aKo"].forEach(f=>{ T[f]+=v[f]; });
+    const sells=[...v.sell];
     rows+='<tr><td class="num" style="color:#AAA">'+(i+1)+'</td>'
-      +'<td><b>'+esc(k)+'</b><div class="bz-sub">'+v.n+'件'+(v.pn?'　＋予定 '+v.pn+'件':'')+'</div></td>'
-      +'<td style="width:24%">'+bzBar(v.aY,v.pY,max)+'</td>'
+      +'<td><b>'+esc(nameOf[k])+'</b><div class="bz-sub">'+v.n+'件'
+      +(v.pn?'　＋予定 '+v.pn+'件':'')+'　'+esc([...v.kubun].join("・"))+'</div>'
+      +(BZ_MODE==="tori"&&sells.length?'<div class="bz-sub">行先：'
+        +esc(sells.slice(0,6).join("・"))+(sells.length>6?' ほか'+(sells.length-6)+'先':'')
+        +'</div>':'')
+      +'</td>'
+      +'<td style="width:20%">'+bzBar(v.aY,v.pY,max)+'</td>'
       +'<td class="num">'+yen(v.aY)+'</td>'
       +'<td class="num">'+(v.pY?yen(v.pY):"—")+'</td>'
       +'<td class="num"><b>'+yen(v.aY+v.pY)+'</b></td>'
       +'<td class="num">'+yen(v.aK)+'</td>'
-      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td></tr>'; });
+      +'<td class="num">'+(v.aKo?"¥"+yen(v.aSh/v.aKo):"—")+'</td>'
+      +'<td class="num"><b>'+bzPct(v.aY+v.pY,grand)+'</b></td></tr>'; });
   rows+='<tr class="total"><td></td><td>合計 '+ord.length+'先</td><td></td>'
     +'<td class="num">'+yen(T.aY)+'</td><td class="num">'+(T.pY?yen(T.pY):"—")+'</td>'
     +'<td class="num"><b>'+yen(T.aY+T.pY)+'</b></td><td class="num">'+yen(T.aK)+'</td>'
-    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td></tr>';
+    +'<td class="num">'+(T.aKo?"¥"+yen(T.aSh/T.aKo):"—")+'</td>'
+    +'<td class="num"><b>100.0%</b></td></tr>';
   bzEl("bzRank").innerHTML=BZ_LG+'<div class="scroll" style="max-height:60vh">'
     +'<table class="bz"><thead><tr><th></th><th>'
     +(BZ_MODE==="sell"?"販売先（発注書の行先）":"取引先（単価マスタ）")+'</th><th>グラフ</th>'
     +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
-    +'<th class="num">kg 実績</th><th class="num">円/kg</th>'
+    +'<th class="num">kg 実績</th><th class="num">円/kg</th><th class="num">構成比</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
@@ -1903,14 +1972,15 @@ function bzTankaDraw(act,pl){
     +'<td class="num">'+yen(T.sh+T.pSh)+'</td><td class="num">'+yen(T.kg+T.pKg)+'</td>'
     +'<td class="num"><b>'+av(T.sh+T.pSh,T.kg+T.pKg)+'</b></td>'
     +'<td class="num" colspan="5" style="color:#999">※ 予定は発注書の数量と単価マスタで計算した見通しです</td></tr>';
+  // 見出しは1段にしています。2段にすると、画面を下へ送ったときに
+  //   上の段と下の段がずれて重なってしまうためです。
   bzEl("bzTanka").innerHTML='<div class="scroll" style="max-height:60vh">'
-    +'<table class="bz"><thead>'
-    +'<tr><th rowspan="2">月</th><th class="num" colspan="3">ぜんぶ（実績）</th>'
-    +'<th class="num" colspan="2">うち 送料別</th><th class="num" colspan="2">うち 送料込み</th>'
-    +'<th class="num" rowspan="2">予定</th></tr>'
-    +'<tr><th class="num">商品金額</th><th class="num">kg</th><th class="num">円/kg</th>'
-    +'<th class="num">kg</th><th class="num">円/kg</th>'
-    +'<th class="num">kg</th><th class="num">円/kg</th></tr>'
+    +'<table class="bz"><thead><tr><th>月</th>'
+    +'<th class="num">全部（実績）<br>商品金額</th>'
+    +'<th class="num">全部<br>kg</th><th class="num">全部<br>円/kg</th>'
+    +'<th class="num">送料別<br>kg</th><th class="num">送料別<br>円/kg</th>'
+    +'<th class="num">送料込み<br>kg</th><th class="num">送料込み<br>円/kg</th>'
+    +'<th class="num">予定</th></tr>'
     +'</thead><tbody>'+rows+'</tbody></table></div>';
 }
 const fmt=d=>d?(d.getMonth()+1)+"/"+d.getDate():"";
