@@ -1669,7 +1669,11 @@ let BZ_MODE="sell";                      // sell=販売先ごと / tori=取引�
 // 分析タブだけの「区分のまとめ方」（2026-10-26 社長指示）
 //   発注書の区分はこまかく分かれているので、見るときだけまとめます。
 //   売上にも請求にも影響しません。ここを変えても帳票は変わりません。
-const BZ_KUBUN_FIX={ "C":"CS", "S":"CS", "土":"土付き" };
+const BZ_KUBUN_FIX={ "土":"土付き" };
+//   C と S は、容量で中身がちがいます（2026-10-26 社長に確認）。
+//     10kg以上 … 加工用の規格　→ CS
+//     10kg未満 … 洗いの中のサイズ指定（5kg の S など）→ 洗い
+const BZ_CS_KG=10;
 //   最後に残したい区分。ここに無い区分は「まだ決めていない区分」として、
 //   どの販売先から来ているかを画面に出します。
 const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽"];
@@ -1677,6 +1681,9 @@ const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外
 function bzKubun(t){
   const k=String(t.kubun==null?"":t.kubun).trim();
   if(!k) return "（区分なし）";
+  // C・S は容量で分けます（上の BZ_CS_KG を参照）
+  if(N(k)===N("C")||N(k)===N("S"))
+    return (Number(t.cap)>=BZ_CS_KG)?"CS":"洗い";
   const f=BZ_KUBUN_FIX[N(k)], name=f||k;
   // 「新芽」は発注書の区分ではなく、単価マスタの商品名で分かれています。
   //   真空のうち、商品名に「新芽」が入るものを別立てにします。
@@ -1768,7 +1775,10 @@ function bzKubunDraw(act,pl){
     src:new Set(), sell:new Set()}; ord.push(k); } return g[k]; };
   const put=(t,isPlan)=>{
     const name=bzKubun(t), a=get(name);
-    a.src.add(String(t.kubun||"").trim()||"（区分なし）");
+    const rawK=String(t.kubun||"").trim()||"（区分なし）";
+    // C・S は容量で行き先が変わるので、注記に容量も出します
+    a.src.add(((N(rawK)===N("C")||N(rawK)===N("S"))&&t.cap>0)
+      ? rawK+"("+t.cap+"kg)" : rawK);
     if(BZ_KUBUN_OK.indexOf(name)<0) a.sell.add(t.sell||"（行先なし）");
     if(isPlan){ a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; return; }
     a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
