@@ -2305,10 +2305,12 @@ function invTotals(rows,ex){
   const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
   return {shohin, soryo, taxF, taxS, total:shohin+soryo+taxF+taxS};
 }
-function extraRowsHtml(ex,hasF,withTanka){
+function extraRowsHtml(ex,hasF,withTanka,hasNote){
   // withTanka: 'pre'=数量の前に単価を出す／true=数量の後ろ／false=単価なし
+  // hasNote: 備考の列を出しているとき true（行の右はしを1つ空けます）
   var pre=(withTanka==='pre');
   var cols=hasF?9:7;
+  var nt=hasNote?'<td></td>':'';
   // grp（まとまり）が付いている行は、販売先と同じように
   //   【サンプル】の見出しと合計を出します。
   var sum={};
@@ -2319,7 +2321,7 @@ function extraRowsHtml(ex,hasF,withTanka){
     if(g!==cur){
       cur=g;
       if(g) out+='<tr class="grp"><td colspan="'+cols+'">【'+esc(g)+'】</td>'
-                +'<td class="num">¥'+yen(sum[g])+'</td></tr>';
+                +'<td class="num">¥'+yen(sum[g])+'</td>'+nt+'</tr>';
     }
     out+='<tr style="background:#F7F3FC"><td>—</td><td colspan="3">'+esc(e.tekiyo)
       +' <span class="badge ed">追加・税'+e.tax+'</span></td>'
@@ -2327,7 +2329,7 @@ function extraRowsHtml(ex,hasF,withTanka){
       +'<td class="num">'+dec1(e.qty)+esc(e.unit)+'</td>'
       +(withTanka===true?'<td class="num">¥'+yen(e.tanka)+'</td>':'')
       +'<td class="num">¥'+yen(e.amount)+'</td>'+(hasF?'<td></td><td></td>':'')
-      +'<td class="num">¥'+yen(e.amount)+'</td></tr>';
+      +'<td class="num">¥'+yen(e.amount)+'</td>'+nt+'</tr>';
   });
   return out;
 }
@@ -3369,6 +3371,8 @@ function showInv(k){
   const ex=invExtras(k,y,m), tt=invTotals(rows,ex), hd=OPS.head[docKey("inv",k,y,m)]||{};
   const shohin=tt.shohin, soryo=tt.soryo, taxF=tt.taxF, taxS=tt.taxS;
   const sub=shohin+soryo, hasF=rows.some(t=>t.freight);
+  // 備考が1つでも入っていれば、画面にも列を出します（PDFと同じ決まりです）
+  const hasNote=rows.some(t=>String(t.note||"").trim());
   // 上の枠まわりは、発行するPDFと同じならびにしています（freee の請求書に合わせたもの）。
   //   明細の表から下は今までどおりで、取引No.・産地・送料・運送会社も出ます。
   const issueDate=(r.shime==="20日")?ymd(y,m,20):ymd(y,m,lastDayOf(y,m));
@@ -3399,18 +3403,23 @@ function showInv(k){
     +'<table class="iv-amt"><tr><th style="width:130px">入金期日</th>'
     +'<th style="width:450px">振込先</th></tr>'
     +'<tr><td>'+esc(due)+'</td><td class="l">'+esc(bank)+'</td></tr></table>'
+    // 備考（先方の伝票番号など）は、PDFと同じで1つも入っていなければ列ごと出しません
     +'<table><thead><tr><th>納品日</th><th>取引No.</th><th>産地</th><th>品名</th>'
     +'<th class="num">単価</th><th class="num">請求数量</th><th class="num">商品金額</th>'
     +(hasF?'<th class="num">送料</th><th>運送会社</th>':'')
-    +'<th class="num">請求金額</th></tr></thead><tbody>'
-    +(function(){ const gs=invGroups(rows), many=gs.length>1, cols=hasF?9:7;
+    +'<th class="num">請求金額</th>'
+    +(hasNote?'<th style="width:120px">備考<br><span style="font-weight:400;font-size:10px;opacity:.85">請求書に出ます</span></th>':'')
+    +'</tr></thead><tbody>'
+    +(function(){ const gs=invGroups(rows), many=gs.length>1,
+        cols=(hasF?9:7)+1+(hasNote?1:0);
       return gs.map(gp=>(many?'<tr class="grp"><td colspan="'+cols+'">'+esc(gp.sell)+'　様</td></tr>':'')
         +gp.rows.map(t=>'<tr><td>'+fmtY(r.kijun==="出し"?t.date:t.deliv)+'</td><td style="font-family:Consolas,monospace;font-size:11px">'
       +t.no+'</td><td>'+esc(t.sanchi)+'</td><td>'+esc(invItem(t))+'</td><td class="num">¥'
       +yen(t.tanka)+'</td><td class="num">'+yen(t.qty)+'c/s</td><td class="num">¥'+yen(t.shohin)+'</td>'
       +(hasF?'<td class="num">'+(t.freight?'¥'+yen(t.freight):'—')+'</td><td>'+esc(t.carrier||"—")+'</td>':'')
-      +'<td class="num">¥'+yen(t.sale)+'</td></tr>').join("")).join(""); })()
-    +extraRowsHtml(ex,hasF,'pre')
+      +'<td class="num">¥'+yen(t.sale)+'</td>'
+      +(hasNote?'<td>'+esc(t.note||"")+'</td>':'')+'</tr>').join("")).join(""); })()
+    +extraRowsHtml(ex,hasF,'pre',hasNote)
     +'</tbody></table>'
     // 右下の「内訳」。PDFと同じく10%が先、軽減8%があとです。
     //   画面では確かめやすいように、合計（税込）の行も出しています。
