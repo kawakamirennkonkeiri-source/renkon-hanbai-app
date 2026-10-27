@@ -350,7 +350,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button class="btn sm" id="bzBySell">販売先ごと</button>
       <button class="btn sm sub" id="bzByTori">取引先ごと</button></h2>
     <p class="hint">「販売先」は<b>発注書の行先の呼び名</b>、
-      「取引先」は<b>単価マスタでまとめている先</b>です。<br>
+      「取引先」は<b>対応表で決めた請求先</b>です。<br>
+      請求書を出す相手と同じまとめ方なので、<b>分かれ方を直したいときは対応表の請求先</b>を直します。<br>
       ひとつの取引先に、いくつもの販売先がぶら下がっていることがあります。<br>
       「円/kg」は<b>運賃を入れていない</b>商品だけの平均です。</p>
     <div id="bzRank"></div></div>
@@ -1670,13 +1671,19 @@ let BZ_MODE="sell";                      // sell=販売先ごと / tori=取引�
 //   発注書の区分はこまかく分かれているので、見るときだけまとめます。
 //   売上にも請求にも影響しません。ここを変えても帳票は変わりません。
 const BZ_KUBUN_FIX={ "土":"土付き" };
+//   Mup は個人注文の列にだけ出てきます（2026-10-27 社長に確認）。
+//   ほかの行先から Mup が出てきたら、そのまま「Mup」で残して印を付けます。
+const BZ_MUP_SELL="個人注文";
 //   C と S は、容量で中身がちがいます（2026-10-26 社長に確認）。
 //     10kg以上 … 加工用の規格　→ CS
 //     10kg未満 … 洗いの中のサイズ指定（5kg の S など）→ 洗い
 const BZ_CS_KG=10;
 //   最後に残したい区分。ここに無い区分は「まだ決めていない区分」として、
 //   どの販売先から来ているかを画面に出します。
-const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽"];
+const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽","個人注文"];
+//   区分は半角カナで書かれていることがあります（ﾋﾟﾛｰ など）。
+//   そのままでは上の一覧と文字が合わないので、N() でそろえてから比べます。
+const bzKubunOK=n=>BZ_KUBUN_OK.some(x=>N(x)===N(n));
 
 function bzKubun(t){
   const k=String(t.kubun==null?"":t.kubun).trim();
@@ -1684,6 +1691,9 @@ function bzKubun(t){
   // C・S は容量で分けます（上の BZ_CS_KG を参照）
   if(N(k)===N("C")||N(k)===N("S"))
     return (Number(t.cap)>=BZ_CS_KG)?"CS":"洗い";
+  // Mup は、行先が個人注文なら「個人注文」にまとめます
+  if(N(k)===N("Mup"))
+    return (N(t.sell||"").indexOf(N(BZ_MUP_SELL))>=0)?BZ_MUP_SELL:k;
   const f=BZ_KUBUN_FIX[N(k)], name=f||k;
   // 「新芽」は発注書の区分ではなく、単価マスタの商品名で分かれています。
   //   真空のうち、商品名に「新芽」が入るものを別立てにします。
@@ -1779,7 +1789,7 @@ function bzKubunDraw(act,pl){
     // C・S は容量で行き先が変わるので、注記に容量も出します
     a.src.add(((N(rawK)===N("C")||N(rawK)===N("S"))&&t.cap>0)
       ? rawK+"("+t.cap+"kg)" : rawK);
-    if(BZ_KUBUN_OK.indexOf(name)<0) a.sell.add(t.sell||"（行先なし）");
+    if(!bzKubunOK(name)) a.sell.add(t.sell||"（行先なし）");
     if(isPlan){ a.pY+=t.sale||0; a.pK+=bzKg(t); a.pn++; return; }
     a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
     if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); }
@@ -1792,7 +1802,7 @@ function bzKubunDraw(act,pl){
   let rows="",T={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0},todo=[];
   ord.forEach(k=>{ const v=g[k];
     ["aY","pY","aK","pK","aSh","aKo","n","pn"].forEach(f=>{ T[f]+=v[f]; });
-    const ng=BZ_KUBUN_OK.indexOf(k)<0;
+    const ng=!bzKubunOK(k);
     if(ng) todo.push(k);
     rows+='<tr><td><b>'+esc(k)+'</b>'
       +(ng?' <span class="badge b-ng">まだ決めていません</span>':'')
@@ -1895,13 +1905,20 @@ function bzRankDraw(act,pl){
   // 取引先ごとのときは、呼び名の書き方のちがい（半角カナ・全角・空白）で
   //   同じ先が2行に分かれないように、N() でそろえてからまとめます。
   //   画面に出す名前は、最初に出てきた書き方をそのまま使います。
-  const key=t=>BZ_MODE==="sell"?(t.sell||"（名前なし）"):(t.priceKey||"（対応表に未登録）");
+  // 「取引先ごと」は、対応表の<請求先>でまとめます（2026-10-27 社長指示）。
+  //   単価マスタの呼び名のままだと、ひとつの取引先が
+  //   いくつもの行に分かれてしまうためです。まとめ方はアプリに持たせず、
+  //   対応表の請求先をそのまま使うので、対応表を直せばここにも効きます。
+  const key=t=>BZ_MODE==="sell"?(t.sell||"（名前なし）")
+                               :(t.customer||"（請求先が未登録）");
   const g={},ord=[],nameOf={};
   const get=t=>{ const raw=key(t), k=N(raw)||raw;
-    if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0,kubun:new Set(),sell:new Set()};
+    if(!g[k]){ g[k]={aY:0,pY:0,aK:0,pK:0,aSh:0,aKo:0,n:0,pn:0,
+      kubun:new Set(),sell:new Set(),src:new Set()};
       nameOf[k]=raw; ord.push(k); }
     g[k].kubun.add(bzKubun(t));
-    if(BZ_MODE==="tori") g[k].sell.add(t.sell||"（行先なし）");
+    if(BZ_MODE==="tori"){ g[k].sell.add(t.sell||"（行先なし）");
+      g[k].src.add(String(t.priceKey||"").trim()||"（単価マスタに未登録）"); }
     return g[k]; };
   act.forEach(t=>{ const a=get(t); a.aY+=t.sale||0; a.aK+=bzKg(t); a.n++;
     if(t.cap>0){ a.aSh+=t.shohin||0; a.aKo+=bzKg(t); } });
@@ -1917,6 +1934,11 @@ function bzRankDraw(act,pl){
     rows+='<tr><td class="num" style="color:#AAA">'+(i+1)+'</td>'
       +'<td><b>'+esc(nameOf[k])+'</b><div class="bz-sub">'+v.n+'件'
       +(v.pn?'　＋予定 '+v.pn+'件':'')+'　'+esc([...v.kubun].join("・"))+'</div>'
+      +(function(){ if(BZ_MODE!=="tori") return "";
+        // まとめたときだけ、単価マスタの呼び名を出します
+        //   （いくつかの呼び名がひとつの請求先にまとまっている場合）
+        const src=[...v.src].filter(x=>N(x)!==N(nameOf[k]));
+        return src.length?'<div class="bz-sub">単価マスタ：'+esc(src.join("・"))+'</div>':""; })()
       +(BZ_MODE==="tori"&&sells.length?'<div class="bz-sub">行先：'
         +esc(sells.slice(0,6).join("・"))+(sells.length>6?' ほか'+(sells.length-6)+'先':'')
         +'</div>':'')
@@ -1935,7 +1957,7 @@ function bzRankDraw(act,pl){
     +'<td class="num"><b>100.0%</b></td></tr>';
   bzEl("bzRank").innerHTML=BZ_LG+'<div class="scroll" style="max-height:60vh">'
     +'<table class="bz"><thead><tr><th></th><th>'
-    +(BZ_MODE==="sell"?"販売先（発注書の行先）":"取引先（単価マスタ）")+'</th><th>グラフ</th>'
+    +(BZ_MODE==="sell"?"販売先（発注書の行先）":"取引先（対応表の請求先）")+'</th><th>グラフ</th>'
     +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
     +'<th class="num">kg 実績</th><th class="num">円/kg</th><th class="num">構成比</th>'
     +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
