@@ -830,11 +830,14 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button class="btn sub" id="btnSyncNow">いますぐ同期</button>
       <button class="btn sub" id="btnSyncRepull">全部取り直す</button>
       <span class="sp" style="flex:1"></span>
-      <button class="btn dgr" id="btnSyncSeed">いまの内容を共有DBへ送る（最初の1台だけ）</button>
+      <button class="btn dgr" id="btnSyncSeed">いまの内容を共有DBへ送る</button>
     </div>
     <p class="hint">💡 <b>全部取り直す</b>…「ここまで受け取った」の印を消して、共有データベースの中身を
       <b>最初から全部受け取り直します</b>。他のPCには出ているのにこのPCにだけ出てこないときに使います。
-      このPCの中身を消す機能ではありません。</p>
+      このPCの中身を消す機能ではありません。<br>
+      💡 <b>いまの内容を共有DBへ送る</b>…このPCの中身を<b>まるごと送り直します</b>。
+      <b>消す指示は送りません</b>ので、他のPCにしかないものが消えることはありません。
+      このPCには出ているのに<b>他のPCに出ていない</b>ときに使います。</p>
     <div class="note" id="syncInfo"></div>
   </div>
   <div class="card">
@@ -1214,7 +1217,16 @@ if(!OPS.buyDocs) OPS.buyDocs=[];
 if(!OPS.log) OPS.log=[];
 const docKey=(type,who,y,m)=>type+"|"+who+"|"+y+"-"+p2(m);
 const numOr=(v,d)=>(v==null||v===""||isNaN(Number(v)))?d:Number(v);
-function saveOps(){try{localStorage.setItem(OPS_KEY,JSON.stringify(OPS));}catch(e){} syncSoon();}
+function saveOps(){
+  try{ localStorage.setItem(OPS_KEY,JSON.stringify(OPS)); }
+  catch(e){
+    // 黙って見のがすと、保存できていないことに誰も気づけません。
+    //   そのまま開き直すと古い中身に戻り、共有データベースの帳票まで消しかねません。
+    try{ dlMsg("このPCに保存できませんでした。保存場所がいっぱいかもしれません。"
+      +"「データ保存・バックアップ」から控えを取って、川上さんに知らせてください。","ng"); }catch(e2){}
+  }
+  syncSoon();
+}
 // ===== 共有データベース（複数PCで同時に使う） =====
 const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
@@ -1226,7 +1238,13 @@ try{SINCE=localStorage.getItem(SINCE_KEY)||"";}catch(e){SINCE="";}
 // 画面の「削除」で消したマスタの行番号。
 // 共有DBから消してよいのは、ここに入っている行だけ。
 const DELQ_KEY="krs_sync_delq";
-const MASTER_ENT=["partners","price","freight","map","shime"];
+const MASTER_ENT=["partners","price","freight","map","shime",
+  // 帳票も「手元に無いから」というだけでは消しません（2026-10-30）。
+  //   このPCに保存できなかっただけなのに、共有データベースの請求書まで
+  //   消してしまう事故が起きました（29件のうち22件が消えました）。
+  //   請求書・買取書・見積書・サンプルは画面の操作で配列から消えることがないので、
+  //   ここに入れておけば、正しい動きは何も変わりません。
+  "invoices","buyDocs","quotes","samples"];
 let DELQ={};
 try{DELQ=JSON.parse(localStorage.getItem(DELQ_KEY)||"{}");}catch(e){DELQ={};}
 function saveDelq(){ try{localStorage.setItem(DELQ_KEY,JSON.stringify(DELQ));}catch(e){} }
