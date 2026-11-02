@@ -623,6 +623,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="card">
     <h2 id="itemNameCard">請求書に書く商品名（読み替え） <span class="cnt" id="cItemName"></span><span class="sp"></span>
       <button class="btn sm sub" id="btnItemNameFill">単価マスタから取り込む</button>
+      <button class="btn sm sub" id="btnItemNameAuto">空欄を自動で埋める</button>
       <button class="btn sm" data-add="itemName">＋ 新規</button></h2>
     <p class="hint">💡 発注書から引いてきた品名を、<b>請求書と納品書に印字する商品名</b>に書き換えます。<br>
       例：<b>○○商事｜土付き8月｜5kg</b> → <b>熊本県産 れんこん「幸祝」 土付き Mup 5kg</b>（備考に「8月」）<br>
@@ -1228,9 +1229,14 @@ function saveOps(){
   syncSoon();
 }
 // ===== 共有データベース（複数PCで同時に使う） =====
-const SYNC_ENT=["partners","price","freight","map","shime","invoices","buyDocs","quotes","samples",
+const SYNC_ENT=["partners","price","freight","map","shime","itemName","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
-const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","itemName","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
+// itemName（請求書に書く商品名）は、ここから外しました（2026-11-02）。
+//   ここに入れていると「まるごと1かたまり」で送り合うので、
+//   古い中身を持つPCが1台つないだだけで、全部が巻き戻ります。
+//   実際に170行の商品名が一度に消えました。
+//   いまは単価マスタなどと同じく「1行ずつ」扱い、消す指示も出しません。
+const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
 const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
@@ -1238,7 +1244,7 @@ try{SINCE=localStorage.getItem(SINCE_KEY)||"";}catch(e){SINCE="";}
 // 画面の「削除」で消したマスタの行番号。
 // 共有DBから消してよいのは、ここに入っている行だけ。
 const DELQ_KEY="krs_sync_delq";
-const MASTER_ENT=["partners","price","freight","map","shime",
+const MASTER_ENT=["partners","price","freight","map","shime","itemName",
   // 帳票も「手元に無いから」というだけでは消しません（2026-10-30）。
   //   このPCに保存できなかっただけなのに、共有データベースの請求書まで
   //   消してしまう事故が起きました（29件のうち22件が消えました）。
@@ -1270,7 +1276,8 @@ async function syncApi(action,payload){
 // マスタの行に、PCをまたいで変わらない番号を振る
 function ensureIds(){
   let n=0;
-  [["pt",CFG.partners],["pr",CFG.price],["fr",CFG.freight],["mp",CFG.map],["sh",CFG.shime]]
+  [["pt",CFG.partners],["pr",CFG.price],["fr",CFG.freight],["mp",CFG.map],["sh",CFG.shime],
+   ["in",CFG.itemName]]
     .forEach(a=>{const p=a[0],list=a[1];(list||[]).forEach(r=>{ if(!r._id){ r._id=p+"_"+uid(); n++; } });});
   return n;
 }
@@ -1290,6 +1297,8 @@ function syncSnapshot(){
     const c=Object.assign({},r); c.id=r._id; c._o=i; delete c._new; m[c.id]=c;}); s[e]=m;};
   arr("partners",CFG.partners); arr("price",CFG.price); arr("freight",CFG.freight);
   arr("map",CFG.map); arr("shime",CFG.shime);
+  if(!CFG.itemName) CFG.itemName=[];
+  arr("itemName",CFG.itemName);
   const docs=(e,list)=>{const m={};(list||[]).forEach(d=>{ if(d&&d.id) m[d.id]=Object.assign({},d); }); s[e]=m;};
   docs("invoices",OPS.invoices); docs("buyDocs",OPS.buyDocs); docs("quotes",OPS.quotes);
   docs("samples",OPS.samples);
@@ -1334,6 +1343,8 @@ function applyRemote(data){
     if(i>=0) Object.assign(list[i],rec); else list.push(rec); }); };
   arr("partners",CFG.partners); arr("price",CFG.price); arr("freight",CFG.freight);
   arr("map",CFG.map); arr("shime",CFG.shime);
+  if(!CFG.itemName) CFG.itemName=[];
+  arr("itemName",CFG.itemName);
   // keep ＝ 共有DB側が空なら、このPCの値を残す項目。
   //   サンプルの届け先・請求先・単価・計上の印・内訳は、このPCでしか入れられない。
   //   消すと「計上済」の印が外れ、もう一度足して二重になる。
@@ -1395,7 +1406,7 @@ function syncHasData_(d){
 // はじめての接続で、共有DBに合わせる（このPCの分は捨てる）
 function syncAdoptLocal_(){
   try{ downloadJson(fullData(),"仕入販売管理_共有DBにつなぐ前の控え_"+stamp()+".json"); }catch(e){}
-  CFG.partners=[]; CFG.price=[]; CFG.freight=[]; CFG.map=[]; CFG.shime=[];
+  CFG.partners=[]; CFG.price=[]; CFG.freight=[]; CFG.map=[]; CFG.shime=[]; CFG.itemName=[];
   OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[]; OPS.samples=[];
   ["adj","extra","head","st","qty","doc","invLines","buyLines"].forEach(k=>{ OPS[k]={}; });
   SRC=[]; SRCB=[]; SNAP={};
@@ -3651,6 +3662,34 @@ function itemNameFill(){
   logOp("商品名の読み替え表を取り込み",add.length+"行");
   alert(add.length+" 行を並べました。\n「請求書に書く商品名」を埋めてください。");
 }
+// 決まった形の商品名を作る（2026-11-02 追加）
+//   熊本県産 れんこん「幸祝」{品名} Mup{容量}kg
+//   品名のうしろに付いている「8月」「8月~」「7月10日~」は外します。
+function autoItemName(x){
+  const base=String(x.item==null?"":x.item)
+    .replace(/[\s\u3000]*\d+月(\d+日)?[\s\u3000]*[~\uff5e\u301c]?[\s\u3000]*$/,"").trim();
+  const cap=(x.cap==null||x.cap==="")?"":String(x.cap);
+  return "熊本県産 れんこん「幸祝」"+base+(cap?" Mup"+cap+"kg":"");
+}
+// 空欄の行だけ埋めます。すでに入っている行は触りません。
+function itemNameAuto(){
+  const list=CFG.itemName||[];
+  const blank=list.filter(x=>!String(x.name==null?"":x.name).trim());
+  if(!blank.length){ alert("商品名が空欄の行はありません。"); return; }
+  const ex=blank.slice(0,4).map(x=>"　"+(x.t||"")+"｜"+(x.item||"")+"｜"+(x.cap||"")+"kg"
+    +"\n　　→ "+autoItemName(x)).join("\n");
+  if(!confirm("商品名が空欄の "+blank.length+" 行に、決まった形の名前を入れます。\n\n"
+    +"　熊本県産 れんこん「幸祝」{品名} Mup{容量}kg\n\n"
+    +"品名のうしろの「○月」は外します。\n\n【例】\n"+ex
+    +"\n\n★ 規格が Mup でないもの（C・S・CS など）は、"
+    +"あとで直してください。\n　 すでに入っている行は触りません。\n\n続けますか？")) return;
+  let n=0;
+  list.forEach(x=>{ if(!String(x.name==null?"":x.name).trim()){ x.name=autoItemName(x); n++; } });
+  saveCfg(); drawItemName(); build();
+  logOp("請求書に書く商品名を自動で埋めた",n+"行");
+  alert(n+" 行に入れました。\n\n規格が Mup でないものを直してください。"
+    +"\n請求書に出る名前なので、一度ざっと目を通してください。");
+}
 function drawShime(){
   const tb=document.querySelector("#tShime tbody"); tb.innerHTML="";
   CFG.shime.forEach((s,i)=>{const tr=document.createElement("tr");
@@ -3978,6 +4017,7 @@ document.getElementById("delivRule").onchange=e=>{
   el[el.tagName==="SELECT"?"onchange":"oninput"]=drawDv;});
 document.getElementById("btnShimeFill").onclick=shimeFill;
 document.getElementById("btnItemNameFill").onclick=itemNameFill;
+document.getElementById("btnItemNameAuto").onclick=itemNameAuto;
 const goTo=id=>{const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});};
 document.getElementById("btnToBuyAgg").onclick=()=>goTo("buyAgg");
 document.getElementById("btnToMap").onclick=()=>goTo("mapCard");
