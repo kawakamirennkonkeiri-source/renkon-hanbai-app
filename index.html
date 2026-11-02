@@ -1080,14 +1080,27 @@ function seikyuYM(tori,se,no){
   return [y,m];
 }
 const TF=()=>({food:(Number(CFG.taxFood)||8)/100, fre:(Number(CFG.taxFreight)||10)/100});
+/**
+ * 運賃マスタの行を品名で絞る（2026-11-02 直し）
+ *   ① 品名がぴったり同じ行　② 前のほうが同じ行　③ 品名が空欄の行　の順に見ます。
+ *   前は①と②を混ぜて先頭の1本を取っていたので、
+ *   「加工用8月」と「加工用8月三ツ和」のように前が同じ名前があると、
+ *   運賃マスタの並び順で決まってしまい、ちがう行のリードが使われていました。
+ */
+function freightPick_(list,k){
+  const ex=list.filter(f=>N(f.item)===k);
+  if(ex.length) return ex;
+  const pt=list.filter(f=>{const fi=N(f.item); return fi&&fi.indexOf(k.slice(0,4))>=0;});
+  if(pt.length) return pt;
+  return list.filter(f=>!N(f.item));
+}
 function findFreight(tori,item,qty,kg,d){
   const t=N(tori),k=N(item); if(!t) return null;
   let c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)
     &&(f.unit==="宅配便"||(f.tanka!=null&&f.tanka!=="")));
   if(!c.length) return null;
   // 品名を書いた行が先。品名が空欄の行は「その取引先の予備」として後から見ます。
-  const nmF=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
-  c=nmF.length?nmF:c.filter(f=>!N(f.item));
+  c=freightPick_(c,k);
   if(!c.length) return null;
   const okc=c.filter(f=>{
     const q=Number(f.condQty);
@@ -1103,8 +1116,7 @@ function findFreightRow(tori,item,d){
   const t=N(tori),k=N(item); if(!t) return null;
   const c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d));
   if(!c.length) return null;
-  const nmR=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
-  const c2=nmR.length?nmR:c.filter(f=>!N(f.item));
+  const c2=freightPick_(c,k);
   return (c2.length?c2:c)[0];
 }
 // リード（店着日数・着曜日）だけを引く。運賃が未入力の行でも使える
@@ -1115,10 +1127,8 @@ function findLead(tori,item,d){
   const c=CFG.freight.filter(f=>N(f.t)===t&&inTerm(f,d)&&has(f));
   if(!c.length) return null;
   // 規格・品目を書いた行が先。品目が空欄の行は「その販売先の全部に効く予備」として後から見る
-  const c2=c.filter(f=>{const fi=N(f.item); return fi&&(fi===k||fi.includes(k.slice(0,4)));});
-  if(c2.length) return c2[0];
-  const c3=c.filter(f=>!N(f.item));
-  return (c3.length?c3:c)[0];
+  const c2=freightPick_(c,k);
+  return (c2.length?c2:c)[0];
 }
 // 出荷日＋リード＝店着日
 function arrivalDate(ship,f){
