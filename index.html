@@ -651,7 +651,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button class="btn sm" data-add="freight">＋ 新規</button></h2>
     <div class="note or"><b>一番左の欄は「取引先」です。発注書の行先（販売先）ではなく、
       <u>単価マスタに並んでいる呼び名</u>を入れてください。</b>
-      （例：行先が「ワタリ」でも、取引先が「川上荷役」なら <b>川上荷役</b> と書きます）<br>
+      （例：発注書の行先と単価マスタの呼び名が違うときは、<b>単価マスタの呼び名</b>の方を書きます）<br>
       品名も同じで、<u>対応表の「品名」</u>と同じ書き方にします。空欄にするとその取引先の全部に効きます。<br>
       単価マスタで<b>「送料別」</b>にした行だけ、ここの運賃が請求書に足されます。<b>「送料込み」</b>の行は運賃を足しません。<br>
       <b>店着リード</b>は運賃とは別に、<b>出荷日から何日後（または何曜日）に着くか</b>を決めます。運賃が空欄の行でもリードだけ使えます。<br>
@@ -1084,7 +1084,7 @@ const TF=()=>({food:(Number(CFG.taxFood)||8)/100, fre:(Number(CFG.taxFreight)||1
  * 運賃マスタの行を品名で絞る（2026-11-02 直し）
  *   ① 品名がぴったり同じ行　② 前のほうが同じ行　③ 品名が空欄の行　の順に見ます。
  *   前は①と②を混ぜて先頭の1本を取っていたので、
- *   「加工用8月」と「加工用8月三ツ和」のように前が同じ名前があると、
+ *   「○○用8月」と「○○用8月□□」のように前の方が同じ名前があると、
  *   運賃マスタの並び順で決まってしまい、ちがう行のリードが使われていました。
  */
 function freightPick_(list,k){
@@ -1574,8 +1574,19 @@ function saleTx(r,dq){
     const adjNo=(aj&&aj.deliv)?parseDate(aj.deliv):null;
     const no=adjNo||((CFG.delivRule==="lead")?(calcNo||boardNo||se):(boardNo||calcNo||se));
     const noSrc=adjNo?"手で修正":(no===calcNo)?"リードで計算":(no===boardNo)?"黒板の納品日":"出荷日と同じ";
-    const hit=(mp&&!sh)?lookup("販売",mp.tori,mp.item,cap,no):null;
-    const bill=mp?(mp.bill||mp.tori):"";
+    // 請求先を手で差し替えたとき、その相手が単価マスタにもいれば、その相手の単価で計算します。
+    //   （ギフトのように、同じ品を相手によって違う値段で出すもの。2026-11-04 追加）
+    //   単価マスタで引けない相手なら、対応表どおりの取引先のままです。
+    //   運賃とリードは対応表の取引先のままにしています。
+    //   どこへ運ぶかは請求先とは別だからです（運賃は「届け先の都道府県」で直せます）。
+    const ajBill=(aj&&aj.bill)?aj.bill:"";
+    const priceTori=(mp&&ajBill&&lookup("販売",ajBill,mp.item,cap,no))?ajBill:(mp?mp.tori:"");
+    const hit=(mp&&!sh)?lookup("販売",priceTori,mp.item,cap,no):null;
+    // 請求先は対応表で決まりますが、ギフトのように行き先が毎回変わるものは
+    //   取引の「✎ 修正」で選んだ請求先を優先します（2026-11-04 追加）。
+    //   billBase は対応表どおりの請求先で、修正画面に「元はどこか」を出すために持ちます。
+    const billBase=mp?(mp.bill||mp.tori):"";
+    const bill=(aj&&aj.bill)?aj.bill:billBase;
     const ym=(mp&&!sh)?seikyuYM(bill,se,no):[no.getFullYear(),no.getMonth()+1];
     const betsu=!!hit&&hit.soryo==="送料別";
     const fr=betsu?findFreight(mp.tori,mp.item,cs,kgTot,se):null;
@@ -1585,7 +1596,8 @@ function saleTx(r,dq){
     const tk=(aj&&aj.tanka!=null)?Number(aj.tanka):(hit?Number(hit.tanka):null);
     const shohin=tk!=null?tk*cs:null;
     return {kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
-      customer:sh?"":bill,priceKey:mp?mp.tori:"",supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
+      customer:sh?"":bill,billBase:billBase,
+      priceKey:priceTori,supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
       frNote:frNote, frPref:frPref,
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
       priceItem:(aj&&aj.item)?aj.item:(hit?hit.item:(mp?mp.item:"")),
@@ -2241,7 +2253,14 @@ function openTxEditor(no, after){
     +'<div class="sub">'+esc(sale?(t.sell+"／"+t.kubun+" → 請求先："+(t.customer||"—")):(t.supplier+"／"+t.kubun))
     +'　取引日 '+fmtY(t.date)+'<br>空欄にした項目は、マスタから計算した元の値に戻ります。</div><div class="grid">';
   if(sale){
-    h+='<label>品名（請求書・納品書に出る名前）<input id="ed_item" value="'+v("item",t.priceItem)+'"></label>'
+    h+='<label>請求先（空欄＝対応表どおり）<select id="ed_bill"><option value=""></option>'
+      +[...new Set((CFG.partners||[]).map(p=>String(p.key||"").trim()).filter(Boolean))]
+        .sort((x,y)=>x.localeCompare(y,"ja"))
+        .map(k=>'<option'+(a.bill===k?" selected":"")+'>'+esc(k)+'</option>').join("")
+      +'</select><span class="was">対応表では '+esc(t.billBase||"—")
+      +'　※取引先マスタに無い相手は、先にマスタへ登録してください'
+      +'<br>選んだ相手が単価マスタにもあれば、<b>単価もその相手のもの</b>になります</span></label>'
+      +'<label>品名（請求書・納品書に出る名前）<input id="ed_item" value="'+v("item",t.priceItem)+'"></label>'
       +'<label>数量（c/s）<input id="ed_qty" inputmode="decimal" value="'+v("qty",t.qty)+'"><span class="was">黒板：'+yen(t.baseQty)+' c/s</span></label>'
       +'<label>単価（円）<input id="ed_tanka" inputmode="decimal" value="'+v("tanka",t.tanka)+'"><span class="was">空欄＝単価マスタ</span></label>'
       +'<label>送料（円・税10%）<input id="ed_freight" inputmode="decimal" value="'+v("freight",t.freight||"")+'"><span class="was">空欄＝運賃マスタ／0で送料なし</span></label>'
@@ -2285,6 +2304,9 @@ function openTxEditor(no, after){
       const dv=md.querySelector("#ed_deliv").value;
       if(dv&&(a.deliv||dv!==ymdOf(t.deliv))) n.deliv=dv;
       const pf=md.querySelector("#ed_pref").value; if(pf) n.pref=pf;
+      // 対応表と同じ請求先を選んだときは覚えません（対応表を直したら追随させるため）
+      const bl=md.querySelector("#ed_bill").value;
+      if(bl&&bl!==t.billBase) n.bill=bl;
       if(a.freight==null&&n.freight!=null&&n.freight===(t.freight||0)) delete n.freight;
     }else{
       if(a.kg==null&&n.kg!=null&&n.kg===t.kg) delete n.kg;
