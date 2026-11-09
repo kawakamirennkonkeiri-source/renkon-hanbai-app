@@ -229,7 +229,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <span class="ver" id="verLabel"></span></div>
   <div class="sp"></div>
   <span class="hbadge" id="syncBadge">● 保存待ち</span>
-  <div class="menu">
+  <!-- データ保存・バックアップは画面に出しません（2026-11-09）。
+       中身は共有データベース（スプレッドシート）に残るので、このPCへ控えを取る必要がありません。 -->
+  <div class="menu" style="display:none">
     <button class="hbtn" id="btnBackup">データ保存・バックアップ ▾</button>
     <div class="menu-list" id="mBackup">
       <div class="cap">まるごと（おすすめ）</div>
@@ -245,9 +247,11 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <button data-act="dataImport">取引データを読み込む</button>
     </div>
   </div>
-  <button class="hbtn y" id="btnFreee">freee設定</button>
+  <!-- freee設定は画面に出しません（2026-11-09）。別に設定し、専務と曽我さんだけが管理します。 -->
+  <button class="hbtn y" id="btnFreee" style="display:none">freee設定</button>
   <span class="who">操作者:<input id="userName" placeholder="氏名"></span>
-  <button class="hbtn r" id="btnCfgReset2">初期データに戻す</button>
+  <!-- 初期データに戻すは画面に出しません（2026-11-09）。押すと全部が最初に戻るため、危険だけがあって用がありません。 -->
+  <button class="hbtn r" id="btnCfgReset2" style="display:none">初期データに戻す</button>
 </header>
 <nav id="nav"></nav>
 <div class="topbar no-print">
@@ -396,7 +400,6 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <span style="position:relative;display:inline-block">
         <button class="btn" data-menu="qt">見積書を発行</button>
         <div class="menu-list" id="m-qt">
-          <button data-freee="qt">見積書(freee)</button>
           <button data-pdf="qt" data-key="new">見積書PDF</button>
           <div class="sep"></div><button id="btnQtPrev">画面で確認する</button>
         </div>
@@ -566,14 +569,17 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="card">
     <h2>取引先マスタ <span class="cnt" id="cPar"></span><span class="sp"></span>
       <button class="btn sm" data-add="partners">＋ 新規</button></h2>
-    <div class="note or"><b>支払</b>＝入金までの月数（0＝当月・1＝翌月・2＝翌々月）、<b>支払日</b>＝「月末」か日付の数字。請求書の「お支払期日」に使います。<br>取引先の正式名称・住所・担当者・メールを登録します。<b>照合キー</b>には、請求一覧に出てくる呼び名（略称）を入れてください。請求書に住所・担当者が印字されます。</div>
+    <div class="note or"><b>支払</b>＝入金までの月数（0＝当月・1＝翌月・2＝翌々月）、<b>支払日</b>＝「月末」か日付の数字。請求書の「お支払期日」に使います。<br>
+      <b>締め</b>＝「月末」か「20日」。<b>請求基準日</b>＝「着」（納品日）か「出し」（出荷日）。<b>どちらも空欄なら、月末締め・納品日基準</b>として計算します。<br>
+      <b>「20日」締め</b>にすると、21日以降の分は翌月の請求に回ります。<b>「出し」</b>にすると、月をまたぐ積み込みの行が前の月の請求に移ります。<br>取引先の正式名称・住所・担当者・メールを登録します。<b>照合キー</b>には、請求一覧に出てくる呼び名（略称）を入れてください。請求書に住所・担当者が印字されます。</div>
     <div class="flex"><input class="find" id="fPar" placeholder="絞り込み"></div>
     <div class="scroll" style="max-height:56vh">
       <table id="tPar"><thead><tr>
-        <th style="width:19%">取引先名（正式）</th><th style="width:11%">照合キー</th>
-        <th style="width:8%">郵便番号</th><th style="width:19%">住所</th>
-        <th style="width:8%">担当者</th><th style="width:15%">メール</th>
-        <th style="width:9%">支払</th><th style="width:8%">支払日</th><th style="width:5%"></th>
+        <th style="width:16%">取引先名（正式）</th><th style="width:10%">照合キー</th>
+        <th style="width:7%">郵便番号</th><th style="width:16%">住所</th>
+        <th style="width:7%">担当者</th><th style="width:12%">メール</th>
+        <th style="width:8%">支払</th><th style="width:7%">支払日</th>
+        <th style="width:7%">締め</th><th style="width:9%">請求基準日</th><th style="width:5%"></th>
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
@@ -712,7 +718,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 
 <!-- 設定 -->
 <section class="panel" id="settings">
-  <div class="card">
+  <!-- 設定の書き出し・読み込み・最初に戻すは画面に出しません（2026-11-09）。
+       設定は共有データベースで4台に配られるので、持ち出す必要がありません。 -->
+  <div class="card" style="display:none">
     <h2>設定の保存・持ち出し</h2>
     <div class="note or">マスタのマス目はクリックすれば書き換えられます。<b>変更は自動保存</b>（このパソコンのChrome）。別のパソコンで使うときは書き出し→読み込み。</div>
     <div class="flex">
@@ -723,7 +731,11 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       <span id="cfgMsg"></span>
     </div>
   </div>
-  <div class="card">
+  <!-- 締め日は取引先マスタへ移しました（2026-11-09）。
+       同じ請求先を2か所で持つと必ずどちらかが古くなるためです。
+       この表は、取引先マスタの「締め」が空欄のときの控えとしてだけ残します。
+       GASで moveShimeToPartners を実行すると、ここの中身が取引先マスタへ移ります。 -->
+  <div class="card" style="display:none">
     <h2>締め日設定 <span class="cnt">ここに無い請求先は「月末締め／納品日基準」</span><span class="sp"></span>
       <button class="btn sub sm" id="btnShimeFill">請求先をまとめて追加</button>
       <button class="btn sm" data-add="shime">＋ 新規</button></h2>
@@ -746,7 +758,16 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="note">登録番号を入れると、請求書・買取書に印字されます（未入力のうちは注意書きが出ます）。</div>
   </div>
 
-  <div class="card">
+  <!-- PDFの保存先は画面に出しません（2026-11-09）。
+       毎回変わるものではなく、値は共有データベースで4台に配られています。
+         納品書 → 納品書用アカウントのマイドライブ／納品書PDF／対象月／
+         請求書 → 請求書用アカウントのマイドライブ／請求書PDF／対象月／
+         買取書・見積書も、請求書と同じアカウントです。
+         （アカウント名は社内用のファイルにだけ書いています。ここは公開されるので書きません。）
+       変えたいときは、ここの display:none を外して入れ直してください。
+       （右側の「保存先フォルダID」の2欄は、もともと保存のときに読まれていません。
+         保存先はGAS側がフォルダ名で決めています。） -->
+  <div class="card" style="display:none">
     <h2>PDFの保存先（Googleドライブ）</h2>
     <div class="note red">
       <b>この機能を使うには、各アカウントで1回だけ準備が必要です。</b><br>
@@ -776,7 +797,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     </div>
   </div>
 
-  <div class="card">
+  <!-- freee連携設定は画面に出しません（2026-11-09 社長判断）。
+       freeeは別に設定し、専務と曽我さんだけが管理します。 -->
+  <div class="card" style="display:none">
     <h2>freee連携設定</h2>
     <div class="flex">
       <label style="min-width:150px">アクセストークン</label>
@@ -850,7 +873,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
         <th style="width:20%">操作</th><th>内容</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
-  <div class="card">
+  <!-- バックアップは画面に出しません（2026-11-09）。
+       データは共有データベース（スプレッドシート）にあり、版の履歴もそちらに残ります。 -->
+  <div class="card" style="display:none">
     <h2>バックアップ</h2>
     <div class="note or" style="margin-top:0">データは<b>このパソコンのブラウザの中だけ</b>に保存されています。ブラウザの履歴削除・パソコンの故障で消えます。<br>
       請求書・買取書を発行したとき、修正を入れたときは、画面右上の<b>「データ保存・バックアップ」→「すべてを書き出す」</b>で控えを取ってください。
@@ -1017,7 +1042,15 @@ function indexCfg(){
   NOBILL=new Set(CFG.nobill||[]);
   PAR={};CFG.partners.forEach(p=>{if(p.key)PAR[KEYNAME(p.key)]=p;});
 }
-const shimeOf=t=>SHIME[t]||{shime:"月末",kijun:"着"};
+// 締め日は取引先マスタで決めます（2026-11-09）。
+//   それまでは別に「締め日設定」の表があり、同じ請求先を2か所で持っていました。
+//   取引先マスタの「締め」が空欄のときだけ、古い「締め日設定」の表を見ます。
+//   移行（GASの moveShimeToPartners）が終われば、古い表は見られません。
+function shimeOf(t){
+  const p=PAR[KEYNAME(t)];
+  if(p&&String(p.shime||"").trim()) return {shime:p.shime,kijun:p.kijun||"着"};
+  return SHIME[t]||{shime:"月末",kijun:"着"};
+}
 const kijunLabel=r=>r.kijun==="出し"?"出荷日":"納品日";
 // 請求書・納品書に書く商品名（読み替え表）
 //   容量を書いた行が先。容量が空欄の行は、その品名の全容量に効きます
@@ -1036,8 +1069,11 @@ function invItem(t){
   return itemNameOf(t.priceKey,t.priceItem,t.cap)||t.priceItem||t.item;
 }
 // 締め日マスタにその請求先の行があるか
-const shimeBadge=t=>SHIME[t]?''
-  :' <span class="badge b-wait" title="締め日設定にこの請求先の行がありません。初期値（月末締め・納品日）で計算しています">締め日 未登録</span>';
+const shimeBadge=t=>{
+  const p=PAR[KEYNAME(t)];
+  if((p&&String(p.shime||"").trim())||SHIME[t]) return '';
+  return ' <span class="badge b-wait" title="取引先マスタに、この請求先の「締め」が入っていません。初期値（月末締め・納品日）で計算しています">締め日 未登録</span>';
+};
 function partnerOf(name){
   const k=KEYNAME(name);
   if(PAR[k]) return PAR[k];
@@ -1234,7 +1270,7 @@ function saveOps(){
     // 黙って見のがすと、保存できていないことに誰も気づけません。
     //   そのまま開き直すと古い中身に戻り、共有データベースの帳票まで消しかねません。
     try{ dlMsg("このPCに保存できませんでした。保存場所がいっぱいかもしれません。"
-      +"「データ保存・バックアップ」から控えを取って、川上さんに知らせてください。","ng"); }catch(e2){}
+      +"このまま閉じると、いま作ったものが消えます。閉じずに川上さんに知らせてください。","ng"); }catch(e2){}
   }
   syncSoon();
 }
@@ -1596,7 +1632,13 @@ function startSync(){
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") syncTick(); });
 function drawSyncBadge(){
   const el=document.getElementById("syncBadge"); if(!el) return;
-  if(!syncOn()){ el.textContent="● このPCだけに保存"; el.title="共有データベースは使っていません"; return; }
+  el.style.color="";
+  // つながっていないときは、赤で警告します（2026-11-09）。
+  //   それまでは「● このPCだけに保存」と出ていて、正常のように見えていました。
+  //   いまは共有データベースが本体なので、つながっていないのは異常です。
+  if(!syncOn()){ el.textContent="⚠ 共有データベースにつながっていません";
+    el.title="設定タブの「共有データベース」で、URLと合言葉を入れてください。このままでは、ほかのPCと数字が合いません。";
+    el.style.color="#C62828"; return; }
   if(SYNCBUSY){ el.textContent="● 同期中…"; return; }
   if(PUSHHOLD){ el.textContent="● 受け取り直しています"; el.title=SYNCHOLD; return; }
   if(SYNCERR){ el.textContent="● 同期できません"; el.title=SYNCERR; return; }
@@ -2214,13 +2256,11 @@ function drawDv(){
     const docCell=doc
       ?'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
        +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
-       +'<button data-freee="dv" data-key="'+esc(t.no)+'">納品書(freee)</button>'
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>'
        +'<br><a href="#" data-reissue="'+esc(t.no)+'" style="font-size:11px;color:var(--or)">発行済PDF</a>'
       :'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
        +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
-       +'<button data-freee="dv" data-key="'+esc(t.no)+'">納品書(freee)</button>'
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>';
     const act=lock?'<span style="color:#999;font-size:11px">請求済のため変更不可</span>'
@@ -3323,7 +3363,7 @@ function smpAdd(key0){
       if(!bu||!bu.done) alert("このPCに保存できませんでした。\n\n"
         +"請求書には足しましたが、「計上済」の印が残っていません。\n"
         +"画面を開き直すと印が消えて、二重に足してしまう恐れがあります。\n\n"
-        +"設定タブの「データ保存・バックアップ」で控えを取ってから、ご連絡ください。");
+        +"このまま閉じずに、川上さんに知らせてください。");
     }catch(e){}
   })();
   logOp("有償サンプルを請求書に足しました",
@@ -3434,7 +3474,6 @@ function drawInvList(){
       +'<button class="btn sub" data-invedit="'+esc(k)+'">✎ この請求書を修正</button>'
       +'<div class="menu"><button class="btn" data-menu="inv-'+esc(k)+'">請求書発行 ▾</button>'
       +'<div class="menu-list" id="m-inv-'+esc(k)+'">'
-      +'<button data-freee="inv" data-key="'+esc(k)+'">請求書(freee)</button>'
       +'<button data-pdf="inv" data-key="'+esc(k)+'">請求書PDF</button>'
       +'<div class="sep"></div><button data-doc="'+esc(k)+'">画面で確認する</button></div></div></div>'
       +'<div class="prev-b"'+(op?'':' style="display:none"')+'>'
@@ -4026,6 +4065,10 @@ function drawPar(){
       +'</td><td>'+cell("partners",i,"person",p.person)+'</td><td>'+cell("partners",i,"mail",p.mail)
       +'</td><td>'+selc("partners",i,"paymentMonthOffset",String(p.paymentMonthOffset??1),["0","1","2"])
       +'</td><td>'+cell("partners",i,"paymentDay",p.paymentDay||"月末")
+      // 締め・請求基準日は、2026-11-09 に「締め日設定」の表からここへ移しました。
+      //   空欄＝未設定で、月末締め・納品日基準として計算します（一覧に「締め日 未登録」と出ます）。
+      +'</td><td>'+selc("partners",i,"shime",p.shime||"",["","月末","20日"])
+      +'</td><td>'+selc("partners",i,"kijun",p.kijun||"",["","着","出し"])
       +'</td><td>'+delBtn("partners",i)+'</td>'; tb.appendChild(tr);});
   document.getElementById("cPar").textContent="("+CFG.partners.length+"行)"+(sh!==CFG.partners.length?" ／ "+sh+"行を表示中":"");
   bind();
@@ -5541,7 +5584,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-09 版（共有DB中心）";
+const BUILD_LABEL="2026-11-10 版（画面の片付け）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
