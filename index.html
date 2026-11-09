@@ -1239,18 +1239,79 @@ function saveOps(){
   syncSoon();
 }
 // ===== 共有データベース（複数PCで同時に使う） =====
+// 送る種類。取込データ（rows）は、ここに入れません（2026-11-09）。
+//   取込データは共有データベース側（GASの発注書取込）でだけ作ります。
+//   アプリからは受け取るだけで、送りません。
+//   それまでは120行をひとかたまりにして送り合っていたため、
+//   件数が1行ちがうPCが1台あるだけで、かたまりの切れ目がずれ、
+//   後ろのかたまり全部をお互いに上書きし合っていました。
+//   売上がPCごとに違う／ダッシュボードとずれる／要確認が出る、の原因がこれです。
 const SYNC_ENT=["partners","price","freight","map","shime","itemName","invoices","buyDocs","quotes","samples",
-  "adj","extra","head","st","qty","doc","invLines","buyLines","rows","meta","auditLog"];
+  "adj","extra","head","st","qty","doc","invLines","buyLines","meta","auditLog"];
 // itemName（請求書に書く商品名）は、ここから外しました（2026-11-02）。
 //   ここに入れていると「まるごと1かたまり」で送り合うので、
 //   古い中身を持つPCが1台つないだだけで、全部が巻き戻ります。
 //   実際に170行の商品名が一度に消えました。
 //   いまは単価マスタなどと同じく「1行ずつ」扱い、消す指示も出しません。
 const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
-const SNAP_KEY="krs_sync_snap", SINCE_KEY="krs_sync_since";
+// 送った控えは「指紋」だけにします（2026-11-09）。名前も変えたので、古い控えとは別物です。
+const SNAP_KEY="krs_sync_snap2", SINCE_KEY="krs_sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
+// PUSHHOLD＝送るのを止めて、共有データベースから受け取り直している間だけ true。
+// PUSHFREE＝全部もらい直した直後の1回だけ、下のブレーキを通さずに送る印。
+//   もらい直した直後は、このPCの中身はもう古くありません。
+//   ここを通さないと、このPCにしか無い記録が20件より多いときに、
+//   ブレーキと受け取り直しを行き来したまま、いつまでも上がらなくなります。
+let PUSHHOLD=false, SYNCHOLD="", PUSHFREE=false;
 try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
+// 古い控え（全データのもう1コピー）を、このPCから捨てます（2026-11-09）。
+//   このPCの保存場所でいちばん場所を取っていたのがここです。
+//   いっぱいになると、発行した買取書・請求書がこのPCに保存できず、
+//   開き直したときに消えていました（PDFだけができて、請求に乗らない症状）。
+//   これからは下の「指紋」だけを持ちます。
+try{ localStorage.removeItem("krs_sync_snap"); }catch(e){}
+// 取込データの「かたまり」の控え。このPCには保存せず、開いている間だけ覚えます。
+let ROWC={}, ROWFULL=false;
 try{SINCE=localStorage.getItem(SINCE_KEY)||"";}catch(e){SINCE="";}
+// 新しい版にしたあとの最初の1回は、指紋がまだ無いので、送る前に全部もらい直します。
+if(SINCE&&!Object.keys(SNAP).length) PUSHHOLD=true;
+
+// 基準（指紋）を失った表から、いきなりこれ以上の件数は送りません。
+const PUSH_MAX=20;
+// 記録の「指紋」。中身は持たず、変わったかどうかだけ分かる短い符号です。
+//   同じ中身なら同じ符号、1文字でも違えば違う符号になります。
+function fp_(o){
+  const s=JSON.stringify(o); let a=5381,b=52711,i=s.length;
+  while(i--){ const c=s.charCodeAt(i); a=((a*33)^c)>>>0; b=((b*31)+c)>>>0; }
+  return s.length.toString(36)+"."+a.toString(36)+"."+b.toString(36);
+}
+function fpMap_(m){ const o={}; Object.keys(m||{}).forEach(k=>{ o[k]=fp_(m[k]); }); return o; }
+// 共有データベースが持っていると分かった記録だけを、「送った」ことにします（2026-11-09）。
+//   受け取ったあとに全部まとめて「送った」ことにしていたため、
+//   このPCにしか無い記録（まだ一度も上がっていないもの）が、
+//   いつまでも共有データベースへ上がらないことがありました。
+//   ここで印を付けるのは、共有DBから返ってきた記録だけにします。
+//   そうすれば、このPCにしか無い記録は印が付かず、次の送信で必ず上がります。
+function snapMark_(data){
+  const cur=syncSnapshot();
+  SYNC_ENT.forEach(e=>{
+    const got=(data[e]||[]); if(!got.length) return;
+    if(!SNAP[e]) SNAP[e]={};
+    got.forEach(r=>{
+      if(!r||!r.id) return;
+      if(r._del){ delete SNAP[e][r.id]; return; }      // 消えた記録の印も外します
+      const c=(cur[e]||{})[r.id];
+      if(c!==undefined) SNAP[e][r.id]=fp_(c);
+    });
+  });
+}
+// 画面に出すときの、表の名前
+const ENT_JA={partners:"取引先マスタ",price:"単価マスタ",freight:"運賃マスタ",map:"対応表",
+  shime:"締め日",itemName:"請求書に書く商品名",invoices:"請求書",buyDocs:"買取書",quotes:"見積書",
+  samples:"サンプル",adj:"取引の修正",extra:"帳票の追加行",head:"帳票の件名備考",st:"納品状態",
+  qty:"納品数量",doc:"納品書の発行",invLines:"請求済みの明細",buyLines:"買取済みの明細",
+  meta:"設定",auditLog:"操作履歴"};
+const entJa_=e=>ENT_JA[e]||e;
 // 画面の「削除」で消したマスタの行番号。
 // 共有DBから消してよいのは、ここに入っている行だけ。
 const DELQ_KEY="krs_sync_delq";
@@ -1291,14 +1352,19 @@ function ensureIds(){
     .forEach(a=>{const p=a[0],list=a[1];(list||[]).forEach(r=>{ if(!r._id){ r._id=p+"_"+uid(); n++; } });});
   return n;
 }
-function rowChunks(kind,rows){
-  const out={}, N=120, list=rows||[];
-  const cnt=Math.max(1,Math.ceil(list.length/N));
-  for(let i=0;i<cnt;i++){
-    const id=kind+"#"+String(i).padStart(4,"0");
-    out[id]={id:id,kind:kind,part:i,rows:list.slice(i*N,(i+1)*N)};
-  }
-  return out;
+// 取込データを120行ずつに切る rowChunks は外しました（2026-11-09）。
+//   送るためだけの関数で、これがPCごとのマスターを作っていました。
+//   受け取る側の組み立ては rowsRebuild_ が引き継ぎます。
+
+// 共有データベースの「かたまり」から、販売・買取・予定の一覧を組み立て直します。
+//   かたまりの中身は共有DB側が作ったものをそのまま使うので、
+//   このPCで切り直すことはありません。
+function rowsRebuild_(){
+  const pick=k=>Object.keys(ROWC).filter(x=>x.indexOf(k+"#")===0).sort()
+    .reduce((a,x)=>a.concat(ROWC[x].rows||[]),[]);
+  SRC=pick("sale"); SRCB=pick("buy"); SRCP=pick("plan");
+  try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB));
+       localStorage.setItem(ROWP_KEY,JSON.stringify(SRCP)); }catch(e){}
 }
 function syncSnapshot(){
   if(ensureIds()) saveCfg();
@@ -1315,33 +1381,48 @@ function syncSnapshot(){
   const kv=(e,o)=>{const m={};Object.keys(o||{}).forEach(k=>{m[k]={id:k,v:o[k]};});s[e]=m;};
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
   kv("doc",OPS.doc); kv("invLines",OPS.invLines); kv("buyLines",OPS.buyLines);
-  // 予定（plan）も入れておかないと、送るときに共有DBから消えてしまいます。
-  s.rows=Object.assign(rowChunks("sale",SRC),rowChunks("buy",SRCB),rowChunks("plan",SRCP));
+  // 取込データ（rows）は、ここに入れません。送らないからです（2026-11-09）。
   const meta={}; META_KEYS.forEach(k=>{ meta[k]={id:k,v:CFG[k]}; }); s.meta=meta;
   const lg={}; (OPS.log||[]).forEach(l=>{ if(l&&l.id) lg[l.id]=l; }); s.auditLog=lg;
   return s;
 }
 // 変わった分だけ送る
+//   「変わった」は、前に送ったときの指紋と見比べて決めます。
+//   中身のコピーは持ちません（2026-11-09）。
 async function syncPush(){
-  const cur=syncSnapshot();
+  const cur=syncSnapshot(), fails=[];
   for(const e of SYNC_ENT){
     const now=cur[e]||{}, old=SNAP[e]||{}, ch=[], del=[];
-    // 予定（plan）は共有データベース側でだけ作ります。こちらからは送りません。
-    //   まだ受け取っていないPCが送ると、共有DBの予定を空っぽで上書きしてしまうためです。
-    //   （控えとしては手元に持っておくので、スナップショットからは外しません）
-    const skipPlan=id=>(e==="rows"&&String(id).indexOf("plan#")===0);
-    Object.keys(now).forEach(id=>{ if(skipPlan(id)) return;
-      if(JSON.stringify(now[id])!==JSON.stringify(old[id])) ch.push(now[id]); });
+    Object.keys(now).forEach(id=>{ if(fp_(now[id])!==old[id]) ch.push(now[id]); });
     // マスタは、画面の「削除」で消した行だけを消す。
     // 手元に無いというだけで消すと、共有DBにあとから足された行（GASで入れた行など）が、
     // 設定の保存が間に合わなかったPCの送信で消えてしまう。
     if(MASTER_ENT.indexOf(e)>=0) Object.keys(DELQ[e]||{}).forEach(id=>{ if(!now[id]) del.push(id); });
-    else Object.keys(old).forEach(id=>{ if(skipPlan(id)) return; if(!now[id]) del.push(id); });
-    if(ch.length) await syncApi("pushBatch",{entity:e,records:ch});
-    if(del.length){ await syncApi("deleteBatch",{entity:e,ids:del});
-      if(DELQ[e]){ del.forEach(id=>{ delete DELQ[e][id]; }); saveDelq(); } }
+    else Object.keys(old).forEach(id=>{ if(!now[id]) del.push(id); });
+    // 暴走ブレーキ（2026-11-09）。
+    //   その表の指紋が1つも無いのに、たくさん送ろうとしている＝基準を失っています。
+    //   そのまま送ると、共有データベースをこのPCの中身で巻き戻してしまいます。
+    //   送らずに止めて、共有DBから全部もらい直し、指紋を作り直します。
+    //   指紋は受け取るたびに作るので、ふだんの入力でここに来ることはありません。
+    if(!PUSHFREE&&!Object.keys(old).length&&ch.length>PUSH_MAX){
+      PUSHHOLD=true;
+      SYNCHOLD=entJa_(e)+"を"+ch.length+"件まとめて送ろうとしたので、止めました。"
+        +"共有データベースから受け取り直しています。";
+      saveSnap(); drawSyncBadge(); return;
+    }
+    // 表ごとに切り離します。1つ失敗しても、後ろの表を止めません（2026-11-09）。
+    //   それまでは手前の表で失敗すると、そのあとの買取書・請求書が
+    //   いつまでも共有データベースに上がらないままでした。
+    try{
+      if(ch.length) await syncApi("pushBatch",{entity:e,records:ch});
+      if(del.length){ await syncApi("deleteBatch",{entity:e,ids:del});
+        if(DELQ[e]){ del.forEach(id=>{ delete DELQ[e][id]; }); saveDelq(); } }
+      SNAP[e]=fpMap_(now);                 // 送れた表だけ、基準を進めます
+    }catch(err){ fails.push(entJa_(e)+"："+(err&&err.message?err.message:String(err))); }
   }
-  SNAP=cur; saveSnap();
+  PUSHFREE=false;
+  saveSnap();
+  if(fails.length) throw new Error("共有データベースに送れなかったものがあります。\n"+fails.join("\n"));
 }
 // 受け取って反映する
 function applyRemote(data){
@@ -1388,15 +1469,10 @@ function applyRemote(data){
     if(r._del) delete o[r.id]; else o[r.id]=r.v; }); };
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
   kv("doc",OPS.doc); kv("invLines",OPS.invLines); kv("buyLines",OPS.buyLines);
-  // 取込データはまとまり（チャンク）単位。手元の控えに当ててから組み立て直す
+  // 取込データはまとまり（チャンク）単位。開いている間だけの控えに当てて組み立て直す
   if((data.rows||[]).length){
-    const cache=Object.assign({},SNAP.rows||{});
-    data.rows.forEach(r=>{ n++; if(r._del) delete cache[r.id]; else cache[r.id]=r; });
-    const pick=k=>Object.keys(cache).filter(x=>x.indexOf(k+"#")===0).sort()
-      .reduce((a,x)=>a.concat(cache[x].rows||[]),[]);
-    SRC=pick("sale"); SRCB=pick("buy"); SRCP=pick("plan");
-    try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB));
-         localStorage.setItem(ROWP_KEY,JSON.stringify(SRCP)); }catch(e){}
+    data.rows.forEach(r=>{ n++; if(r._del) delete ROWC[r.id]; else ROWC[r.id]=r; });
+    rowsRebuild_();
   }
   (data.meta||[]).forEach(r=>{ n++; if(!r._del&&META_KEYS.indexOf(r.id)>=0) CFG[r.id]=r.v; });
   if((data.auditLog||[]).length){
@@ -1419,25 +1495,38 @@ function syncAdoptLocal_(){
   CFG.partners=[]; CFG.price=[]; CFG.freight=[]; CFG.map=[]; CFG.shime=[]; CFG.itemName=[];
   OPS.invoices=[]; OPS.buyDocs=[]; OPS.quotes=[]; OPS.samples=[];
   ["adj","extra","head","st","qty","doc","invLines","buyLines"].forEach(k=>{ OPS[k]={}; });
-  SRC=[]; SRCB=[]; SNAP={};
+  SRC=[]; SRCB=[]; SRCP=[]; SNAP={}; ROWC={}; ROWFULL=false;
   try{ localStorage.setItem(ROW_KEY,"[]"); localStorage.setItem(ROWB_KEY,"[]");
        localStorage.setItem(ROWP_KEY,"[]"); }catch(e){}
 }
 async function syncPull(){
   const first=!SINCE;
-  const j=await syncApi("pullAll",{since:SINCE});
+  // 送るのを止めているときは、「変わった分だけ」ではなく全部もらい直します（2026-11-09）。
+  //   指紋を作り直すためです。このPCの中身を捨てることはしません。
+  const j=await syncApi("pullAll",{since:(PUSHHOLD?"":SINCE)});
   const d=j.data||{};
   // はじめての接続で共有DBに中身があるときは、このPCの分を捨てて共有DBに合わせる。
   // ここで合わせておかないと、次にこのPCの中身を共有DBへ送ってしまい、
   // マスタが二重になったり、自社情報が空で上書きされたりする。
   const adopt=first&&syncHasData_(d);
   if(adopt) syncAdoptLocal_();
-  const n=applyRemote(d);
+  // 開いてから1回だけ、取込データを共有データベースの中身にそろえ直します（2026-11-09）。
+  //   「変わった分だけ」で受け取っていると、共有DBから消えた行がこのPCに残り続け、
+  //   売上がそのPCだけ多く出ていました。
+  //   取込データはアプリから送らないので、共有DBの中身がそのまま正です。
+  let rowsN=0;
+  if(!ROWFULL){
+    const jr=await syncApi("pullAll",{since:"",only:"rows"});
+    ROWC={}; ((jr.data||{}).rows||[]).forEach(r=>{ if(!r._del) ROWC[r.id]=r; });
+    rowsRebuild_(); ROWFULL=true; rowsN=1;
+  }
+  const n=applyRemote(d)+rowsN;
   // 設定を先に、待たずに書く。書けていないのに控えだけ新しくすると、行が消える。
   const ok=(n||adopt)?saveCfgNow():true;
   if(ok){ SINCE=j.serverTime||SINCE; saveSince(); }
-  if(n||adopt){
-    if(ok){ SNAP=syncSnapshot(); saveSnap(); }
+  if(n||adopt||PUSHHOLD){
+    if(ok){ snapMark_(d); saveSnap();
+      if(PUSHHOLD){ PUSHHOLD=false; SYNCHOLD=""; PUSHFREE=true; } }
     indexCfg(); drawAll(); build(); drawLog();
   }
   if(!ok) throw new Error("このPCに設定を保存できませんでした。保存場所がいっぱいかもしれません。");
@@ -1463,7 +1552,7 @@ async function syncTick(force){
   if(!force&&typingNow()) return;                        // 打っている最中は反映しない
   SYNCBUSY=true; drawSyncBadge();
   // 一度も受け取っていないPCは、送らずに先に受け取る
-  try{ if(SINCE) await syncPush(); await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
+  try{ if(SINCE&&!PUSHHOLD) await syncPush(); await syncPull(); SYNCERR=""; LASTSYNC=nowStr(); }
   catch(e){ SYNCERR=e.message||String(e); }
   SYNCBUSY=false; drawSyncBadge(); drawSyncCard();
 }
@@ -1509,6 +1598,7 @@ function drawSyncBadge(){
   const el=document.getElementById("syncBadge"); if(!el) return;
   if(!syncOn()){ el.textContent="● このPCだけに保存"; el.title="共有データベースは使っていません"; return; }
   if(SYNCBUSY){ el.textContent="● 同期中…"; return; }
+  if(PUSHHOLD){ el.textContent="● 受け取り直しています"; el.title=SYNCHOLD; return; }
   if(SYNCERR){ el.textContent="● 同期できません"; el.title=SYNCERR; return; }
   el.textContent="● 同期 "+(LASTSYNC?LASTSYNC.slice(-5):""); el.title="最終同期 "+LASTSYNC;
 }
@@ -2945,7 +3035,10 @@ async function smpRepull(){
       } else { OPS.samples.push(rec); add++; }
     });
     saveOps();
-    try{ SNAP=syncSnapshot(); saveSnap(); }catch(e){}
+    // ここで「送った」印は付けません（2026-11-09）。
+    //   それまでは全部の指紋を「送った」ことにしていたので、
+    //   このとき未送信だった請求書などが、送られないまま取り残されていました。
+    //   印を付けないと、受け取ったサンプルを1回だけ送り返します。中身は同じなので害はありません。
     drawSamples(); drawInvList();
     alert("サンプルを "+got.length+" 件受け取りました。\n\n"
       +"新しく入った　"+add+" 件\n上書きした　"+upd+" 件\n\n"
@@ -5444,7 +5537,12 @@ let iA=DATA.sample,iB=DATA.prod;
 try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
     const b=localStorage.getItem(ROWB_KEY); if(b) iB=JSON.parse(b);
     const p=localStorage.getItem(ROWP_KEY); if(p) SRCP=JSON.parse(p);}catch(e){}
-document.getElementById("verLabel").textContent=new Date().toISOString().slice(0,10)+" 版";
+// 画面の右上に出す版名。アプリを直したときは、ここも書き替えてください（2026-11-09）。
+//   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
+//   「新しい版に差し替わったか」を画面で確かめられませんでした。
+//   4台をそろえたか確かめるのに使います。
+const BUILD_LABEL="2026-11-09 版（共有DB中心）";
+document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
   document.getElementById("syncBadge").textContent="● 保存できない環境です";}
