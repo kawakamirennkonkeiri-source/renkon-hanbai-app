@@ -1863,7 +1863,9 @@ const BZ_MUP_SELL="個人注文";
 const BZ_CS_KG=10;
 //   最後に残したい区分。ここに無い区分は「まだ決めていない区分」として、
 //   どの販売先から来ているかを画面に出します。
-const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽","個人注文"];
+//   「ギフト」は、ほかにまとめず、そのまま「ギフト」で残します（2026-11-16 社長判断）。
+//     贈答用は単価も数量も他と性格がちがうので、1つの区分として見ます。
+const BZ_KUBUN_OK=["洗い","真空","土付き","CS","ピロー","真空(海外)","蓮の葉","新芽","個人注文","ギフト"];
 //   区分は半角カナで書かれていることがあります（ﾋﾟﾛｰ など）。
 //   そのままでは上の一覧と文字が合わないので、N() でそろえてから比べます。
 const bzKubunOK=n=>BZ_KUBUN_OK.some(x=>N(x)===N(n));
@@ -2012,7 +2014,8 @@ function bzKubunDraw(act,pl){
     +(todo.length?'<div class="note">まだどこにまとめるか決めていない区分が '+todo.length+' つあります：<b>'
       +esc(todo.join("・"))+'</b><br>'
       +'赤い字の「行先」を見て、どの区分に入れるか決めてください。'
-      +'決まったら、まとめ方の表（BZ_KUBUN_FIX）に足します。</div>':'')
+      +'決まったら、<b>そのまま残す</b>なら BZ_KUBUN_OK に、'
+      +'<b>ほかの区分にまとめる</b>なら BZ_KUBUN_FIX に足します。</div>':'')
     +'<div class="scroll" style="max-height:52vh">'
     +'<table class="bz"><thead><tr><th>区分</th><th>グラフ</th>'
     +'<th class="num">売上 実績</th><th class="num">売上 予定</th><th class="num">合計</th>'
@@ -5584,7 +5587,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-10 版（画面の片付け）";
+const BUILD_LABEL="2026-11-16 版（ギフトの区分）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
