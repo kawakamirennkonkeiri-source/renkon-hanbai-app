@@ -1042,14 +1042,16 @@ function indexCfg(){
   NOBILL=new Set(CFG.nobill||[]);
   PAR={};CFG.partners.forEach(p=>{if(p.key)PAR[KEYNAME(p.key)]=p;});
 }
-// 締め日は取引先マスタで決めます（2026-11-09）。
-//   それまでは別に「締め日設定」の表があり、同じ請求先を2か所で持っていました。
-//   取引先マスタの「締め」が空欄のときだけ、古い「締め日設定」の表を見ます。
-//   移行（GASの moveShimeToPartners）が終われば、古い表は見られません。
+// 締め日は取引先マスタだけで決めます（2026-11-16）。
+//   2026-11-09 に「締め日設定」の表から取引先マスタへ中身を移し（24社）、
+//   2026-11-16 に、古い表を見るのをやめました。
+//   同じ請求先を2か所で持つと、必ずどちらかが古くなるためです。
+//   「締め」が空欄の請求先は、月末締め・納品日基準として計算します。
+//   スプレッドシートの「締め日」シートは残っていますが、もう読みません。
 function shimeOf(t){
   const p=PAR[KEYNAME(t)];
   if(p&&String(p.shime||"").trim()) return {shime:p.shime,kijun:p.kijun||"着"};
-  return SHIME[t]||{shime:"月末",kijun:"着"};
+  return {shime:"月末",kijun:"着"};
 }
 const kijunLabel=r=>r.kijun==="出し"?"出荷日":"納品日";
 // 請求書・納品書に書く商品名（読み替え表）
@@ -1068,10 +1070,10 @@ function invItem(t){
   if(aj&&aj.item) return aj.item;              // 「✎ 修正」で直した品名が最優先
   return itemNameOf(t.priceKey,t.priceItem,t.cap)||t.priceItem||t.item;
 }
-// 締め日マスタにその請求先の行があるか
+// 取引先マスタに、その請求先の「締め」が入っているか
 const shimeBadge=t=>{
   const p=PAR[KEYNAME(t)];
-  if((p&&String(p.shime||"").trim())||SHIME[t]) return '';
+  if(p&&String(p.shime||"").trim()) return '';
   return ' <span class="badge b-wait" title="取引先マスタに、この請求先の「締め」が入っていません。初期値（月末締め・納品日）で計算しています">締め日 未登録</span>';
 };
 function partnerOf(name){
@@ -1282,7 +1284,10 @@ function saveOps(){
 //   件数が1行ちがうPCが1台あるだけで、かたまりの切れ目がずれ、
 //   後ろのかたまり全部をお互いに上書きし合っていました。
 //   売上がPCごとに違う／ダッシュボードとずれる／要確認が出る、の原因がこれです。
-const SYNC_ENT=["partners","price","freight","map","shime","itemName","invoices","buyDocs","quotes","samples",
+//   締め日（shime）も、ここから外しました（2026-11-16）。
+//     締め日は取引先マスタ（partners）の「締め」「請求基準日」で持つことにしたので、
+//     古い「締め日設定」の表は送りも受け取りもしません。
+const SYNC_ENT=["partners","price","freight","map","itemName","invoices","buyDocs","quotes","samples",
   "adj","extra","head","st","qty","doc","invLines","buyLines","meta","auditLog"];
 // itemName（請求書に書く商品名）は、ここから外しました（2026-11-02）。
 //   ここに入れていると「まるごと1かたまり」で送り合うので、
@@ -5587,7 +5592,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-16 版（ギフトの区分）";
+const BUILD_LABEL="2026-11-16b 版（締め日の片付け）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
