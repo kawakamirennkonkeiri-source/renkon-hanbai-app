@@ -2268,7 +2268,9 @@ function drawDv(){
        +'<button data-dvfreee="'+esc(t.no)+'">◆ freee で作成</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>'
        +'<br><a href="#" data-reissue="'+esc(t.no)+'" style="font-size:11px;color:var(--or)">発行済PDF</a>'
-       +(doc.freeeId?'<br><a href="'+esc(doc.freeeUrl||"#")+'" target="_blank" style="font-size:11px;color:#2E7D32">freee '+esc(doc.freeeNo||("id "+doc.freeeId))+'</a>':'')
+       +(doc.freeeId
+          ?'<br><a href="'+esc(doc.freeeUrl||"#")+'" target="_blank" style="font-size:11px;color:#2E7D32">freee '+esc(doc.freeeNo||("id "+doc.freeeId))+'</a>'
+          :'<br><a href="#" data-dvsend="'+esc(t.no)+'" style="font-size:11px;color:#1565C0">freeeへ送る</a>')
       :'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
        +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
@@ -2294,6 +2296,8 @@ function drawDv(){
   tb.querySelectorAll("[data-undv]").forEach(b=>b.onclick=()=>{
     OPS.st[b.dataset.undv]="created"; saveOps(); build();});
   tb.querySelectorAll("[data-txedit]").forEach(b=>b.onclick=()=>openTxEditor(b.dataset.txedit));
+  tb.querySelectorAll("[data-dvsend]").forEach(a=>a.onclick=e=>{
+    e.preventDefault(); freeeSendDvOnly(a.dataset.dvsend); });
   tb.querySelectorAll("[data-reissue]").forEach(a=>a.onclick=e=>{
     e.preventDefault();
     const d=OPS.doc[a.dataset.reissue];
@@ -5068,9 +5072,10 @@ async function issueInvoice_run(custKey){
   dlMsg("請求書を発行しました："+inv.invoiceNo+"（ドライブに保存済み）","ok");
 }
 // 納品書を発行する（請求には一切触らない）
-async function issueDeliveryNote(txNo){
-  const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
-  if(!t){ alert("対象の取引が見つかりません"); return; }
+// 納品書の中身を組み立てます。
+//   PDFにも freee にも、ここで作った同じものを使います。
+//   PDFを作り直さずに freee へ送りたいときがあるので、切り出してあります。
+function buildDvDoc(t){
   const p=partnerOf(t.customer), tf=TF();
   // kind は freee に送るときの税率の目じるしです（PDFには出ません）。
   //   shohin＝軽減税率8%、freight＝10%。請求書の明細と同じ付け方です。
@@ -5080,19 +5085,39 @@ async function issueDeliveryNote(txNo){
     qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
   const shohin=t.shohin||0, soryo=t.freight||0;
   const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
-  const doc={ docNo:"DN-"+t.no, txNo:t.no, customer:t.customer,
+  return { docNo:"DN-"+t.no, txNo:t.no, customer:t.customer,
     partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:t.customer},
     subject:boardSubject([t.sell], p?p.name:t.customer, t.customer),
     delivDate:ymd(t.deliv.getFullYear(),t.deliv.getMonth()+1,t.deliv.getDate()),
     sanchi:t.sanchi, carrier:t.carrier, hai:t.hai, lines:lines,
     shohin:shohin, soryo:soryo, taxF:taxF, taxS:taxS, total:shohin+soryo+taxF+taxS,
     issuedAt:nowStr(), issuedBy:CFG.userName||"" };
+}
+
+// 発行済みの納品書を、PDFを作り直さずに freee へ送ります
+async function freeeSendDvOnly(txNo){
+  const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
+  if(!t){ alert("対象の取引が見つかりません"); return; }
+  const doc=buildDvDoc(t);
+  const d=OPS.doc[txNo];
+  if(d&&d.at) doc.issuedAt=d.at;      // 発行した日時は、そのときのものを残します
+  await freeeSendDv(doc);
+}
+
+async function issueDeliveryNote(txNo){
+  const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
+  if(!t){ alert("対象の取引が見つかりません"); return; }
+  const p=partnerOf(t.customer);
+  const doc=buildDvDoc(t);
   dlMsg("納品書PDFを作成しています…","wait");
   try{
     const fname=(p?p.name:t.customer)+"_"+doc.docNo+"_納品書";
     const sub=doc.delivDate.slice(0,7);
     const res=await gasSavePdf("dv", fname, sub, buildDeliveryNoteHtml(doc));
-    OPS.doc[t.no]={at:doc.issuedAt, url:res.url||"", name:res.name||"", docNo:doc.docNo};
+    // freee の控え（freeeNo など）は消さずに残します。
+    //   まるごと入れ替えると、PDFを作り直しただけで freee のリンクが消えていました。
+    OPS.doc[t.no]=Object.assign({}, OPS.doc[t.no]||{},
+      {at:doc.issuedAt, url:res.url||"", name:res.name||"", docNo:doc.docNo});
     saveOps(); build();
     logOp("納品書を発行",doc.docNo+"／"+((doc.partner&&doc.partner.name)||doc.customer));
     dlMsg("納品書を発行しました："+doc.docNo+"（ドライブに保存済み）","ok");
@@ -5853,7 +5878,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-20c 版（freee に納品書も）";
+const BUILD_LABEL="2026-11-20d 版（納品書を送るだけ）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
