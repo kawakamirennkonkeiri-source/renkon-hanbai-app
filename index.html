@@ -519,7 +519,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="scroll" style="max-height:40vh">
       <table id="tIssued"><thead><tr>
         <th>請求書No.</th><th>請求先</th><th>対象月</th><th>請求日</th><th>入金期日</th>
-        <th class="num">請求額(税込)</th><th>発行者</th><th>PDF</th><th>状態</th><th></th>
+        <th class="num">請求額(税込)</th><th>発行者</th><th>PDF</th><th>freee</th><th>状態</th><th></th>
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
@@ -3483,6 +3483,7 @@ function drawInvList(){
       +'<div class="menu"><button class="btn" data-menu="inv-'+esc(k)+'">請求書発行 ▾</button>'
       +'<div class="menu-list" id="m-inv-'+esc(k)+'">'
       +'<button data-pdf="inv" data-key="'+esc(k)+'">請求書PDF</button>'
+      +'<button data-invfreee="'+esc(k)+'">◆ freee で作成</button>'
       +'<div class="sep"></div><button data-doc="'+esc(k)+'">画面で確認する</button></div></div></div>'
       +'<div class="prev-b"'+(op?'':' style="display:none"')+'>'
       +'<table><thead><tr><th>取引日</th><th>取引No.</th><th>産地</th><th>品目</th>'
@@ -5254,8 +5255,144 @@ function cancelBuyDoc(id){
   dlMsg("買取書 "+d.docNo+" を取り消しました","wait");
   return true;
 }
+// ===== freee への発行（2026-11-20 追加） =====
+//   共有データベースと同じ入口に action:'freeeXxx' を投げると、
+//   GASの freee請求書連携.gs が受けてくれます。
+//   ・freeeCheck … 送るとどうなるかの下見（読むだけ）
+//   ・freeeSend  … 実際に送る
+//   ・freeeSent  … もう送ったか
+//   アプリは freee のトークンを一切持ちません。鍵はGAS側にだけ置いてあります。
+let FREEE={sent:{}};
+
+// syncApi は ok:false のとき例外にしてしまうので、freee 用は別にします。
+//   「すでに送っています」のような返事も、中身ごと受け取りたいためです。
+async function freeeApi(action,payload){
+  if(!syncOn()) throw new Error("共有データベースにつながっていません");
+  const body=JSON.stringify(Object.assign({action:action,accessCode:CFG.syncCode},payload||{}));
+  const r=await fetch(CFG.syncUrl,{method:"POST",body:body});
+  return await r.json();
+}
+
+// 一覧の「freee」欄
+function freeeCell(i){
+  if(i.status==="cancelled") return '—';
+  const s=FREEE.sent[i.invoiceNo];
+  if(s&&s.id){
+    const nm=s.no||("id "+s.id);
+    return s.url?'<a href="'+esc(s.url)+'" target="_blank" style="color:var(--or)">'+esc(nm)+'</a>'
+                :'<span style="font-size:11px;color:#2E7D32">'+esc(nm)+'</span>';
+  }
+  if(s&&s.sending) return '<span style="font-size:11px;color:#888">送信中…</span>';
+  return '<button class="edit" data-freeesend="'+esc(i.invoiceNo)+'">freeeへ送る</button>';
+}
+
+// 一覧を描いたあと、送信済みかどうかをGASに聞きに行きます（読むだけ）
+async function freeeRefresh(list){
+  if(!syncOn()) return;
+  const nos=(list||[]).filter(i=>i.status!=="cancelled").map(i=>i.invoiceNo);
+  if(!nos.length) return;
+  let j;
+  try{ j=await freeeApi("freeeSent",{invoiceNos:nos}); }catch(e){ return; }
+  if(!j||!j.ok) return;
+  let changed=false;
+  Object.keys(j.sent||{}).forEach(k=>{
+    if(JSON.stringify(FREEE.sent[k])!==JSON.stringify(j.sent[k])){ FREEE.sent[k]=j.sent[k]; changed=true; }
+  });
+  if(changed) drawIssuedInvoices(true);
+}
+
+// freee が使える状態かどうか（使えないときは、何をすればよいかを出します）
+async function freeeOk(){
+  if(!syncOn()){
+    alert("共有データベースにつながっていません。\n\nfreee への発行は、共有データベース経由で行います。\n設定タブの「接続を確認」をお試しください。");
+    return false;
+  }
+  let j;
+  try{ j=await freeeApi("freeeReady",{}); }
+  catch(e){ alert("共有データベースにつながりませんでした。\n\n"+e.message); return false; }
+  if(!j||!j.ok){
+    alert("freee 連携が入っていません。\n\n"+((j&&j.error)||"")+"\n\n管理者にお伝えください。");
+    return false;
+  }
+  if(!j.ready){
+    alert("freee につながっていません。\n\nfreee の接続作業（鍵の登録）がまだです。\n管理者にお伝えください。");
+    return false;
+  }
+  return true;
+}
+
+// 1通を freee に送ります（下見 → 確認 → 送信）
+async function freeeSendNo(no){
+  if(!(await freeeOk())) return false;
+
+  let c;
+  try{ c=await freeeApi("freeeCheck",{invoiceNo:no}); }
+  catch(e){ alert("下見ができませんでした。\n\n"+e.message); return false; }
+  if(!c||!c.ok){ alert("freee に送れません。\n\n"+((c&&c.error)||"")); return false; }
+
+  if(c.sent&&c.sent.id){
+    FREEE.sent[no]=c.sent; drawIssuedInvoices(true);
+    alert("請求書 "+no+" は、すでに freee に送っています。\n\nfreee の請求書："
+      +(c.sent.no||("id "+c.sent.id))+"\n\n二重に作らないよう、送りません。");
+    return false;
+  }
+  if(!c.partner.freeeId){
+    alert("freee に取引先が見あたりません。\n\n　"+c.partner.now
+      +"\n\nfreee の取引先に登録してから、もう一度お試しください。"
+      +(c.partner.many?"\n\n（似た相手が複数あります：\n　"+c.partner.many.join("\n　")+"）":""));
+    return false;
+  }
+  if(!c.same){
+    alert("合計がアプリと合いません。念のため送りません。\n\n　freee：¥"+yen(c.total)
+      +"\n　アプリ：¥"+yen(c.appTotal)+"\n\n管理者にお伝えください。");
+    return false;
+  }
+
+  if(!confirm("この内容で freee に請求書を作ります。\n\n"
+    +"　請求書No.　："+no+"\n"
+    +"　請求先　　："+c.partner.now+"\n"
+    +"　件名　　　："+(c.subject||"（なし）")+"\n"
+    +"　請求日　　："+(c.issueDate||"（なし）")+"\n"
+    +"　入金期日　："+(c.dueDate||"（なし）")+"\n"
+    +"　明細　　　："+c.items+"行\n"
+    +"　請求額　　：¥"+yen(c.total)+"（税抜 ¥"+yen(c.net)
+    +"／8% ¥"+yen(c.tax8)+"／10% ¥"+yen(c.tax10)+"）\n\n"
+    +"★ freee の請求書は、あとから消せません。\n　よろしいですか？")) return false;
+
+  if(!busyOn("freee に送っています…")) return false;
+  let r;
+  try{ r=await freeeApi("freeeSend",{invoiceNo:no, by:CFG.userName||""}); }
+  catch(e){ alert("送れませんでした。\n\n"+e.message
+    +"\n\n★ freee の画面で、請求書ができていないかご確認ください。"); return false; }
+  finally{ busyOff(); }
+
+  if(!r||!r.ok){
+    if(r&&r.sent){ FREEE.sent[no]=r.sent; drawIssuedInvoices(true); }
+    alert("送れませんでした。\n\n"+((r&&r.error)||""));
+    return false;
+  }
+  FREEE.sent[no]=r.sent;
+  drawIssuedInvoices(true);
+  logOp("freeeへ請求書を送信", no+"／freee "+(r.sent.no||("id "+r.sent.id))+"／¥"+yen(r.sent.total));
+  dlMsg("freee に請求書を作りました："+(r.sent.no||("id "+r.sent.id)),"ok");
+  alert("freee に請求書を作りました。\n\n　アプリ　："+no
+    +"\n　freee　："+(r.sent.no||("id "+r.sent.id))
+    +"\n　請求額　：¥"+yen(r.sent.total)
+    +"\n\n一覧の「freee」欄から、freee の画面を開けます。");
+  return true;
+}
+
+// 「◆ freee で作成」… いつもどおり発行（PDFも保存）してから、そのまま freee に送ります
+async function invoiceMakeInFreee(custKey){
+  if(!(await freeeOk())) return;
+  const had={}; OPS.invoices.forEach(i=>{ had[i.id]=1; });
+  await issueInvoice(custKey);
+  const inv=OPS.invoices.filter(i=>!had[i.id])[0];
+  if(!inv) return;                       // 発行できなかった（理由は issueInvoice が出しています）
+  await freeeSendNo(inv.invoiceNo);
+}
 // 発行済請求書の一覧
-function drawIssuedInvoices(){
+function drawIssuedInvoices(noFetch){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
   const ym=y+"-"+p2(m);
   const list=OPS.invoices.filter(i=>i.targetMonth===ym)
@@ -5273,12 +5410,15 @@ function drawIssuedInvoices(){
       +'<td>'+esc(i.issueDate)+'</td><td>'+esc(i.dueDate)+'</td>'
       +'<td class="num">¥'+yen(i.total)+'</td><td>'+esc(i.issuedBy||"—")+'</td>'
       +'<td>'+(i.pdfUrl?'<a href="'+esc(i.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
+      +'<td>'+freeeCell(i)+'</td>'
       +'<td>'+st+'</td>'
       +'<td style="white-space:nowrap">'+(i.status==="cancelled"?'':'<button class="edit" data-fixinv="'+esc(i.id)+'">取消して修正</button> '
         +'<button class="del" data-cancelinv="'+esc(i.id)+'">取消</button>')+'</td>';
     tb.appendChild(tr);
   });
   document.getElementById("issuedCnt").textContent="("+list.length+"件)";
+  tb.querySelectorAll("[data-freeesend]").forEach(b=>b.onclick=()=>freeeSendNo(b.dataset.freeesend));
+  if(!noFetch) freeeRefresh(list);
   tb.querySelectorAll("[data-cancelinv]").forEach(b=>b.onclick=()=>cancelInvoice(b.dataset.cancelinv));
   tb.querySelectorAll("[data-fixinv]").forEach(b=>b.onclick=()=>{
     const inv=OPS.invoices.find(i=>i.id===b.dataset.fixinv); if(!inv) return;
@@ -5342,6 +5482,9 @@ document.addEventListener("click",e=>{
     else issueDeliveryNote(p.dataset.key);
     return;
   }
+  const fm=e.target.closest("[data-invfreee]");
+  if(fm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+    invoiceMakeInFreee(fm.dataset.invfreee); return; }
   const f=e.target.closest("[data-freee]");
   if(f){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
     freeeNotReady(f.dataset.freee==="inv"?"請求書":f.dataset.freee==="qt"?"見積書":"納品書"); }
@@ -5592,7 +5735,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-16b 版（締め日の片付け）";
+const BUILD_LABEL="2026-11-20 版（freee への請求書発行）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
