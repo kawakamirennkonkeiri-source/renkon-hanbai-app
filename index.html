@@ -2265,11 +2265,14 @@ function drawDv(){
       ?'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
        +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
+       +'<button data-dvfreee="'+esc(t.no)+'">◆ freee で作成</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>'
        +'<br><a href="#" data-reissue="'+esc(t.no)+'" style="font-size:11px;color:var(--or)">発行済PDF</a>'
+       +(doc.freeeId?'<br><a href="'+esc(doc.freeeUrl||"#")+'" target="_blank" style="font-size:11px;color:#2E7D32">freee '+esc(doc.freeeNo||("id "+doc.freeeId))+'</a>':'')
       :'<button class="btn sm" data-menu="dv-'+esc(t.no)+'">納品書を発行</button>'
        +'<div class="menu-list" id="m-dv-'+esc(t.no)+'">'
        +'<button data-pdf="dv" data-key="'+esc(t.no)+'">納品書PDF</button>'
+       +'<button data-dvfreee="'+esc(t.no)+'">◆ freee で作成</button>'
        +'<div class="sep"></div><button data-dvdoc="'+esc(t.no)+'">画面で確認する</button></div>';
     const act=lock?'<span style="color:#999;font-size:11px">請求済のため変更不可</span>'
       :'<button class="edit" data-txedit="'+esc(t.no)+'">✎ 修正</button> '
@@ -5069,10 +5072,12 @@ async function issueDeliveryNote(txNo){
   const t=TX.find(x=>x.kind==="sale"&&x.no===txNo);
   if(!t){ alert("対象の取引が見つかりません"); return; }
   const p=partnerOf(t.customer), tf=TF();
+  // kind は freee に送るときの税率の目じるしです（PDFには出ません）。
+  //   shohin＝軽減税率8%、freight＝10%。請求書の明細と同じ付け方です。
   const lines=[{txNo:t.no, tekiyo:invItem(t)+" ※",
-    qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin}];
+    qty:t.qty, unit:"c/s", tanka:t.tanka, amount:t.shohin, kind:"shohin"}];
   if(t.freight) lines.push({txNo:t.no, tekiyo:"運賃"+(t.carrier?"　"+t.carrier:""),
-    qty:1, unit:"式", tanka:t.freight, amount:t.freight});
+    qty:1, unit:"式", tanka:t.freight, amount:t.freight, kind:"freight"});
   const shohin=t.shohin||0, soryo=t.freight||0;
   const taxF=Math.floor(shohin*tf.food), taxS=Math.floor(soryo*tf.fre);
   const doc={ docNo:"DN-"+t.no, txNo:t.no, customer:t.customer,
@@ -5091,6 +5096,7 @@ async function issueDeliveryNote(txNo){
     saveOps(); build();
     logOp("納品書を発行",doc.docNo+"／"+((doc.partner&&doc.partner.name)||doc.customer));
     dlMsg("納品書を発行しました："+doc.docNo+"（ドライブに保存済み）","ok");
+    return doc;                      // freee に送るときに、この中身をそのまま使います
   }catch(e){
     dlMsg("PDFを保存できませんでした："+e.message,"ng");
   }
@@ -5417,6 +5423,85 @@ async function invoiceMakeInFreee(custKey){
   if(!inv) return;                       // 発行できなかった（理由は issueInvoice が出しています）
   await freeeSendNo(inv.invoiceNo);
 }
+
+// ===== 納品書を freee に送る =====
+//   請求書とちがい、納品書の中身は共有データベースに残していません
+//   （「いつ・どのPDFを作ったか」だけです）。
+//   そのため、アプリが組み立てた中身をそのままGASに渡します。
+function freeeStampDv(txNo,s){
+  const d=OPS.doc[txNo];
+  if(!d||!s||!s.id) return false;
+  if(String(d.freeeId||"")===String(s.id)&&String(d.freeeNo||"")===String(s.no||"")
+     &&String(d.freeeUrl||"")===String(s.url||"")) return false;
+  d.freeeId=String(s.id); d.freeeNo=s.no||""; d.freeeUrl=s.url||"";
+  d.freeeAt=s.at||""; d.freeeBy=s.by||"";
+  return true;
+}
+
+async function freeeSendDv(doc){
+  if(!doc||!doc.docNo) return false;
+  if(!(await freeeOk())) return false;
+
+  let c;
+  try{ c=await freeeApi("freeeCheckDv",{doc:doc}); }
+  catch(e){ alert("下見ができませんでした。\n\n"+e.message); return false; }
+  if(!c||!c.ok){ alert("freee に送れません。\n\n"+((c&&c.error)||"")); return false; }
+
+  if(c.sent&&c.sent.id){
+    if(freeeStampDv(doc.txNo,c.sent)){ saveOps(); build(); }
+    alert("納品書 "+doc.docNo+" は、すでに freee に送っています。\n\nfreee の納品書："
+      +(c.sent.no||("id "+c.sent.id))+"\n\n二重に作らないよう、送りません。");
+    return false;
+  }
+  if(!c.partner.freeeId){
+    alert("freee に取引先が見あたりません。\n\n　"+c.partner.now
+      +"\n\nfreee の取引先に登録してから、もう一度お試しください。");
+    return false;
+  }
+  if(!c.same){
+    alert("合計がアプリと合いません。念のため送りません。\n\n　freee：¥"+yen(c.total)
+      +"\n　アプリ：¥"+yen(c.appTotal)+"\n\n管理者にお伝えください。");
+    return false;
+  }
+
+  if(!confirm("この内容で freee に納品書を作ります。\n\n"
+    +"　納品書No.　："+doc.docNo+"\n"
+    +"　お届け先　　："+c.partner.now+"\n"
+    +"　件名　　　　："+(c.subject||"（なし）")+"\n"
+    +"　納品日　　　："+(c.delivDate||"（なし）")+"\n"
+    +"　明細　　　　："+c.items+"行\n"
+    +"　金額　　　　：¥"+yen(c.total)+"（税抜 ¥"+yen(c.net)
+    +"／8% ¥"+yen(c.tax8)+"／10% ¥"+yen(c.tax10)+"）\n\n"
+    +"★ freee の納品書は、あとから消せません。\n　よろしいですか？")) return false;
+
+  if(!busyOn("freee に送っています…")) return false;
+  let r;
+  try{ r=await freeeApi("freeeSendDv",{doc:doc, by:CFG.userName||""}); }
+  catch(e){ alert("送れませんでした。\n\n"+e.message
+    +"\n\n★ freee の画面で、納品書ができていないかご確認ください。"); return false; }
+  finally{ busyOff(); }
+
+  if(!r||!r.ok){
+    if(r&&r.sent&&freeeStampDv(doc.txNo,r.sent)){ saveOps(); build(); }
+    alert("送れませんでした。\n\n"+((r&&r.error)||""));
+    return false;
+  }
+  if(freeeStampDv(doc.txNo,r.sent)){ saveOps(); build(); }
+  logOp("freeeへ納品書を送信", doc.docNo+"／freee "+(r.sent.no||("id "+r.sent.id))+"／¥"+yen(r.sent.total));
+  dlMsg("freee に納品書を作りました："+(r.sent.no||("id "+r.sent.id)),"ok");
+  alert("freee に納品書を作りました。\n\n　アプリ　："+doc.docNo
+    +"\n　freee　："+(r.sent.no||("id "+r.sent.id))
+    +"\n\n一覧の「freee …」のリンクから、freee の画面を開けます。");
+  return true;
+}
+
+// 「◆ freee で作成」… いつもどおり発行（PDFも保存）してから、そのまま freee に送ります
+async function deliveryMakeInFreee(txNo){
+  if(!(await freeeOk())) return;
+  const doc=await issueDeliveryNote(txNo);
+  if(!doc) return;                       // 発行できなかった
+  await freeeSendDv(doc);
+}
 // 発行済請求書の一覧
 function drawIssuedInvoices(noFetch){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
@@ -5512,6 +5597,9 @@ document.addEventListener("click",e=>{
     else issueDeliveryNote(p.dataset.key);
     return;
   }
+  const dm=e.target.closest("[data-dvfreee]");
+  if(dm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+    deliveryMakeInFreee(dm.dataset.dvfreee); return; }
   const fm=e.target.closest("[data-invfreee]");
   if(fm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
     invoiceMakeInFreee(fm.dataset.invfreee); return; }
@@ -5765,7 +5853,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-20b 版（freee の番号を控える）";
+const BUILD_LABEL="2026-11-20c 版（freee に納品書も）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
