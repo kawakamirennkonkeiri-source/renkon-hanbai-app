@@ -5273,14 +5273,33 @@ async function freeeApi(action,payload){
   return await r.json();
 }
 
+// freee の番号を、請求書の記録そのものに控えます（2026-11-20）
+//   GAS側の控えだけだと、まるごとバックアップにも共有データベースの表にも出ません。
+//   PDFのリンクと同じ扱いにして、請求書といっしょに残します。
+//   ★ 金額や明細は触りません。発行した請求書の中身は凍結したままです。
+function freeeStamp(inv,s){
+  if(!inv||!s||!s.id) return false;
+  if(String(inv.freeeId||"")===String(s.id)&&String(inv.freeeNo||"")===String(s.no||"")
+     &&String(inv.freeeUrl||"")===String(s.url||"")) return false;
+  inv.freeeId=String(s.id); inv.freeeNo=s.no||""; inv.freeeUrl=s.url||"";
+  inv.freeeAt=s.at||""; inv.freeeBy=s.by||"";
+  return true;
+}
+function invByNo(no){ return OPS.invoices.find(x=>x.invoiceNo===no); }
+
 // 一覧の「freee」欄
 function freeeCell(i){
-  if(i.status==="cancelled") return '—';
   const s=FREEE.sent[i.invoiceNo];
-  if(s&&s.id){
-    const nm=s.no||("id "+s.id);
-    return s.url?'<a href="'+esc(s.url)+'" target="_blank" style="color:var(--or)">'+esc(nm)+'</a>'
-                :'<span style="font-size:11px;color:#2E7D32">'+esc(nm)+'</span>';
+  const id=i.freeeId||(s&&s.id)||"";
+  const nm=i.freeeNo||(s&&s.no)||(id?"id "+id:"");
+  const url=i.freeeUrl||(s&&s.url)||"";
+  if(i.status==="cancelled"){
+    // 取り消しても、freee の請求書は残ります。消し忘れに気づけるよう、赤で出します。
+    return id?'<span style="font-size:11px;color:#C62828" title="freee には請求書が残っています。freee の画面でご確認ください">★'+esc(nm)+'</span>':'—';
+  }
+  if(id){
+    return url?'<a href="'+esc(url)+'" target="_blank" style="color:var(--or)">'+esc(nm)+'</a>'
+              :'<span style="font-size:11px;color:#2E7D32">'+esc(nm)+'</span>';
   }
   if(s&&s.sending) return '<span style="font-size:11px;color:#888">送信中…</span>';
   return '<button class="edit" data-freeesend="'+esc(i.invoiceNo)+'">freeeへ送る</button>';
@@ -5294,11 +5313,14 @@ async function freeeRefresh(list){
   let j;
   try{ j=await freeeApi("freeeSent",{invoiceNos:nos}); }catch(e){ return; }
   if(!j||!j.ok) return;
-  let changed=false;
+  let changed=false,stamped=false;
   Object.keys(j.sent||{}).forEach(k=>{
     if(JSON.stringify(FREEE.sent[k])!==JSON.stringify(j.sent[k])){ FREEE.sent[k]=j.sent[k]; changed=true; }
+    // 送れたのに控えそこねた分を、ここで拾い直します
+    if(freeeStamp(invByNo(k),j.sent[k])) stamped=true;
   });
-  if(changed) drawIssuedInvoices(true);
+  if(stamped) saveOps();
+  if(changed||stamped) drawIssuedInvoices(true);
 }
 
 // freee が使える状態かどうか（使えないときは、何をすればよいかを出します）
@@ -5331,7 +5353,9 @@ async function freeeSendNo(no){
   if(!c||!c.ok){ alert("freee に送れません。\n\n"+((c&&c.error)||"")); return false; }
 
   if(c.sent&&c.sent.id){
-    FREEE.sent[no]=c.sent; drawIssuedInvoices(true);
+    FREEE.sent[no]=c.sent;
+    if(freeeStamp(invByNo(no),c.sent)) saveOps();
+    drawIssuedInvoices(true);
     alert("請求書 "+no+" は、すでに freee に送っています。\n\nfreee の請求書："
       +(c.sent.no||("id "+c.sent.id))+"\n\n二重に作らないよう、送りません。");
     return false;
@@ -5372,6 +5396,8 @@ async function freeeSendNo(no){
     return false;
   }
   FREEE.sent[no]=r.sent;
+  // freee の番号を請求書の記録に控えます（共有データベースにも上がります）
+  if(freeeStamp(invByNo(no),r.sent)) saveOps();
   drawIssuedInvoices(true);
   logOp("freeeへ請求書を送信", no+"／freee "+(r.sent.no||("id "+r.sent.id))+"／¥"+yen(r.sent.total));
   dlMsg("freee に請求書を作りました："+(r.sent.no||("id "+r.sent.id)),"ok");
@@ -5434,7 +5460,11 @@ function cancelInvoice(id){
   const inv=OPS.invoices.find(i=>i.id===id); if(!inv||inv.status==="cancelled") return false;
   if(!confirm("請求書 "+inv.invoiceNo+" を取り消します。\n"
     +"・この請求書に含まれる明細は「未請求」に戻ります\n"
-    +"・請求書の記録とPDFは証憑として残します\n\nよろしいですか？")) return false;
+    +"・請求書の記録とPDFは証憑として残します\n"
+    +(inv.freeeId?"\n★ この請求書は freee にも作ってあります（"+(inv.freeeNo||("id "+inv.freeeId))+"）。\n"
+       +"　freee の請求書は、アプリからは消せません。\n"
+       +"　freee の画面を開いて、あちらでも取り消してください。\n":"")
+    +"\nよろしいですか？")) return false;
   const reason=prompt("取消の理由（任意）","")||"";
   inv.status="cancelled"; inv.cancelledAt=nowStr(); inv.cancelReason=reason;
   inv.cancelledBy=CFG.userName||"";
@@ -5735,7 +5765,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-20 版（freee への請求書発行）";
+const BUILD_LABEL="2026-11-20b 版（freee の番号を控える）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
