@@ -19,6 +19,15 @@ header .hbadge{background:rgba(255,255,255,.22);padding:4px 11px;border-radius:4
 .sanchi-sw button{background:transparent;color:#fff;border:none;padding:5px 15px;font-size:12.5px;
   font-family:inherit;cursor:pointer;font-weight:bold;opacity:.8}
 .sanchi-sw button.on{background:#fff;color:var(--or);opacity:1}
+.segzei{display:inline-flex;border:1px solid #CCC;border-radius:4px;overflow:hidden;vertical-align:middle}
+.segzei button{background:#fff;border:none;border-right:1px solid #DDD;padding:5px 13px;cursor:pointer;
+  font-size:11.5px;font-family:inherit;color:#555}
+.segzei button:last-child{border-right:none}
+.segzei button.on{background:var(--or);color:#fff;font-weight:bold}
+.b-kuma{background:#FDF0DC;color:#8A5A00}
+.b-hiro{background:var(--or-l);color:var(--or-d)}
+.b-wait{background:#EFEFEF;color:#777;font-weight:normal}
+.b-now{background:var(--grn-l);color:var(--grn);font-weight:normal}
 header .hbtn{background:#fff;color:var(--or);border:none;padding:6px 13px;border-radius:4px;
   cursor:pointer;font-size:12px;font-weight:bold;font-family:inherit}
 header .hbtn.y{background:#F5C242;color:#4a3400}
@@ -309,7 +318,8 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   </div>
   <div class="card" id="sanchiCard">
     <h2>産地別 売上 <span class="cnt" id="sanchiYm"></span><span class="sp"></span>
-      <button class="btn sm sub" id="btnSanchiRe">読み直す</button></h2>
+      <span class="segzei"><button data-z="nuki">税抜で見る</button><button data-z="komi">税込で見る</button></span>
+      <button class="btn sm sub" id="btnSanchiRe" style="margin-left:10px">読み直す</button></h2>
     <div id="sanchiBox"></div>
   </div>
   <div class="card"><h2>ステータス<span class="sp"></span>
@@ -357,6 +367,17 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
   <div class="card"><h2>区分別の売上と数量 <span class="cnt">（洗い・土付き・真空 など）</span></h2>
     <p class="hint">「円/kg」は<b>運賃を入れていない</b>商品だけの平均です。売上の列には送料別の送料が入っています。</p>
     <div id="bzKubun"></div></div>
+
+  <div class="card" id="bzCrossCard"><h2>熊本・広島の累計売上 <span class="cnt" id="bzCrossHead"></span><span class="sp"></span>
+      <span class="segzei"><button data-z="nuki">税抜で見る</button><button data-z="komi">税込で見る</button></span>
+      <button class="btn sm sub" id="bzCrossRe" style="margin-left:10px">読み直す</button></h2>
+    <p class="hint">💡 <b>いま見ている産地にかかわらず、熊本と広島の両方が出ます。</b>
+      このページのほかの表は「いま開いている産地」だけですが、ここだけは、
+      もう一方の産地の共有データベースから<b>合計の数字だけ</b>を読んで並べています。<br>
+      数え方は<b>ダッシュボードの「受注合計」と同じ</b>（請求年月でまとめた受注）です。
+      下の「シーズンはじめからの累計売上」は実績＋予定を日ぐりで足したものなので、数字は一致しません。</p>
+    <div class="kpis" id="bzCrossKpi"></div>
+    <div id="bzCross"></div></div>
 
   <div class="card"><h2>シーズンはじめからの累計売上 <span class="cnt" id="bzCumHead"></span></h2>
     <div id="bzCum"></div></div>
@@ -1990,6 +2011,7 @@ const bzEl=id=>document.getElementById(id);
 function drawBunseki(){
   const act=TX.filter(bzOK), pl=TXP.filter(bzOK);
   bzNoteDraw(act,pl); bzKpiDraw(act,pl); bzKubunDraw(act,pl);
+  bzCrossDraw();
   bzCumDraw(act,pl); bzRankDraw(act,pl); bzTankaDraw(act,pl);
 }
 
@@ -5361,11 +5383,16 @@ function cancelBuyDoc(id){
 //   もう一方の産地は「その数字を読むだけ」にします。
 //   同じ計算を2か所でやると必ずずれるので、数えるのは自分の産地だけです。
 function calcTotals(){
-  const t={}, ymk=(y,m)=>y+"-"+p2(m);
-  const box=k=>{ if(!t[k]) t[k]={ord:0,ordN:0,net:0,tax:0,inc:0,n:0}; return t[k]; };
+  const t={}, ymk=(y,m)=>y+"-"+p2(m), tf=TF();
+  const box=k=>{ if(!t[k]) t[k]={ord:0,oh:0,os:0,otax:0,qty:0,ordN:0,net:0,tax:0,inc:0,n:0}; return t[k]; };
   TX.forEach(x=>{
     if(x.kind!=="sale"||x.shanai||isFune(x)||x.sale==null) return;
-    const b=box(ymk(x.y,x.m)); b.ord+=Number(x.sale)||0; b.ordN++;
+    const b=box(ymk(x.y,x.m));
+    b.ord+=Number(x.sale)||0;
+    b.oh +=Number(x.shohin)||0;          // 商品ぶん（軽減税率）
+    b.os +=Number(x.freight)||0;         // 送料ぶん（標準税率）
+    b.qty+=Number(x.qty)||0;
+    b.ordN++;
   });
   (OPS.invoices||[]).forEach(i=>{
     if(!i||i.status==="cancelled"||!i.targetMonth) return;
@@ -5374,6 +5401,13 @@ function calcTotals(){
     b.tax+=(Number(i.taxF)||0)+(Number(i.taxS)||0);
     b.inc+=Number(i.total)||0;
     b.n++;
+  });
+  // 受注ぶんの消費税を、月ごとにまとめて計算します。
+  //   請求書は1通ずつ計算するので、足し合わせると数円ちがうことがあります（目安の数字です）。
+  Object.keys(t).forEach(k=>{ const b=t[k];
+    b.ord=Math.round(b.ord); b.oh=Math.round(b.oh); b.os=Math.round(b.os);
+    b.qty=Math.round(b.qty*10)/10;
+    b.otax=Math.floor(b.oh*tf.food)+Math.floor(b.os*tf.fre);
   });
   // 並びをそろえます。PCごとに同じ文字列になれば、むだな送り合いが起きません。
   const out={}; Object.keys(t).sort().forEach(k=>{ out[k]=t[k]; });
@@ -5409,50 +5443,175 @@ async function loadOther(force){
   return OTHER.data;
 }
 
+// ===== 税抜／税込の切替（2026-11-21 追加） =====
+//   ダッシュボードの「産地別 売上」と、分析の「熊本・広島の累計売上」で
+//   同じ切替を使います。どちらで押しても、両方が切り替わります。
+//   選んだ状態はこのPCに覚えます（産地ごとに別々に覚えます）。
+let ZEI="nuki";
+try{ if(localStorage.getItem(SA.pre+"zei")==="komi") ZEI="komi"; }catch(e){}
+const ZEIL=()=>(ZEI==="komi")?"税込":"税抜";
+function drawZeiSeg(){
+  document.querySelectorAll(".segzei button").forEach(b=>{
+    b.className=(b.dataset.z===ZEI)?"on":"";
+  });
+}
+function setZei(z){
+  if(z!=="nuki"&&z!=="komi") return;
+  ZEI=z;
+  try{ localStorage.setItem(SA.pre+"zei",z); }catch(e){}
+  drawZeiSeg(); drawSanchi(); bzCrossDraw();
+}
+
+// 1か月ぶんの数字を、いま選んでいる「税抜／税込」にそろえます。
+//   ord … 受注（ダッシュボードの「受注合計」と同じ数え方）
+//   bil … 発行した請求書の合計（取消ぶんは除く）
+const Z0={ord:0,otax:0,bil:0,qty:0,ordN:0,n:0};
+function zeiOf(d){
+  const t=d||{};
+  const ord=Number(t.ord)||0;
+  // 消費税の控えがまだ無い産地（前の版のまま同期していない）は、商品の税率で見当をつけます。
+  //   その産地のアプリで一度同期すれば、本当の数字に入れ替わります。
+  const otax=(t.otax==null)?Math.floor(ord*((Number(CFG.taxFood)||8)/100)):(Number(t.otax)||0);
+  const net=Number(t.net)||0, tax=Number(t.tax)||0, inc=Number(t.inc)||0;
+  return {
+    ord:(ZEI==="komi")?(ord+otax):ord,
+    otax:otax,
+    bil:(ZEI==="komi")?(inc||(net+tax)):net,
+    qty:Number(t.qty)||0, ordN:Number(t.ordN)||0, n:Number(t.n)||0
+  };
+}
+const zAdd=(a,b)=>({ord:a.ord+b.ord,otax:a.otax+b.otax,bil:a.bil+b.bil,
+  qty:a.qty+b.qty,ordN:a.ordN+b.ordN,n:a.n+b.n});
+const sanBadge=id=>'<span class="badge '+(id==="hiro"?"b-hiro":"b-kuma")+'">'
+  +esc(SANCHI_LIST[id].name)+'</span>';
+
 // ダッシュボードの「産地別 売上」
 function drawSanchi(){
   const box=document.getElementById("sanchiBox"); if(!box) return;
+  drawZeiSeg();
   const [y,m]=ymNow(), key=y+"-"+p2(m);
   const lab=document.getElementById("sanchiYm");
-  if(lab) lab.textContent="("+y+"年"+p2(m)+"月)";
+  if(lab) lab.textContent="("+y+"年"+p2(m)+"月・"+ZEIL()+"で表示)";
 
   const oc=otherCfg();
-  const mine=(CFG.totals||{})[key]||{ord:0,ordN:0,net:0,tax:0,inc:0,n:0};
-  const other=OTHER.data?((OTHER.data[key])||{ord:0,ordN:0,net:0,tax:0,inc:0,n:0}):null;
-  const oName=oc.name;
+  const mine=zeiOf((CFG.totals||{})[key]);
+  const other=OTHER.data?zeiOf(OTHER.data[key]):null;
 
-  const row=(nm,d,bold)=>{
-    if(!d) return '';
-    const b=bold?' style="font-weight:700;background:#FAFAFA"':'';
-    return '<tr'+b+'><td>'+esc(nm)+'</td>'
-      +'<td class="num">¥'+yen(Math.round(d.ord))+'</td>'
-      +'<td class="num">'+(d.ordN||0)+'</td>'
-      +'<td class="num">¥'+yen(Math.round(d.net))+'</td>'
-      +'<td class="num">¥'+yen(Math.round(d.tax))+'</td>'
-      +'<td class="num">¥'+yen(Math.round(d.inc))+'</td>'
-      +'<td class="num">'+(d.n||0)+'</td></tr>';
-  };
-  const sum=other?{
-    ord:mine.ord+other.ord, ordN:mine.ordN+other.ordN,
-    net:mine.net+other.net, tax:mine.tax+other.tax,
-    inc:mine.inc+other.inc, n:mine.n+other.n }:null;
+  const row=(id,d,st)=>'<tr><td>'+sanBadge(id)+'</td>'
+    +'<td class="num">'+(d.ordN||0)+'</td>'
+    +'<td class="num">'+dec1(d.qty)+'</td>'
+    +'<td class="num"><b>¥'+yen(Math.round(d.ord))+'</b></td>'
+    +'<td class="num">¥'+yen(Math.round(d.otax))+'</td>'
+    +'<td class="num">¥'+yen(Math.round(d.bil))+'</td>'
+    +'<td class="num">'+(d.n||0)+'</td>'
+    +'<td>'+st+'</td></tr>';
+
+  const rows=[[SANCHI_ID,mine,'<span class="badge b-now">いま開いている産地</span>']];
+  if(other) rows.push([oc.id,other,
+    '<span class="badge b-wait">'+esc(oc.name)+'の共有DBから合計だけ</span>']);
+  rows.sort((a,b)=>(a[0]==="kuma"?0:1)-(b[0]==="kuma"?0:1));   // 熊本をいつも上に
 
   let html='<table><thead><tr><th>産地</th>'
-    +'<th class="num">受注 税抜</th><th class="num">件数</th>'
-    +'<th class="num">請求済 税抜</th><th class="num">消費税</th><th class="num">請求済 税込</th><th class="num">通数</th>'
+    +'<th class="num">取引件数</th><th class="num">数量 c/s</th>'
+    +'<th class="num">受注 '+ZEIL()+'</th><th class="num">消費税</th>'
+    +'<th class="num">請求済 '+ZEIL()+'</th><th class="num">通数</th><th></th>'
     +'</tr></thead><tbody>'
-    + row(SANCHI_ME,mine) + (other?row(oName,other):'') + (sum?row("合計",sum,true):'')
-    +'</tbody></table>';
+    +rows.map(r=>row(r[0],r[1],r[2])).join("")
+    +'</tbody>';
+  if(other){
+    const s=zAdd(mine,other);
+    html+='<tfoot><tr class="total"><td>合計（熊本＋広島）</td>'
+      +'<td class="num">'+s.ordN+'</td><td class="num">'+dec1(s.qty)+'</td>'
+      +'<td class="num">¥'+yen(Math.round(s.ord))+'</td>'
+      +'<td class="num">¥'+yen(Math.round(s.otax))+'</td>'
+      +'<td class="num">¥'+yen(Math.round(s.bil))+'</td>'
+      +'<td class="num">'+s.n+'</td><td></td></tr></tfoot>';
+  }
+  html+='</table>';
 
   if(!oc.url||!oc.code){
-    html+='<p class="hint">💡 もう一方の産地（'+esc(oName)+'）の数字は出していません。'
-      +'ヘッダーの「'+esc(oName)+'」に切り替えて、設定タブで共有DBにつなぐと並びます。</p>';
+    html+='<p class="hint">💡 もう一方の産地（'+esc(oc.name)+'）の数字は出していません。'
+      +'ヘッダーの「'+esc(oc.name)+'」に切り替えて、設定タブで共有DBにつなぐと並びます。</p>';
   }else if(OTHER.err){
-    html+='<p class="hint" style="color:#C62828">⚠ '+esc(oName)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
+    html+='<p class="hint" style="color:#C62828">⚠ '+esc(oc.name)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
   }else{
     html+='<p class="hint">💡 <b>受注</b>はダッシュボードの「受注合計」と同じ数え方、'
       +'<b>請求済</b>は発行した請求書の合計（取消ぶんは除く）です。'
-      +(other?'　'+esc(oName)+'の数字は、あちらのアプリが数えたものをそのまま読んでいます。':'')+'</p>';
+      +'消費税は、商品を'+(Number(CFG.taxFood)||8)+'%・送料を'+(Number(CFG.taxFreight)||10)+'%で計算した<b>目安</b>です'
+      +'（請求書は1通ずつ計算するので、数円ちがうことがあります）。'
+      +(other?'　'+esc(oc.name)+'の数字は、あちらのアプリが数えたものをそのまま読んでいます。':'')+'</p>';
+  }
+  box.innerHTML=html;
+}
+
+// 分析タブ「熊本・広島の累計売上」（2026-11-21 追加）
+//   月ごとの受注を、熊本・広島・合計で並べ、右に累計を添えます。
+//   自分の産地は自分で数えた数字、もう一方は共有データベースから読んだ数字です。
+function bzCrossDraw(){
+  const box=document.getElementById("bzCross"); if(!box) return;
+  drawZeiSeg();
+  const oc=otherCfg();
+  const mineAll=CFG.totals||{}, otherAll=OTHER.data;
+  const kuma=(SANCHI_ID==="kuma")?mineAll:otherAll;
+  const hiro=(SANCHI_ID==="kuma")?otherAll:mineAll;
+  const keys=[...new Set(Object.keys(mineAll).concat(otherAll?Object.keys(otherAll):[]))].sort();
+
+  const hd=document.getElementById("bzCrossHead");
+  if(hd) hd.textContent="（"+ZEIL()+"で表示）";
+
+  const kpi=(cls,l,v,sub)=>'<div class="kpi '+cls+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'
+    +(sub?'<div class="bz-sub">'+sub+'</div>':'')+'</div>';
+
+  if(!keys.length){
+    const k=document.getElementById("bzCrossKpi"); if(k) k.innerHTML="";
+    box.innerHTML='<p class="hint">まだ売上の控えがありません。一度同期すると数字が入ります。</p>';
+    return;
+  }
+
+  let ck=Object.assign({},Z0), ch=Object.assign({},Z0);
+  const tr=[];
+  keys.forEach(k=>{
+    // その月の数字が無い産地は「—」にします（0円と区別するためです）
+    const a=(kuma&&kuma[k])?zeiOf(kuma[k]):null, b=(hiro&&hiro[k])?zeiOf(hiro[k]):null;
+    if(a) ck=zAdd(ck,a);
+    if(b) ch=zAdd(ch,b);
+    const mon=(a?a.ord:0)+(b?b.ord:0);
+    const ym=k.split("-");
+    const cell=(v,ok)=>'<td class="num">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
+    const cum =(v,ok)=>'<td class="num" style="color:#888">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
+    tr.push('<tr><td>'+ym[0]+'年'+ym[1]+'月</td>'
+      +cell(a?a.ord:0,!!a)+cum(ck.ord,!!kuma)
+      +cell(b?b.ord:0,!!b)+cum(ch.ord,!!hiro)
+      +'<td class="num"><b>¥'+yen(Math.round(mon))+'</b></td>'
+      +cum(ck.ord+ch.ord,true)+'</tr>');
+  });
+
+  const kEl=document.getElementById("bzCrossKpi");
+  if(kEl) kEl.innerHTML=
+     kpi("sale","熊本 累計売上（"+ZEIL()+"）",kuma?("¥"+yen(Math.round(ck.ord))):"—",
+       kuma?(ck.ordN+" 件"):"つないでいません")
+    +kpi("sale","広島 累計売上（"+ZEIL()+"）",hiro?("¥"+yen(Math.round(ch.ord))):"—",
+       hiro?(ch.ordN+" 件"):"つないでいません")
+    +kpi("gp","熊本＋広島 合計売上（"+ZEIL()+"）","¥"+yen(Math.round(ck.ord+ch.ord)),
+       (ck.ordN+ch.ordN)+" 件　"+keys.length+"か月ぶん");
+
+  let html='<table><thead><tr><th>月</th>'
+    +'<th class="num">熊本</th><th class="num">熊本 累計</th>'
+    +'<th class="num">広島</th><th class="num">広島 累計</th>'
+    +'<th class="num">合計</th><th class="num">合計 累計</th>'
+    +'</tr></thead><tbody>'+tr.join("")+'</tbody>'
+    +'<tfoot><tr class="total"><td>合計</td>'
+    +'<td class="num">'+(kuma?'¥'+yen(Math.round(ck.ord)):'—')+'</td><td></td>'
+    +'<td class="num">'+(hiro?'¥'+yen(Math.round(ch.ord)):'—')+'</td><td></td>'
+    +'<td class="num">¥'+yen(Math.round(ck.ord+ch.ord))+'</td><td></td>'
+    +'</tr></tfoot></table>';
+
+  if(!oc.url||!oc.code){
+    html+='<p class="hint">💡 '+esc(oc.name)+'の共有データベースにまだつないでいないので、'
+      +esc(oc.name)+'の列は空です。ヘッダーの「'+esc(oc.name)+'」に切り替えて、'
+      +'設定タブでURLと合言葉を入れると並びます。</p>';
+  }else if(OTHER.err){
+    html+='<p class="hint" style="color:#C62828">⚠ '+esc(oc.name)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
   }
   box.innerHTML=html;
 }
@@ -5460,7 +5619,7 @@ function drawSanchi(){
 // 読み直して描き直す
 async function refreshSanchi(force){
   await loadOther(force);
-  drawSanchi();
+  drawSanchi(); bzCrossDraw();
 }
 
 // ===== freee への発行（2026-11-20 追加） =====
@@ -5992,6 +6151,13 @@ document.getElementById("btnFullExport").onclick=fullExport;
 })();
 (function(){ const b=document.getElementById("btnSanchiRe");
   if(b) b.onclick=()=>refreshSanchi(true); })();
+// 税抜／税込のボタン（2026-11-21 追加）。どの画面で押しても両方が変わります
+(function(){
+  document.querySelectorAll(".segzei button").forEach(b=>{ b.onclick=()=>setZei(b.dataset.z); });
+  drawZeiSeg();
+  const r=document.getElementById("bzCrossRe");
+  if(r) r.onclick=()=>refreshSanchi(true);
+})();
 (function(){ const b=document.getElementById("btnOtherTest");
   if(!b) return;
   b.onclick=async()=>{
@@ -5999,7 +6165,7 @@ document.getElementById("btnFullExport").onclick=fullExport;
     if(!o.url||!o.code){
       alert(o.name+"の共有データベースにまだつないでいません。\n\n"
         +"ヘッダーの「"+o.name+"」に切り替えて、設定タブでURLと合言葉を入れてください。"); return; }
-    await loadOther(true); drawSanchi();
+    await loadOther(true); drawSanchi(); bzCrossDraw();
     if(OTHER.err){ alert("読めませんでした。\n\n"+OTHER.err); return; }
     const n=Object.keys(OTHER.data||{}).length;
     alert(n?("読めました。"+n+"か月ぶんの売上が入っています。"):
@@ -6081,7 +6247,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21c 版（熊本・広島を1本に）";
+const BUILD_LABEL="2026-11-21d 版（産地別売上・税抜／税込）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
