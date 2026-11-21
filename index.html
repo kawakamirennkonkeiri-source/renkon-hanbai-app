@@ -5811,6 +5811,14 @@ async function freeeOk(){
 async function freeeSendNo(no){
   if(!(await freeeOk())) return false;
 
+  // 出したばかりの請求書は、まだ共有データベースへ送り出せていないことがあります。
+  //   送るのは10秒ごとで、GASは共有データベースを読みに行くため、
+  //   先に送っておかないと「請求書が見あたりません」になります（2026-11-21）。
+  if(syncOn()){
+    dlMsg("共有データベースへ送っています…","wait");
+    try{ await syncTick(true); }catch(e){}
+  }
+
   let c;
   try{ c=await freeeApi("freeeCheck",{invoiceNo:no}); }
   catch(e){ alert("下見ができませんでした。\n\n"+e.message); return false; }
@@ -6344,7 +6352,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21f 版（分析に もう片方の産地）";
+const BUILD_LABEL="2026-11-21g 版（freee送信前に同期）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
