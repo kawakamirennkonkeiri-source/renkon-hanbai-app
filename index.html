@@ -6,6 +6,10 @@
 <title>カワカミ蓮根 農産物 仕入販売管理</title>
 <style>
 :root{--or:#0F7FA8;--or-d:#0B6187;--or-l:#E8F5FB;--red:#DC3545;--grn:#1E7D34;--grn-l:#E9F4ED;}
+/* 熊本＝青、広島＝緑。どちらを見ているか、ひと目で分かるようにします（2026-11-21 社長指示）。
+   読み込みのときに <html> へ class="sanchi-hiro" を付けて、色だけ入れ替えます。
+   緑が表の色になるので、発注・買取に使っていた緑（--grn）は青にずらしています。 */
+:root.sanchi-hiro{--or:#2E7D32;--or-d:#1B5E20;--or-l:#E8F5E9;--grn:#0F7FA8;--grn-l:#E8F5FB;}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;background:#F7F7F8;color:#333;font-size:13px;line-height:1.6}
 header{background:var(--or);color:#fff;padding:9px 18px;display:flex;align-items:center;
@@ -30,10 +34,10 @@ header .hbadge{background:rgba(255,255,255,.22);padding:4px 11px;border-radius:4
   padding:11px 15px;display:flex;flex-wrap:wrap;align-items:baseline;gap:7px 26px;font-size:12.5px}
 .bz-sum .l{font-weight:bold;color:var(--or-d)}
 .bz-sum b{font-size:17px;color:var(--or-d);margin-left:3px}
-.b-kuma{background:#FDF0DC;color:#8A5A00}
-.b-hiro{background:var(--or-l);color:var(--or-d)}
+.b-kuma{background:#E8F5FB;color:#0B6187}    /* 熊本＝青 */
+.b-hiro{background:#E9F4ED;color:#1B5E20}    /* 広島＝緑 */
 .b-wait{background:#EFEFEF;color:#777;font-weight:normal}
-.b-now{background:var(--grn-l);color:var(--grn);font-weight:normal}
+.b-now{background:#FFF6E0;color:#8A5A00;font-weight:normal}
 header .hbtn{background:#fff;color:var(--or);border:none;padding:6px 13px;border-radius:4px;
   cursor:pointer;font-size:12px;font-weight:bold;font-family:inherit}
 header .hbtn.y{background:#F5C242;color:#4a3400}
@@ -965,6 +969,8 @@ let SANCHI_ID="kuma";
 try{ if(localStorage.getItem(SANCHI_SEL_KEY)==="hiro") SANCHI_ID="hiro"; }catch(e){}
 const SA=SANCHI_LIST[SANCHI_ID];
 const SANCHI_ME=SA.name;
+// 広島のときだけ、画面の色を緑にします（2026-11-21）
+if(SANCHI_ID==="hiro") document.documentElement.classList.add("sanchi-hiro");
 
 // 産地を切り替えます。書きかけを保存してから、読み込み直します。
 function switchSanchi(id){
@@ -6381,7 +6387,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21h 版（広島発の宅配便運賃）";
+const BUILD_LABEL="2026-11-21i 版（広島は緑）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
