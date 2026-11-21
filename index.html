@@ -737,7 +737,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
         140サイズと 30kg は使っていないので空欄にしてあります。<b>空欄のサイズは使いません</b>。<br>
         使うには、上の運賃マスタで<b>単位を「宅配便」</b>にして、その販売先の<b>地帯</b>を選んでください。<br>
         サンプルのように行先が毎回変わるものは、取引の「✎ 修正」で<b>届け先の都道府県</b>を入れると、そちらが優先されます。</p>
-      <div class="flex"><button class="btn sub" id="btnTakuDefault">佐川急便の料金表（熊本発）を入れ直す</button></div>
+      <div class="flex"><button class="btn sub" id="btnTakuDefault">佐川急便の料金表を入れ直す</button></div>
       <div class="scroll" style="max-height:48vh">
         <table id="tTaku"><thead><tr>
           <th style="width:11%">地帯</th><th style="width:33%">都道府県（カンマ区切り）</th>
@@ -1034,10 +1034,16 @@ const TAKU_SIZES=[{k:"y60",name:"60",maxKg:2},{k:"y80",name:"80",maxKg:5},
   {k:"y100",name:"100",maxKg:10},{k:"y140",name:"140",maxKg:20},{k:"y30",name:"30kg",maxKg:30}];
 //   140サイズと 30kg は、いま使っていないので空欄にしてあります。
 //   空欄のサイズは、箱の組み合わせに使いません。
-//   佐川の料金表にある数字（熊本発・税別）はこちらです。
+//   使うときは、下のコメントの数字をそのまま y140 / y30 に入れてください。
+//
+//   ★ どちらの表も「クール料金こみ・税別」です（2026-11-21 社長確認）。
+//     佐川の付加諸料金表（クール冷蔵・冷凍とも同額）を足してあります。
+//       2kgまで +250／5kgまで +300／10kgまで +400／20kgまで +800／30kgまで +1,200
+//
+//   熊本発（運賃表の素の金額に、上のクール料金を足したもの）
 //     140：2120 2120 2120 2190 2190 2360 2460 2600 2800 3080 3080 3480
 //     30kg：2880 2880 2880 2980 2980 3080 3080 3280 3280 3480 3480 3880
-const TAKU_RATES_DEFAULT=[
+const TAKU_RATES_KUMA=[
   {chitai:"南九州",pref:"熊本,宮崎,鹿児島",y60:800,y80:970,y100:1290,y140:null,y30:null},
   {chitai:"北九州",pref:"福岡,佐賀,長崎,大分",y60:800,y80:970,y100:1290,y140:null,y30:null},
   {chitai:"中国",pref:"鳥取,島根,岡山,広島,山口",y60:840,y80:970,y100:1290,y140:null,y30:null},
@@ -1051,6 +1057,26 @@ const TAKU_RATES_DEFAULT=[
   {chitai:"北東北",pref:"青森,岩手,秋田",y60:1170,y80:1390,y100:2100,y140:null,y30:null},
   {chitai:"北海道",pref:"北海道",y60:1450,y80:1670,y100:2600,y140:null,y30:null}
 ];
+//   広島発（東広島営業所・見積No.003／2025-05-09〜2026-05-08）
+//     60・80・100 は熊本発とまったく同じ金額でした。ちがうのは下の2行だけです。
+//     140：2120 2120 2120 2190 2190 2360 2460 2600 2800 3080 3250 3730
+//     30kg：3080 3080 3080 3180 3180 3280 3280 3480 3480 3850 3890 4370
+const TAKU_RATES_HIRO=[
+  {chitai:"南九州",pref:"熊本,宮崎,鹿児島",y60:800,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"北九州",pref:"福岡,佐賀,長崎,大分",y60:800,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"中国",pref:"鳥取,島根,岡山,広島,山口",y60:840,y80:970,y100:1290,y140:null,y30:null},
+  {chitai:"四国",pref:"徳島,香川,愛媛,高知",y60:840,y80:1040,y100:1360,y140:null,y30:null},
+  {chitai:"関西",pref:"滋賀,京都,大阪,兵庫,奈良,和歌山",y60:840,y80:1040,y100:1360,y140:null,y30:null},
+  {chitai:"北陸",pref:"富山,石川,福井",y60:890,y80:1110,y100:1430,y140:null,y30:null},
+  {chitai:"東海",pref:"岐阜,静岡,愛知,三重",y60:890,y80:1110,y100:1430,y140:null,y30:null},
+  {chitai:"信越",pref:"新潟,長野",y60:1030,y80:1250,y100:1570,y140:null,y30:null},
+  {chitai:"関東",pref:"茨城,栃木,群馬,埼玉,千葉,東京,神奈川,山梨",y60:1030,y80:1250,y100:1650,y140:null,y30:null},
+  {chitai:"南東北",pref:"宮城,山形,福島",y60:1170,y80:1390,y100:2000,y140:null,y30:null},
+  {chitai:"北東北",pref:"青森,岩手,秋田",y60:1170,y80:1390,y100:2100,y140:null,y30:null},
+  {chitai:"北海道",pref:"北海道",y60:1450,y80:1670,y100:2600,y140:null,y30:null}
+];
+//   いま開いている産地の発地を使います（沖縄は別途見積りなので入っていません）
+const TAKU_RATES_DEFAULT=(SANCHI_ID==="hiro")?TAKU_RATES_HIRO:TAKU_RATES_KUMA;
 const PREF_LIST=["北海道","青森","岩手","宮城","秋田","山形","福島","茨城","栃木","群馬","埼玉","千葉","東京","神奈川","新潟","富山","石川","福井","山梨","長野","岐阜","静岡","愛知","三重","滋賀","京都","大阪","兵庫","奈良","和歌山","鳥取","島根","岡山","広島","山口","徳島","香川","愛媛","高知","福岡","佐賀","長崎","熊本","大分","宮崎","鹿児島","沖縄"];
 // 請求書に書く商品名のひな形（2026/10/7 社長からいただいた18通り）。
 //   「請求書に書く商品名」の欄をクリックすると、この一覧が出ます。
@@ -4303,6 +4329,9 @@ function bind(){
 }
 // 宅配便の料金表
 function drawTakuhai(){
+  // 入れ直すボタンに、いまの産地の発地を出します（2026-11-21 追加）
+  const bd=document.getElementById("btnTakuDefault");
+  if(bd) bd.textContent="佐川急便の料金表（"+SANCHI_ME+"発・クール込み）を入れ直す";
   const tb=document.querySelector("#tTaku tbody"); if(!tb) return; tb.innerHTML="";
   if(!CFG.takuhaiRates) CFG.takuhaiRates=[];
   CFG.takuhaiRates.forEach((r,i)=>{
@@ -4316,7 +4345,7 @@ function drawTakuhai(){
 }
 document.addEventListener("click",e=>{
   if(!e.target.closest("#btnTakuDefault")) return;
-  if(!confirm("宅配便の料金表を、佐川急便の料金表（熊本発）で入れ直します。\n今入っている金額は上書きされます。")) return;
+  if(!confirm("宅配便の料金表を、佐川急便の料金表（"+SANCHI_ME+"発・クール込み）で入れ直します。\n今入っている金額は上書きされます。")) return;
   CFG.takuhaiRates=TAKU_RATES_DEFAULT.map(r=>Object.assign({},r));
   drawTakuhai(); saveCfg("料金表を入れ直しました"); build();
 });
@@ -6352,7 +6381,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21g 版（freee送信前に同期）";
+const BUILD_LABEL="2026-11-21h 版（広島発の宅配便運賃）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
