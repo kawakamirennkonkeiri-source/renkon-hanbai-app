@@ -24,6 +24,12 @@ header .hbadge{background:rgba(255,255,255,.22);padding:4px 11px;border-radius:4
   font-size:11.5px;font-family:inherit;color:#555}
 .segzei button:last-child{border-right:none}
 .segzei button.on{background:var(--or);color:#fff;font-weight:bold}
+.bz-ttl{margin:16px 0 7px;font-size:12.5px;color:#555;display:flex;align-items:center;gap:7px}
+.bz-ttl:first-of-type{margin-top:4px}
+.bz-sum{margin-top:13px;background:var(--or-l);border:1px solid #CFE6F0;border-radius:6px;
+  padding:11px 15px;display:flex;flex-wrap:wrap;align-items:baseline;gap:7px 26px;font-size:12.5px}
+.bz-sum .l{font-weight:bold;color:var(--or-d)}
+.bz-sum b{font-size:17px;color:var(--or-d);margin-left:3px}
 .b-kuma{background:#FDF0DC;color:#8A5A00}
 .b-hiro{background:var(--or-l);color:var(--or-d)}
 .b-wait{background:#EFEFEF;color:#777;font-weight:normal}
@@ -361,10 +367,14 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">💡 このページは<b>見るだけ</b>のページです。請求書にも売上にも何も書きません。<br>
       <b>濃い色＝実績</b>（取り込みずみの取引）、<b>薄い色＝予定</b>（発注書の明日以降）です。<br>
       予定は発注書の数字をそのまま読んだものなので、単価が入っていない行は金額に入りません。<br>
-      右はしの<b>3つ（熊本 累計・広島 累計・合計）だけは両方の産地</b>の数字です。
-      こちらは<b>実績だけ</b>を請求年月でまとめたもので、左の「売上 実績」とは数え方がすこしちがいます。</p>
+      <b>上の段がいま開いている産地、下の段がもう片方の産地</b>です。下の段は、
+      あちらのアプリが数えて共有データベースに置いた合計を読んでいます。</p>
     <div id="bzNote"></div>
+    <div class="bz-ttl" id="bzKpiT1"></div>
     <div class="kpis" id="bzKpi"></div>
+    <div class="bz-ttl" id="bzKpiT2"></div>
+    <div class="kpis" id="bzKpi2"></div>
+    <div id="bzKpiSum"></div>
   </div>
 
   <div class="card"><h2>区分別の売上と数量 <span class="cnt">（洗い・土付き・真空 など）</span></h2>
@@ -2042,29 +2052,89 @@ function bzNoteDraw(act,pl){
 
 // ---------- 上の数字 ----------
 function bzKpiDraw(act,pl){
-  const sA=act.reduce((s,t)=>s+(t.sale||0),0), sP=pl.reduce((s,t)=>s+(t.sale||0),0);
-  const kA=act.reduce((s,t)=>s+bzKg(t),0), kP=pl.reduce((s,t)=>s+bzKg(t),0);
+  const tf=TF(), komi=(ZEI==="komi");
+  // 写真の並びのままです。税抜／税込のボタンで、中の数字だけが変わります。
+  const grp=a=>({sh:a.reduce((s,t)=>s+(t.shohin||0),0),
+                 fr:a.reduce((s,t)=>s+(t.freight||0),0),
+                 kg:a.reduce((s,t)=>s+bzKg(t),0)});
+  const A=grp(act), P=grp(pl);
+  const zei=o=>Math.floor(o.sh*tf.food)+Math.floor(o.fr*tf.fre);
+  const val=o=>o.sh+o.fr+(komi?zei(o):0);
+  const sA=val(A), sP=val(P), kA=A.kg, kP=P.kg;
   const shA=act.filter(t=>t.cap>0).reduce((s,t)=>s+(t.shohin||0),0);
   const kOk=act.filter(t=>t.cap>0).reduce((s,t)=>s+bzKg(t),0);
   const kpi=(cls,l,v,sub)=>'<div class="kpi '+cls+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'
     +(sub?'<div class="bz-sub">'+sub+'</div>':'')+'</div>';
-  const X=bzCrossSum();                       // 熊本・広島を合わせた累計
   bzEl("bzKpi").innerHTML=
-     kpi("sale","売上　実績（税抜）","¥"+yen(sA),act.length+"件　"+bzMan(sA)+"円")
+     kpi("sale","売上　実績（"+ZEIL()+"）","¥"+yen(sA),act.length+"件　"+bzMan(sA)+"円")
     +kpi("","売上　予定（明日以降）",sP?"¥"+yen(sP):"—",pl.length?pl.length+"件　"+bzMan(sP)+"円":"予定なし")
     +kpi("gp","シーズン見通し（実績＋予定）","¥"+yen(sA+sP),bzMan(sA+sP)+"円")
     +kpi("buy","数量　実績",""+yen(kA)+" kg",kP?"予定 "+yen(kP)+" kg":"")
-    +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg")
-    // ここから右の3つは、熊本と広島を合わせた数字です（2026-11-21 追加）
-    +kpi("sale","熊本 累計売上（"+ZEIL()+"）",X.kuma?"¥"+yen(Math.round(X.ck.ord)):"—",
-       X.kuma?(X.ck.ordN+"件　"+bzMan(X.ck.ord)+"円"):"まだつないでいません")
-    +kpi("sale","広島 累計売上（"+ZEIL()+"）",X.hiro?"¥"+yen(Math.round(X.ch.ord)):"—",
-       X.hiro?(X.ch.ordN+"件　"+bzMan(X.ch.ord)+"円"):"まだつないでいません")
-    +kpi("gp","熊本＋広島 合計売上（"+ZEIL()+"）","¥"+yen(Math.round(X.ck.ord+X.ch.ord)),
-       (X.ck.ordN+X.ch.ordN)+"件　"+bzMan(X.ck.ord+X.ch.ord)+"円");
+    +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg");
   bzEl("bzHead").textContent=act.length+"件の実績"+(pl.length?"／"+pl.length+"件の予定":"");
+  bzKpi2Draw(sA,sP,kpi);                 // 下に、もう片方の産地を同じ並びで出します
 }
 
+// もう片方の産地の合計（2026-11-21 追加）
+//   相手の帳簿は読めないので、相手のアプリが数えて共有データベースに置いた
+//   「合計だけ」を読み、上と同じ並びで下に出します。
+function otherSum(){
+  const d=OTHER.data; if(!d) return null;
+  const komi=(ZEI==="komi"), f=(Number(CFG.taxFood)||8)/100;
+  const o={ord:0,plan:0,qty:0,kg:0,pkg:0,ok:0,ordN:0,planN:0,
+           has:false,hasPlan:false,hasKg:false};
+  Object.keys(d).forEach(k=>{
+    const m=d[k]||{};
+    // 消費税の控えがまだ無い産地（前の版のまま）は、商品の税率で見当をつけます
+    const ot=(m.otax==null)?Math.floor((Number(m.ord)||0)*f):(Number(m.otax)||0);
+    const pt=(m.ptax==null)?Math.floor((Number(m.plan)||0)*f):(Number(m.ptax)||0);
+    o.ord  +=(Number(m.ord)||0)+(komi?ot:0);
+    o.plan +=(Number(m.plan)||0)+(komi?pt:0);
+    o.ordN +=Number(m.ordN)||0;
+    o.planN+=Number(m.planN)||0;
+    o.qty  +=Number(m.qty)||0;
+    o.kg   +=Number(m.kg)||0;
+    o.pkg  +=Number(m.pkg)||0;
+    o.ok   +=Number(m.ok)||0;
+    if(m.plan!=null) o.hasPlan=true;
+    if(m.kg!=null)   o.hasKg=true;
+    o.has=true;
+  });
+  return o.has?o:null;
+}
+
+function bzKpi2Draw(mySA,mySP,kpi){
+  const box=bzEl("bzKpi2"); if(!box) return;
+  const t1=bzEl("bzKpiT1"), t2=bzEl("bzKpiT2"), sb=bzEl("bzKpiSum");
+  const oc=otherCfg(), O=otherSum();
+  if(t1) t1.innerHTML=sanBadge(SANCHI_ID)+'　<b>いま開いている産地</b>'
+    +'<span class="bz-sub" style="display:inline">　この帳簿の取引から数えています</span>';
+  if(t2) t2.innerHTML=sanBadge(oc.id)+'　<b>もう片方の産地</b>'
+    +'<span class="bz-sub" style="display:inline">　'+esc(oc.name)
+    +'の共有データベースから、合計だけを読んでいます</span>';
+  if(!O){
+    box.innerHTML='<p class="hint">💡 '+esc(oc.name)+'の共有データベースにまだつないでいません。'
+      +'ヘッダーの「'+esc(oc.name)+'」に切り替えて、設定タブでURLと合言葉を入れると、'
+      +'ここに'+esc(oc.name)+'の数字が並びます。'
+      +(OTHER.err?'<br><span style="color:#C62828">⚠ '+esc(OTHER.err)+'</span>':'')+'</p>';
+    if(sb) sb.innerHTML="";
+    return;
+  }
+  const mada="あちらで一度同期すると入ります";
+  box.innerHTML=
+     kpi("sale","売上　実績（"+ZEIL()+"）","¥"+yen(O.ord),O.ordN+"件　"+bzMan(O.ord)+"円")
+    +kpi("","売上　予定（明日以降）",(O.hasPlan&&O.plan)?"¥"+yen(O.plan):"—",
+        O.hasPlan?(O.planN?O.planN+"件　"+bzMan(O.plan)+"円":"予定なし"):mada)
+    +kpi("gp","シーズン見通し（実績＋予定）","¥"+yen(O.ord+O.plan),bzMan(O.ord+O.plan)+"円")
+    +kpi("buy","数量　実績",O.hasKg?(yen(O.kg)+" kg"):"—",
+        O.hasKg?(O.pkg?"予定 "+yen(O.pkg)+" kg":""):mada)
+    +kpi("","平均単価（運賃ぬき）",(O.kg>0&&O.ok>0)?"¥"+yen(O.ok/O.kg)+" /kg":"—","商品の金額 ÷ kg");
+  if(sb) sb.innerHTML='<div class="bz-sum">'
+    +'<span class="l">'+esc(SANCHI_ME)+'＋'+esc(oc.name)+'　合計（'+ZEIL()+'）</span>'
+    +'<span>売上 実績 <b>¥'+yen(mySA+O.ord)+'</b></span>'
+    +'<span>予定 <b>¥'+yen(mySP+O.plan)+'</b></span>'
+    +'<span>シーズン見通し <b>¥'+yen(mySA+mySP+O.ord+O.plan)+'</b></span></div>';
+}
 // ---------- 区分別 ----------
 function bzKubunDraw(act,pl){
   const g={},ord=[];
@@ -5394,7 +5464,9 @@ function cancelBuyDoc(id){
 //   同じ計算を2か所でやると必ずずれるので、数えるのは自分の産地だけです。
 function calcTotals(){
   const t={}, ymk=(y,m)=>y+"-"+p2(m), tf=TF();
-  const box=k=>{ if(!t[k]) t[k]={ord:0,oh:0,os:0,otax:0,qty:0,ordN:0,net:0,tax:0,inc:0,n:0}; return t[k]; };
+  const box=k=>{ if(!t[k]) t[k]={ord:0,oh:0,os:0,otax:0,qty:0,kg:0,ok:0,ordN:0,
+    plan:0,ph:0,ps:0,ptax:0,pkg:0,planN:0,net:0,tax:0,inc:0,n:0}; return t[k]; };
+  // 実績（取り込みずみの取引）
   TX.forEach(x=>{
     if(x.kind!=="sale"||x.shanai||isFune(x)||x.sale==null) return;
     const b=box(ymk(x.y,x.m));
@@ -5402,8 +5474,21 @@ function calcTotals(){
     b.oh +=Number(x.shohin)||0;          // 商品ぶん（軽減税率）
     b.os +=Number(x.freight)||0;         // 送料ぶん（標準税率）
     b.qty+=Number(x.qty)||0;
+    b.kg +=bzKg(x);                      // 容量が入っている行だけ kg が出ます
+    if(x.cap>0) b.ok+=Number(x.shohin)||0;   // 平均単価の分子（運賃ぬき）
     b.ordN++;
   });
+  // 予定（発注書の明日以降）
+  (typeof TXP!=="undefined"?TXP:[]).forEach(x=>{
+    if(x.kind!=="sale"||x.shanai||isFune(x)||x.sale==null) return;
+    const b=box(ymk(x.y,x.m));
+    b.plan+=Number(x.sale)||0;
+    b.ph  +=Number(x.shohin)||0;
+    b.ps  +=Number(x.freight)||0;
+    b.pkg +=bzKg(x);
+    b.planN++;
+  });
+  // 発行した請求書（取消ぶんは除く）
   (OPS.invoices||[]).forEach(i=>{
     if(!i||i.status==="cancelled"||!i.targetMonth) return;
     const b=box(String(i.targetMonth));
@@ -5412,18 +5497,21 @@ function calcTotals(){
     b.inc+=Number(i.total)||0;
     b.n++;
   });
-  // 受注ぶんの消費税を、月ごとにまとめて計算します。
+  // 消費税を、月ごとにまとめて計算します。
   //   請求書は1通ずつ計算するので、足し合わせると数円ちがうことがあります（目安の数字です）。
   Object.keys(t).forEach(k=>{ const b=t[k];
     b.ord=Math.round(b.ord); b.oh=Math.round(b.oh); b.os=Math.round(b.os);
+    b.plan=Math.round(b.plan); b.ph=Math.round(b.ph); b.ps=Math.round(b.ps);
+    b.ok=Math.round(b.ok);
     b.qty=Math.round(b.qty*10)/10;
+    b.kg =Math.round(b.kg);  b.pkg=Math.round(b.pkg);
     b.otax=Math.floor(b.oh*tf.food)+Math.floor(b.os*tf.fre);
+    b.ptax=Math.floor(b.ph*tf.food)+Math.floor(b.ps*tf.fre);
   });
   // 並びをそろえます。PCごとに同じ文字列になれば、むだな送り合いが起きません。
   const out={}; Object.keys(t).sort().forEach(k=>{ out[k]=t[k]; });
   return out;
 }
-
 // 数えた結果を控えます。変わったときだけ保存します（＝そのときだけ共有DBへ送ります）
 function publishTotals(){
   try{
@@ -6256,7 +6344,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21e 版（産地別売上・税抜／税込）";
+const BUILD_LABEL="2026-11-21f 版（分析に もう片方の産地）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
