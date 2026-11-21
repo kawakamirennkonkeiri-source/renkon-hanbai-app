@@ -356,10 +356,13 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <section class="panel" id="bunseki">
   <div class="card">
     <h2>分析<span class="cnt" id="bzHead"></span><span class="sp"></span>
-      <button class="btn sm sub" id="bzRe">計算し直す</button></h2>
+      <span class="segzei"><button data-z="nuki">税抜で見る</button><button data-z="komi">税込で見る</button></span>
+      <button class="btn sm sub" id="bzRe" style="margin-left:10px">計算し直す</button></h2>
     <p class="hint">💡 このページは<b>見るだけ</b>のページです。請求書にも売上にも何も書きません。<br>
       <b>濃い色＝実績</b>（取り込みずみの取引）、<b>薄い色＝予定</b>（発注書の明日以降）です。<br>
-      予定は発注書の数字をそのまま読んだものなので、単価が入っていない行は金額に入りません。</p>
+      予定は発注書の数字をそのまま読んだものなので、単価が入っていない行は金額に入りません。<br>
+      右はしの<b>3つ（熊本 累計・広島 累計・合計）だけは両方の産地</b>の数字です。
+      こちらは<b>実績だけ</b>を請求年月でまとめたもので、左の「売上 実績」とは数え方がすこしちがいます。</p>
     <div id="bzNote"></div>
     <div class="kpis" id="bzKpi"></div>
   </div>
@@ -368,7 +371,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">「円/kg」は<b>運賃を入れていない</b>商品だけの平均です。売上の列には送料別の送料が入っています。</p>
     <div id="bzKubun"></div></div>
 
-  <div class="card" id="bzCrossCard"><h2>熊本・広島の累計売上 <span class="cnt" id="bzCrossHead"></span><span class="sp"></span>
+  <div class="card" id="bzCrossCard"><h2>熊本・広島の月べつ売上 <span class="cnt" id="bzCrossHead"></span><span class="sp"></span>
       <span class="segzei"><button data-z="nuki">税抜で見る</button><button data-z="komi">税込で見る</button></span>
       <button class="btn sm sub" id="bzCrossRe" style="margin-left:10px">読み直す</button></h2>
     <p class="hint">💡 <b>いま見ている産地にかかわらず、熊本と広島の両方が出ます。</b>
@@ -376,7 +379,6 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       もう一方の産地の共有データベースから<b>合計の数字だけ</b>を読んで並べています。<br>
       数え方は<b>ダッシュボードの「受注合計」と同じ</b>（請求年月でまとめた受注）です。
       下の「シーズンはじめからの累計売上」は実績＋予定を日ぐりで足したものなので、数字は一致しません。</p>
-    <div class="kpis" id="bzCrossKpi"></div>
     <div id="bzCross"></div></div>
 
   <div class="card"><h2>シーズンはじめからの累計売上 <span class="cnt" id="bzCumHead"></span></h2>
@@ -2046,12 +2048,20 @@ function bzKpiDraw(act,pl){
   const kOk=act.filter(t=>t.cap>0).reduce((s,t)=>s+bzKg(t),0);
   const kpi=(cls,l,v,sub)=>'<div class="kpi '+cls+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'
     +(sub?'<div class="bz-sub">'+sub+'</div>':'')+'</div>';
+  const X=bzCrossSum();                       // 熊本・広島を合わせた累計
   bzEl("bzKpi").innerHTML=
      kpi("sale","売上　実績（税抜）","¥"+yen(sA),act.length+"件　"+bzMan(sA)+"円")
     +kpi("","売上　予定（明日以降）",sP?"¥"+yen(sP):"—",pl.length?pl.length+"件　"+bzMan(sP)+"円":"予定なし")
     +kpi("gp","シーズン見通し（実績＋予定）","¥"+yen(sA+sP),bzMan(sA+sP)+"円")
     +kpi("buy","数量　実績",""+yen(kA)+" kg",kP?"予定 "+yen(kP)+" kg":"")
-    +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg");
+    +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg")
+    // ここから右の3つは、熊本と広島を合わせた数字です（2026-11-21 追加）
+    +kpi("sale","熊本 累計売上（"+ZEIL()+"）",X.kuma?"¥"+yen(Math.round(X.ck.ord)):"—",
+       X.kuma?(X.ck.ordN+"件　"+bzMan(X.ck.ord)+"円"):"まだつないでいません")
+    +kpi("sale","広島 累計売上（"+ZEIL()+"）",X.hiro?"¥"+yen(Math.round(X.ch.ord)):"—",
+       X.hiro?(X.ch.ordN+"件　"+bzMan(X.ch.ord)+"円"):"まだつないでいません")
+    +kpi("gp","熊本＋広島 合計売上（"+ZEIL()+"）","¥"+yen(Math.round(X.ck.ord+X.ch.ord)),
+       (X.ck.ordN+X.ch.ordN)+"件　"+bzMan(X.ck.ord+X.ch.ord)+"円");
   bzEl("bzHead").textContent=act.length+"件の実績"+(pl.length?"／"+pl.length+"件の予定":"");
 }
 
@@ -5459,7 +5469,10 @@ function setZei(z){
   if(z!=="nuki"&&z!=="komi") return;
   ZEI=z;
   try{ localStorage.setItem(SA.pre+"zei",z); }catch(e){}
-  drawZeiSeg(); drawSanchi(); bzCrossDraw();
+  drawZeiSeg(); drawSanchi();
+  // 分析タブをすでに描いていれば、上の数字ごと描き直します
+  const k=document.getElementById("bzKpi");
+  if(k&&k.innerHTML) drawBunseki(); else bzCrossDraw();
 }
 
 // 1か月ぶんの数字を、いま選んでいる「税抜／税込」にそろえます。
@@ -5544,56 +5557,50 @@ function drawSanchi(){
   box.innerHTML=html;
 }
 
-// 分析タブ「熊本・広島の累計売上」（2026-11-21 追加）
-//   月ごとの受注を、熊本・広島・合計で並べ、右に累計を添えます。
+// 熊本・広島を合わせて数えます（2026-11-21 追加）
+//   分析タブのいちばん上の数字と、月べつの表の両方でこれを使います。
 //   自分の産地は自分で数えた数字、もう一方は共有データベースから読んだ数字です。
-function bzCrossDraw(){
-  const box=document.getElementById("bzCross"); if(!box) return;
-  drawZeiSeg();
+function bzCrossSum(){
   const oc=otherCfg();
   const mineAll=CFG.totals||{}, otherAll=OTHER.data;
   const kuma=(SANCHI_ID==="kuma")?mineAll:otherAll;
   const hiro=(SANCHI_ID==="kuma")?otherAll:mineAll;
   const keys=[...new Set(Object.keys(mineAll).concat(otherAll?Object.keys(otherAll):[]))].sort();
-
-  const hd=document.getElementById("bzCrossHead");
-  if(hd) hd.textContent="（"+ZEIL()+"で表示）";
-
-  const kpi=(cls,l,v,sub)=>'<div class="kpi '+cls+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'
-    +(sub?'<div class="bz-sub">'+sub+'</div>':'')+'</div>';
-
-  if(!keys.length){
-    const k=document.getElementById("bzCrossKpi"); if(k) k.innerHTML="";
-    box.innerHTML='<p class="hint">まだ売上の控えがありません。一度同期すると数字が入ります。</p>';
-    return;
-  }
-
   let ck=Object.assign({},Z0), ch=Object.assign({},Z0);
-  const tr=[];
+  const rows=[];
   keys.forEach(k=>{
     // その月の数字が無い産地は「—」にします（0円と区別するためです）
     const a=(kuma&&kuma[k])?zeiOf(kuma[k]):null, b=(hiro&&hiro[k])?zeiOf(hiro[k]):null;
     if(a) ck=zAdd(ck,a);
     if(b) ch=zAdd(ch,b);
-    const mon=(a?a.ord:0)+(b?b.ord:0);
-    const ym=k.split("-");
-    const cell=(v,ok)=>'<td class="num">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
-    const cum =(v,ok)=>'<td class="num" style="color:#888">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
-    tr.push('<tr><td>'+ym[0]+'年'+ym[1]+'月</td>'
-      +cell(a?a.ord:0,!!a)+cum(ck.ord,!!kuma)
-      +cell(b?b.ord:0,!!b)+cum(ch.ord,!!hiro)
-      +'<td class="num"><b>¥'+yen(Math.round(mon))+'</b></td>'
-      +cum(ck.ord+ch.ord,true)+'</tr>');
+    rows.push({k:k,a:a,b:b,ck:ck.ord,ch:ch.ord});
   });
+  return {oc:oc,kuma:kuma,hiro:hiro,keys:keys,rows:rows,ck:ck,ch:ch};
+}
 
-  const kEl=document.getElementById("bzCrossKpi");
-  if(kEl) kEl.innerHTML=
-     kpi("sale","熊本 累計売上（"+ZEIL()+"）",kuma?("¥"+yen(Math.round(ck.ord))):"—",
-       kuma?(ck.ordN+" 件"):"つないでいません")
-    +kpi("sale","広島 累計売上（"+ZEIL()+"）",hiro?("¥"+yen(Math.round(ch.ord))):"—",
-       hiro?(ch.ordN+" 件"):"つないでいません")
-    +kpi("gp","熊本＋広島 合計売上（"+ZEIL()+"）","¥"+yen(Math.round(ck.ord+ch.ord)),
-       (ck.ordN+ch.ordN)+" 件　"+keys.length+"か月ぶん");
+// 分析タブ「熊本・広島の月べつ売上」（2026-11-21 追加）
+function bzCrossDraw(){
+  const box=document.getElementById("bzCross"); if(!box) return;
+  drawZeiSeg();
+  const X=bzCrossSum();
+  const hd=document.getElementById("bzCrossHead");
+  if(hd) hd.textContent="（"+ZEIL()+"で表示）";
+
+  if(!X.keys.length){
+    box.innerHTML='<p class="hint">まだ売上の控えがありません。一度同期すると数字が入ります。</p>';
+    return;
+  }
+
+  const cell=(v,ok)=>'<td class="num">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
+  const cum =(v,ok)=>'<td class="num" style="color:#888">'+(ok?'¥'+yen(Math.round(v)):'—')+'</td>';
+  const tr=X.rows.map(r=>{
+    const ym=r.k.split("-"), mon=(r.a?r.a.ord:0)+(r.b?r.b.ord:0);
+    return '<tr><td>'+ym[0]+'年'+ym[1]+'月</td>'
+      +cell(r.a?r.a.ord:0,!!r.a)+cum(r.ck,!!X.kuma)
+      +cell(r.b?r.b.ord:0,!!r.b)+cum(r.ch,!!X.hiro)
+      +'<td class="num"><b>¥'+yen(Math.round(mon))+'</b></td>'
+      +cum(r.ck+r.ch,true)+'</tr>';
+  });
 
   let html='<table><thead><tr><th>月</th>'
     +'<th class="num">熊本</th><th class="num">熊本 累計</th>'
@@ -5601,17 +5608,17 @@ function bzCrossDraw(){
     +'<th class="num">合計</th><th class="num">合計 累計</th>'
     +'</tr></thead><tbody>'+tr.join("")+'</tbody>'
     +'<tfoot><tr class="total"><td>合計</td>'
-    +'<td class="num">'+(kuma?'¥'+yen(Math.round(ck.ord)):'—')+'</td><td></td>'
-    +'<td class="num">'+(hiro?'¥'+yen(Math.round(ch.ord)):'—')+'</td><td></td>'
-    +'<td class="num">¥'+yen(Math.round(ck.ord+ch.ord))+'</td><td></td>'
+    +'<td class="num">'+(X.kuma?'¥'+yen(Math.round(X.ck.ord)):'—')+'</td><td></td>'
+    +'<td class="num">'+(X.hiro?'¥'+yen(Math.round(X.ch.ord)):'—')+'</td><td></td>'
+    +'<td class="num">¥'+yen(Math.round(X.ck.ord+X.ch.ord))+'</td><td></td>'
     +'</tr></tfoot></table>';
 
-  if(!oc.url||!oc.code){
-    html+='<p class="hint">💡 '+esc(oc.name)+'の共有データベースにまだつないでいないので、'
-      +esc(oc.name)+'の列は空です。ヘッダーの「'+esc(oc.name)+'」に切り替えて、'
+  if(!X.oc.url||!X.oc.code){
+    html+='<p class="hint">💡 '+esc(X.oc.name)+'の共有データベースにまだつないでいないので、'
+      +esc(X.oc.name)+'の列は空です。ヘッダーの「'+esc(X.oc.name)+'」に切り替えて、'
       +'設定タブでURLと合言葉を入れると並びます。</p>';
   }else if(OTHER.err){
-    html+='<p class="hint" style="color:#C62828">⚠ '+esc(oc.name)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
+    html+='<p class="hint" style="color:#C62828">⚠ '+esc(X.oc.name)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
   }
   box.innerHTML=html;
 }
@@ -5619,7 +5626,9 @@ function bzCrossDraw(){
 // 読み直して描き直す
 async function refreshSanchi(force){
   await loadOther(force);
-  drawSanchi(); bzCrossDraw();
+  drawSanchi();
+  const k=document.getElementById("bzKpi");
+  if(k&&k.innerHTML) drawBunseki(); else bzCrossDraw();
 }
 
 // ===== freee への発行（2026-11-20 追加） =====
@@ -6247,7 +6256,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21d 版（産地別売上・税抜／税込）";
+const BUILD_LABEL="2026-11-21e 版（産地別売上・税抜／税込）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
