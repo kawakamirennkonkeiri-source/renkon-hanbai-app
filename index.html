@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>カワカミ蓮根 農産物 仕入販売管理（公開版）</title>
+<title>カワカミ蓮根 農産物 仕入販売管理</title>
 <style>
 :root{--or:#0F7FA8;--or-d:#0B6187;--or-l:#E8F5FB;--red:#DC3545;--grn:#1E7D34;--grn-l:#E9F4ED;}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -14,6 +14,11 @@ header h1{font-size:17px;font-weight:bold}
 header .ver{font-size:11.5px;opacity:.85;margin-left:8px;font-weight:400}
 header .sp{flex:1}
 header .hbadge{background:rgba(255,255,255,.22);padding:4px 11px;border-radius:4px;font-size:11.5px}
+/* 産地の切り替え。いま見ている産地が白くなります */
+.sanchi-sw{display:inline-flex;border:1px solid rgba(255,255,255,.55);border-radius:5px;overflow:hidden}
+.sanchi-sw button{background:transparent;color:#fff;border:none;padding:5px 15px;font-size:12.5px;
+  font-family:inherit;cursor:pointer;font-weight:bold;opacity:.8}
+.sanchi-sw button.on{background:#fff;color:var(--or);opacity:1}
 header .hbtn{background:#fff;color:var(--or);border:none;padding:6px 13px;border-radius:4px;
   cursor:pointer;font-size:12px;font-weight:bold;font-family:inherit}
 header .hbtn.y{background:#F5C242;color:#4a3400}
@@ -227,6 +232,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <header class="no-print">
   <div><span style="font-size:17px;font-weight:bold">カワカミ蓮根　農産物 仕入販売管理</span>
     <span class="ver" id="verLabel"></span></div>
+  <span class="sanchi-sw"><button data-sanchi="kuma">熊本</button><button data-sanchi="hiro">広島</button></span>
   <div class="sp"></div>
   <span class="hbadge" id="syncBadge">● 保存待ち</span>
   <!-- データ保存・バックアップは画面に出しません（2026-11-09）。
@@ -300,6 +306,11 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="kpi gp"><div class="l">差引（受注−買取）</div><div class="v" id="kGp">-</div></div>
     <div class="kpi"><div class="l">取引件数</div><div class="v" id="kCnt">-</div></div>
     <div class="kpi click" id="kpiNg" title="押すと、要確認の一覧を出します"><div class="l">要確認 <span style="font-size:10.5px;color:var(--or)">▸ 押すと一覧</span></div><div class="v" id="kNg">-</div></div>
+  </div>
+  <div class="card" id="sanchiCard">
+    <h2>産地別 売上 <span class="cnt" id="sanchiYm"></span><span class="sp"></span>
+      <button class="btn sm sub" id="btnSanchiRe">読み直す</button></h2>
+    <div id="sanchiBox"></div>
   </div>
   <div class="card"><h2>ステータス<span class="sp"></span>
     <button class="btn sm sub" id="btnToBuyAgg">仕入先別 発注（生産者）へ ▾</button></h2>
@@ -865,6 +876,19 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="note" id="syncInfo"></div>
   </div>
   <div class="card">
+    <h2>もう一方の産地</h2>
+    <div class="note or" style="margin-top:0">熊本と広島は、<b>別々の共有データベース</b>で動いています。
+      ヘッダーの「熊本／広島」で切り替えると、取引・請求・マスタ・帳票番号のすべてが入れ替わります。<br>
+      <b>それぞれの産地で、この設定タブの「共有データベース」を1回ずつ入れてください。</b>
+      両方つないでおくと、ダッシュボードの「産地別 売上」に両方の数字が並びます
+      （もう一方は<b>読むだけ</b>で、何も書きません）。</div>
+    <div class="flex">
+      <span id="otherState" style="font-size:12.5px"></span>
+      <span class="sp" style="flex:1"></span>
+      <button class="btn sub" id="btnOtherTest">もう一方が読めるか確認</button>
+    </div>
+  </div>
+  <div class="card">
     <h2>操作履歴 <span class="cnt" id="logCnt"></span><span class="sp"></span>
       <input class="find" id="fLog" placeholder="絞り込み（操作者・内容）"></h2>
     <p class="hint">💡 発行・取消・修正の記録です。共有データベースを使っていると、<b>他のPCの操作もここに出ます</b>。</p>
@@ -891,10 +915,49 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 <script>
 const DATA = {"price": [], "map": [], "shime": [], "shanai": [], "kaitori": [], "partners": [], "prod": [], "sample": [], "tmv3": []};
 const TAX = 0.08;
-const CFG_KEY="krs_cfg_v2", ROW_KEY="krs_rows", ROWB_KEY="krs_rows_buy";
+// ===== 産地（熊本／広島）＝このアプリ1本で両方を扱います（2026-11-21） =====
+//   熊本と広島は、別々の共有データベースで動いています。
+//   このアプリは「いまどちらを見ているか」だけを覚えていて、
+//   保存場所・つなぎ先・帳票番号・PDFの入れ物を、まるごと入れ替えます。
+//   切り替えると画面を読み込み直します。中身が混ざらないようにするためです。
+const SANCHI_LIST={
+  kuma:{ id:"kuma", name:"熊本", pre:"krs_", inv:"INV-", buy:"BUY-", est:"EST-",
+         pdfInv:"請求書PDF",      pdfDv:"納品書PDF" },
+  hiro:{ id:"hiro", name:"広島", pre:"krh_", inv:"INH-", buy:"BUH-", est:"ESH-",
+         pdfInv:"広島_請求書PDF", pdfDv:"広島_納品書PDF" }
+};
+// どちらを見ているかの印。産地ごとの保存場所とは別に、1つだけ持ちます。
+const SANCHI_SEL_KEY="kr_sanchi";
+let SANCHI_ID="kuma";
+try{ if(localStorage.getItem(SANCHI_SEL_KEY)==="hiro") SANCHI_ID="hiro"; }catch(e){}
+const SA=SANCHI_LIST[SANCHI_ID];
+const SANCHI_ME=SA.name;
+
+// 産地を切り替えます。書きかけを保存してから、読み込み直します。
+function switchSanchi(id){
+  if(!SANCHI_LIST[id]||id===SANCHI_ID) return;
+  try{ if(typeof saveCfgNow==="function") saveCfgNow(); }catch(e){}
+  try{ localStorage.setItem(SANCHI_SEL_KEY,id); }catch(e){
+    alert("産地を切り替えられませんでした（保存場所が使えません）。"); return; }
+  location.reload();
+}
+
+// もう一方の産地のつなぎ先。そちらの設定から読みます（このPCに入れてあるもの）。
+function otherCfg(){
+  const o=SANCHI_LIST[SANCHI_ID==="kuma"?"hiro":"kuma"];
+  let c={};
+  try{ c=JSON.parse(localStorage.getItem(o.pre+"cfg_v2")||"{}")||{}; }catch(e){}
+  return { id:o.id, name:o.name, url:String(c.syncUrl||""), code:String(c.syncCode||"") };
+}
+// 埋め込みのデータは、熊本のはじめの値です。
+//   広島に切り替えたときに使うと、広島のマスタに熊本の中身が入ってしまいます。
+//   広島のマスタは共有データベースから受け取るので、ここは空にします。
+if(SANCHI_ID!=="kuma"){ try{ Object.keys(DATA).forEach(k=>{ if(Array.isArray(DATA[k])) DATA[k]=[]; }); }catch(e){} }
+
+const CFG_KEY=SA.pre+"cfg_v2", ROW_KEY=SA.pre+"rows", ROWB_KEY=SA.pre+"rows_buy";
 // 発注書の「予定」（明日以降）。分析のグラフで薄い色で出すためのものです。
 //   請求にも売上にも使いません。
-const ROWP_KEY="krs_rows_plan";
+const ROWP_KEY=SA.pre+"rows_plan";
 const COMPANY_DEFAULT={name:"",addr:"",bank:"",invoiceNo:""};
 const TABS=[["dashboard","ダッシュボード"],["bunseki","分析"],["quote","見積"],["tx","取引 (受注＋発注)"],["deliv","納品"],
   ["invoicing","請求"],["buying","買取 (生産者)"],["partners","取引先マスタ"],
@@ -960,29 +1023,29 @@ const PREF_LIST=["北海道","青森","岩手","宮城","秋田","山形","福�
 //   「請求書に書く商品名」の欄をクリックすると、この一覧が出ます。
 //   ここに無い書き方も、そのまま打てば使えます。
 const INV_NAME_LIST=[
-  "熊本県産 れんこん 「幸祝」洗い Mup2㎏",
-  "熊本県産 れんこん 「幸祝」洗い Mup5㎏",
-  "熊本県産 れんこん 「幸祝」洗い Mup10㎏",
-  "熊本県産 れんこん 「幸祝」土付き Mup2㎏",
-  "熊本県産 れんこん 「幸祝」土付き Mup5㎏",
-  "熊本県産 れんこん 「幸祝」土付き Mup10㎏",
-  "熊本県産 れんこん 「幸祝」真空 Mup2㎏",
-  "熊本県産 れんこん 「幸祝」真空 Mup5㎏",
-  "熊本県産 れんこん 「幸祝」真空 Mup10㎏",
-  "熊本県産 れんこん 「幸祝」ピロー Mup2㎏",
-  "熊本県産 れんこん 「幸祝」ピロー Mup5㎏",
-  "熊本県産 れんこん 「幸祝」ピロー Mup10㎏",
-  "熊本県産 れんこん 「幸祝」　加工用　5kg",
-  "熊本県産 れんこん 「幸祝」　加工用　10kg",
-  "熊本県産 れんこん 「幸祝」　C　5kg",
-  "熊本県産 れんこん 「幸祝」　C　10kg",
-  "熊本県産 れんこん 「幸祝」　S　5kg",
-  "熊本県産 れんこん 「幸祝」　S　10kg"];
+  SANCHI_ME+"県産 れんこん 「幸祝」洗い Mup2㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」洗い Mup5㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」洗い Mup10㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」土付き Mup2㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」土付き Mup5㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」土付き Mup10㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」真空 Mup2㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」真空 Mup5㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」真空 Mup10㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」ピロー Mup2㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」ピロー Mup5㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」ピロー Mup10㎏",
+  SANCHI_ME+"県産 れんこん 「幸祝」　加工用　5kg",
+  SANCHI_ME+"県産 れんこん 「幸祝」　加工用　10kg",
+  SANCHI_ME+"県産 れんこん 「幸祝」　C　5kg",
+  SANCHI_ME+"県産 れんこん 「幸祝」　C　10kg",
+  SANCHI_ME+"県産 れんこん 「幸祝」　S　5kg",
+  SANCHI_ME+"県産 れんこん 「幸祝」　S　10kg"];
 function defaultCfg(){
   const price=[];
-  DATA.price.forEach(p=>price.push({t:p.t,item:p.item,cap:p.cap,sanchi:"熊本",kind:"販売",
+  DATA.price.forEach(p=>price.push({t:p.t,item:p.item,cap:p.cap,sanchi:SANCHI_ME,kind:"販売",
     tanka:p.tanka,unit:"円/ケース",soryo:"送料込み",from:PFROM,to:PTO}));
-  DATA.kaitori.forEach(k=>price.push({t:k.seisansha,item:k.kubun,cap:k.size,sanchi:"熊本",
+  DATA.kaitori.forEach(k=>price.push({t:k.seisansha,item:k.kubun,cap:k.size,sanchi:SANCHI_ME,
     kind:k.kubun==="収穫舟数"?"対象外":"仕入",tanka:kaitoriTanka(k.kubun),unit:"円/kg",from:PFROM,to:PTO}));
   const seen={},freight=[];
   DATA.map.forEach(m=>{const k=m.tori+""+m.item;
@@ -995,7 +1058,7 @@ function defaultCfg(){
     dvGas:"", dvFolder:"", invGas:"", invFolder:"", alsoDownload:"しない", delivRule:"board",
     freeeToken:"", freeeCompany:"", userName:"", syncUrl:"", syncCode:"", syncOn:false,
     map:DATA.map.map(m=>({sell:m.sell,kubun:m.kubun,tori:m.tori,item:m.item,
-      bill:billOf(m.tori),sanchi:"熊本"})),
+      bill:billOf(m.tori),sanchi:SANCHI_ME})),
     shime:DATA.shime.map(s=>({tori:billOf(s.tori),shime:s.shime,kijun:s.kijun,memo:""})),
     itemName:[], takuhaiRates:TAKU_RATES_DEFAULT.map(r=>Object.assign({},r)),
     shanai:DATA.shanai.slice(), nobill:(DATA.nobill||[]).slice(),
@@ -1249,7 +1312,7 @@ function freightNote(f,qty,kg,cap,pref){
 }
 const txNo=(pre,d,i)=>pre+"-"+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"-"+String(i).padStart(3,"0");
 
-const OPS_KEY="krs_ops";
+const OPS_KEY=SA.pre+"ops";
 // adj  ：取引ごとの手修正（数量・単価・品名・送料・納品日・kg・備考）
 // extra：請求書／買取書ごとの追加行（値引き・調整など） キー＝"inv|請求先|YYYY-MM" / "buy|生産者|YYYY-MM"
 // head ：請求書／買取書ごとの件名・備考
@@ -1294,9 +1357,11 @@ const SYNC_ENT=["partners","price","freight","map","itemName","invoices","buyDoc
 //   古い中身を持つPCが1台つないだだけで、全部が巻き戻ります。
 //   実際に170行の商品名が一度に消えました。
 //   いまは単価マスタなどと同じく「1行ずつ」扱い、消す指示も出しません。
-const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload"];
+//   totals（月別の売上）は、この産地が数えた結果です。もう一方の産地がこれを読みます。
+//   相手のURL・合言葉（otherSync / otherCode）は、つなぎ先と同じくPCごとの設定なので入れません。
+const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload","totals"];
 // 送った控えは「指紋」だけにします（2026-11-09）。名前も変えたので、古い控えとは別物です。
-const SNAP_KEY="krs_sync_snap2", SINCE_KEY="krs_sync_since";
+const SNAP_KEY=SA.pre+"sync_snap2", SINCE_KEY=SA.pre+"sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
 // PUSHHOLD＝送るのを止めて、共有データベースから受け取り直している間だけ true。
 // PUSHFREE＝全部もらい直した直後の1回だけ、下のブレーキを通さずに送る印。
@@ -1310,7 +1375,7 @@ try{SNAP=JSON.parse(localStorage.getItem(SNAP_KEY)||"{}");}catch(e){SNAP={};}
 //   いっぱいになると、発行した買取書・請求書がこのPCに保存できず、
 //   開き直したときに消えていました（PDFだけができて、請求に乗らない症状）。
 //   これからは下の「指紋」だけを持ちます。
-try{ localStorage.removeItem("krs_sync_snap"); }catch(e){}
+try{ localStorage.removeItem(SA.pre+"sync_snap"); }catch(e){}
 // 取込データの「かたまり」の控え。このPCには保存せず、開いている間だけ覚えます。
 let ROWC={}, ROWFULL=false;
 try{SINCE=localStorage.getItem(SINCE_KEY)||"";}catch(e){SINCE="";}
@@ -1355,7 +1420,7 @@ const ENT_JA={partners:"取引先マスタ",price:"単価マスタ",freight:"運
 const entJa_=e=>ENT_JA[e]||e;
 // 画面の「削除」で消したマスタの行番号。
 // 共有DBから消してよいのは、ここに入っている行だけ。
-const DELQ_KEY="krs_sync_delq";
+const DELQ_KEY=SA.pre+"sync_delq";
 const MASTER_ENT=["partners","price","freight","map","shime","itemName",
   // 帳票も「手元に無いから」というだけでは消しません（2026-10-30）。
   //   このPCに保存できなかっただけなのに、共有データベースの請求書まで
@@ -1679,13 +1744,13 @@ function build(sale,buy){
     const kin=tk!=null?tk*(ku==="円/kg"?kg:cs):null;
     const isOut=CFG.price.some(p=>p.kind==="対象外"&&N(p.t)===N(r.seisansha)&&N(p.item)===N(r.kubun));
     TX.push({kind:"buy",no:_pno,date:d,deliv:d,customer:"",supplier:r.seisansha,edited:!!aj,memo:aj?(aj.memo||""):"",
-      sanchi:"熊本",item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
+      sanchi:SANCHI_ME,item:(r.kubun||"")+"　"+(r.size||"")+"kg",sell:r.seisansha,kubun:r.kubun||"",
       cap:cap||null,qty:cs,kg:kg,unitLabel:"c/s",tanka:tk,
       kunit:tk!=null?ku:"",sale:null,buy:kin,y:d.getFullYear(),m:d.getMonth()+1,
       shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
       why:(sh||isOut)?"買取の対象外":(tk==null)?"買取単価が未設定":""});
   });
-  fillYM(); render();
+  fillYM(); render(); publishTotals(); drawSanchi();
 }
 
 // 発注書の1行 → 取引1件。実績と予定で同じものを使います（dq は日付ごとの連番）
@@ -1734,7 +1799,7 @@ function saleTx(r,dq){
     const shohin=tk!=null?tk*cs:null;
     return {kind:"sale",no:_no,baseQty:baseQty,date:se,deliv:no,
       customer:sh?"":bill,billBase:billBase,
-      priceKey:priceTori,supplier:"",sanchi:mp?(mp.sanchi||"熊本"):"熊本",
+      priceKey:priceTori,supplier:"",sanchi:mp?(mp.sanchi||SANCHI_ME):SANCHI_ME,
       frNote:frNote, frPref:frPref,
       item:(r.tori||"")+"　"+(r.kubun||""),sell:r.tori,kubun:r.kubun||"",cap:cap,
       priceItem:(aj&&aj.item)?aj.item:(hit?hit.item:(mp?mp.item:"")),
@@ -2894,7 +2959,7 @@ function ngJump(no){
     let i=CFG.map.findIndex(m=>m.sell===t.sell&&(m.kubun||"")===(t.kubun||""));
     if(i<0){
       if(!confirm("対応表に「"+t.sell+"／"+t.kubun+"」の行を足します。\n足したあと、請求先・単価マスタの取引先・商品を選んでください。")) return;
-      CFG.map.unshift({sell:t.sell,kubun:t.kubun||"",bill:"",tori:"",item:"",sanchi:"熊本",_new:1});
+      CFG.map.unshift({sell:t.sell,kubun:t.kubun||"",bill:"",tori:"",item:"",sanchi:SANCHI_ME,_new:1});
       saveCfg("対応表に行を足しました");
     }
     MAPF=""; document.getElementById("fMap").value=t.sell; drawMap(); build();
@@ -3809,7 +3874,7 @@ function drawItemName(){
       +'<td><input class="cell" list="dlItemI" data-t="itemName" data-i="'+i+'" data-k="item" value="'+esc(x.item||"")+'"></td>'
       +'<td>'+cell("itemName",i,"cap",x.cap,true)+'</td>'
       +'<td><input class="cell'+(yet?" need":"")+'" list="dlItemN" data-t="itemName" data-i="'+i+'" data-k="name" '
-        +'placeholder="例：熊本県産 れんこん「幸祝」 土付き Mup 5kg" value="'+esc(x.name||"")+'"></td>'
+        +'placeholder="例：'+SANCHI_ME+'県産 れんこん「幸祝」 土付き Mup 5kg" value="'+esc(x.name||"")+'"></td>'
       +'<td>'+cell("itemName",i,"memo",x.memo)+'</td><td>'+delBtn("itemName",i)+'</td>';
     tb.appendChild(tr);});
   const yetN=(CFG.itemName||[]).filter(x=>!String(x.name||"").trim()).length;
@@ -3849,7 +3914,7 @@ function autoItemName(x){
   const base=String(x.item==null?"":x.item)
     .replace(/[\s\u3000]*\d+月(\d+日)?[\s\u3000]*[~\uff5e\u301c]?[\s\u3000]*$/,"").trim();
   const cap=(x.cap==null||x.cap==="")?"":String(x.cap);
-  return "熊本県産 れんこん「幸祝」"+base+(cap?" Mup"+cap+"kg":"");
+  return SANCHI_ME+"県産 れんこん「幸祝」"+base+(cap?" Mup"+cap+"kg":"");
 }
 // 空欄の行だけ埋めます。すでに入っている行は触りません。
 function itemNameAuto(){
@@ -3859,7 +3924,7 @@ function itemNameAuto(){
   const ex=blank.slice(0,4).map(x=>"　"+(x.t||"")+"｜"+(x.item||"")+"｜"+(x.cap||"")+"kg"
     +"\n　　→ "+autoItemName(x)).join("\n");
   if(!confirm("商品名が空欄の "+blank.length+" 行に、決まった形の名前を入れます。\n\n"
-    +"　熊本県産 れんこん「幸祝」{品名} Mup{容量}kg\n\n"
+    +"　"+SANCHI_ME+"県産 れんこん「幸祝」{品名} Mup{容量}kg\n\n"
     +"品名のうしろの「○月」は外します。\n\n【例】\n"+ex
     +"\n\n★ 規格が Mup でないもの（C・S・CS など）は、"
     +"あとで直してください。\n　 すでに入っている行は触りません。\n\n続けますか？")) return;
@@ -3909,7 +3974,7 @@ function drawPrice(){
     sh++; const tr=document.createElement("tr"); if(p._new){tr.className="new";delete p._new;}
     const bl=p.kind==="仕入"&&(p.tanka==null||p.tanka==="");
     tr.innerHTML='<td>'+selPriceT(i,p)+'</td><td>'+cell("price",i,"item",p.item)+'</td>'
-      +'<td>'+cell("price",i,"cap",p.cap,true)+'</td><td>'+selc("price",i,"sanchi",p.sanchi||"熊本",["熊本","広島"])+'</td>'
+      +'<td>'+cell("price",i,"cap",p.cap,true)+'</td><td>'+selc("price",i,"sanchi",p.sanchi||SANCHI_ME,["熊本","広島"])+'</td>'
       +'<td>'+selc("price",i,"kind",p.kind,["販売","仕入","加工賃","対象外"])+'</td>'
       +'<td>'+cell("price",i,"tanka",p.tanka,true,bl)+'</td>'
       +'<td>'+selc("price",i,"unit",p.unit,["円/ケース","円/kg"])+'</td>'
@@ -4064,7 +4129,7 @@ function drawMap(){
       +'<td>'+selKey("map",i,"bill",m.bill||"")+'</td>'
       +'<td>'+selTori("map",i,"tori",m.tori)+'</td><td>'
       +cell("map",i,"item",m.item)+'</td><td>'
-      +selc("map",i,"sanchi",m.sanchi||"熊本",["熊本","広島"])+'</td><td>'+delBtn("map",i)+'</td>';
+      +selc("map",i,"sanchi",m.sanchi||SANCHI_ME,["熊本","広島"])+'</td><td>'+delBtn("map",i)+'</td>';
     tb.appendChild(tr);});
   MAPSHOWN=sh;
   drawMapBadges();
@@ -4171,8 +4236,8 @@ document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{
   const t=b.dataset.add;
   if(t==="shime") CFG.shime.push({tori:"",shime:"月末",kijun:"着",memo:""});
   if(t==="itemName") CFG.itemName.unshift({t:"",item:"",cap:null,name:"",memo:"",_new:1});
-  if(t==="map") CFG.map.unshift({sell:"",kubun:"",bill:"",tori:"",item:"",sanchi:"熊本",_new:1});
-  if(t==="price") CFG.price.unshift({t:"",item:"",cap:null,sanchi:"熊本",kind:"販売",tanka:null,
+  if(t==="map") CFG.map.unshift({sell:"",kubun:"",bill:"",tori:"",item:"",sanchi:SANCHI_ME,_new:1});
+  if(t==="price") CFG.price.unshift({t:"",item:"",cap:null,sanchi:SANCHI_ME,kind:"販売",tanka:null,
     unit:"円/ケース",from:PFROM,to:PTO,_new:1});
   if(t==="partners") CFG.partners.unshift({name:"",key:"",zip:"",addr:"",person:"",mail:"",paymentMonthOffset:1,paymentDay:"月末",_new:1});
   if(t==="freight") CFG.freight.unshift({t:"",item:"",hai:"自社",carrier:"",tanka:null,unit:"円/ケース",
@@ -4251,7 +4316,7 @@ document.getElementById("btnCfgReset").onclick=()=>{
   CFG=defaultCfg(); drawAll(); saveCfg("最初の設定に戻しました"); build();};
 
 // ===== 見積 =====
-const QT_KEY="krs_quote";
+const QT_KEY=SA.pre+"quote";
 let QT={customer:"",subject:"",date:"",valid:"",memo:"",lines:[]};
 try{const d=JSON.parse(localStorage.getItem(QT_KEY)||"null"); if(d&&d.lines) QT=d;}catch(e){}
 function qtSave(){try{localStorage.setItem(QT_KEY,JSON.stringify(QT));}catch(e){}}
@@ -4352,7 +4417,7 @@ function buildQuoteHtml(q){
     +'</body></html>';
 }
 function nextQuoteNo(){
-  const d=new Date(), pre="EST-"+d.getFullYear()+p2(d.getMonth()+1)+"-";
+  const d=new Date(), pre=SA.est+d.getFullYear()+p2(d.getMonth()+1)+"-";
   let n=0;
   OPS.quotes.forEach(q=>{ if(q.quoteNo&&q.quoteNo.indexOf(pre)===0){
     const v=parseInt(q.quoteNo.slice(pre.length),10); if(v>n) n=v; }});
@@ -4787,9 +4852,11 @@ function buildDeliveryNoteHtml(doc){
 }
 // GASへ送ってPDF化・保存（Content-Typeは付けない：CORSのプリフライトを避ける）
 async function gasSavePdf(kind, fileName, subFolder, html, rootFolder){
-  const url=(kind==="inv"?CFG.invGas:CFG.dvGas)||"";
+  // PDF保存のあて先。空のときは共有データベースと同じGASに送ります（2026-11-21）。
+  //   PDF保存の設定欄は画面に出していないので、広島では必ず空になります。
+  const url=(kind==="inv"?CFG.invGas:CFG.dvGas)||CFG.syncUrl||"";
   if(!url) throw new Error("ドライブのURLが未設定です（設定タブで登録してください）");
-  const root=rootFolder||(kind==="inv"?"請求書PDF":"納品書PDF");
+  const root=rootFolder||(kind==="inv"?SA.pdfInv:SA.pdfDv);
   const body=JSON.stringify({action:"saveInvoicePdf", fileName:fileName, subFolder:subFolder,
     html:html, rootFolder:root, by:CFG.userName||""});
   const r=await fetch(url,{method:"POST", body:body});
@@ -4956,7 +5023,7 @@ async function issueOtherInvoice_run(d,y,m,ls){
   dlMsg("その他の請求書を発行しました："+inv.invoiceNo+"（ドライブに保存済み）","ok");
 }
 function nextInvoiceNo(y,m){
-  const pre="INV-"+y+p2(m)+"-";
+  const pre=SA.inv+y+p2(m)+"-";
   let n=0;
   OPS.invoices.forEach(i=>{ if(i.invoiceNo&&i.invoiceNo.indexOf(pre)===0){
     const v=parseInt(i.invoiceNo.slice(pre.length),10); if(v>n) n=v; }});
@@ -5128,7 +5195,7 @@ async function issueDeliveryNote(txNo){
 }
 // 買取書の番号
 function nextBuyNo(y,m){
-  const pre="BUY-"+y+p2(m)+"-";
+  const pre=SA.buy+y+p2(m)+"-";
   let n=0;
   OPS.buyDocs.forEach(b=>{ if(b.docNo&&b.docNo.indexOf(pre)===0){
     const v=parseInt(b.docNo.slice(pre.length),10); if(v>n) n=v; }});
@@ -5286,6 +5353,116 @@ function cancelBuyDoc(id){
   dlMsg("買取書 "+d.docNo+" を取り消しました","wait");
   return true;
 }
+// ===== 産地別の売上（2026-11-21 追加） =====
+// 月別の売上を数えます。
+//   受注 … ダッシュボードの「受注合計（税抜）」と同じ数え方（請求年月でまとめます）
+//   請求済 … 発行した請求書の合計。取消したものは数えません
+//   この結果を CFG.totals に入れて共有データベースへ流し、
+//   もう一方の産地は「その数字を読むだけ」にします。
+//   同じ計算を2か所でやると必ずずれるので、数えるのは自分の産地だけです。
+function calcTotals(){
+  const t={}, ymk=(y,m)=>y+"-"+p2(m);
+  const box=k=>{ if(!t[k]) t[k]={ord:0,ordN:0,net:0,tax:0,inc:0,n:0}; return t[k]; };
+  TX.forEach(x=>{
+    if(x.kind!=="sale"||x.shanai||isFune(x)||x.sale==null) return;
+    const b=box(ymk(x.y,x.m)); b.ord+=Number(x.sale)||0; b.ordN++;
+  });
+  (OPS.invoices||[]).forEach(i=>{
+    if(!i||i.status==="cancelled"||!i.targetMonth) return;
+    const b=box(String(i.targetMonth));
+    b.net+=(Number(i.shohin)||0)+(Number(i.soryo)||0);
+    b.tax+=(Number(i.taxF)||0)+(Number(i.taxS)||0);
+    b.inc+=Number(i.total)||0;
+    b.n++;
+  });
+  // 並びをそろえます。PCごとに同じ文字列になれば、むだな送り合いが起きません。
+  const out={}; Object.keys(t).sort().forEach(k=>{ out[k]=t[k]; });
+  return out;
+}
+
+// 数えた結果を控えます。変わったときだけ保存します（＝そのときだけ共有DBへ送ります）
+function publishTotals(){
+  try{
+    const now=JSON.stringify(calcTotals());
+    if(now===JSON.stringify(CFG.totals||{})) return;
+    CFG.totals=JSON.parse(now);
+    saveCfg();
+  }catch(e){}
+}
+
+// もう一方の産地の数字を読みます（読むだけ。相手には1文字も書きません）
+let OTHER={at:0,data:null,err:""};
+async function loadOther(force){
+  const o=otherCfg();
+  if(!o.url||!o.code){ OTHER={at:0,data:null,err:""}; return null; }
+  if(!force&&OTHER.data&&Date.now()-OTHER.at<60000) return OTHER.data;   // 1分は取り直しません
+  try{
+    const body=JSON.stringify({action:"pullAll",accessCode:o.code,only:"meta"});
+    const r=await fetch(o.url,{method:"POST",body:body});
+    const j=await r.json();
+    if(!j||!j.ok) throw new Error((j&&j.error)||"読めませんでした");
+    const rec=((j.data&&j.data.meta)||[]).filter(x=>x.id==="totals")[0];
+    OTHER={at:Date.now(),data:(rec&&rec.v)||{},err:""};
+  }catch(e){
+    OTHER={at:Date.now(),data:null,err:e.message||String(e)};
+  }
+  return OTHER.data;
+}
+
+// ダッシュボードの「産地別 売上」
+function drawSanchi(){
+  const box=document.getElementById("sanchiBox"); if(!box) return;
+  const [y,m]=ymNow(), key=y+"-"+p2(m);
+  const lab=document.getElementById("sanchiYm");
+  if(lab) lab.textContent="("+y+"年"+p2(m)+"月)";
+
+  const oc=otherCfg();
+  const mine=(CFG.totals||{})[key]||{ord:0,ordN:0,net:0,tax:0,inc:0,n:0};
+  const other=OTHER.data?((OTHER.data[key])||{ord:0,ordN:0,net:0,tax:0,inc:0,n:0}):null;
+  const oName=oc.name;
+
+  const row=(nm,d,bold)=>{
+    if(!d) return '';
+    const b=bold?' style="font-weight:700;background:#FAFAFA"':'';
+    return '<tr'+b+'><td>'+esc(nm)+'</td>'
+      +'<td class="num">¥'+yen(Math.round(d.ord))+'</td>'
+      +'<td class="num">'+(d.ordN||0)+'</td>'
+      +'<td class="num">¥'+yen(Math.round(d.net))+'</td>'
+      +'<td class="num">¥'+yen(Math.round(d.tax))+'</td>'
+      +'<td class="num">¥'+yen(Math.round(d.inc))+'</td>'
+      +'<td class="num">'+(d.n||0)+'</td></tr>';
+  };
+  const sum=other?{
+    ord:mine.ord+other.ord, ordN:mine.ordN+other.ordN,
+    net:mine.net+other.net, tax:mine.tax+other.tax,
+    inc:mine.inc+other.inc, n:mine.n+other.n }:null;
+
+  let html='<table><thead><tr><th>産地</th>'
+    +'<th class="num">受注 税抜</th><th class="num">件数</th>'
+    +'<th class="num">請求済 税抜</th><th class="num">消費税</th><th class="num">請求済 税込</th><th class="num">通数</th>'
+    +'</tr></thead><tbody>'
+    + row(SANCHI_ME,mine) + (other?row(oName,other):'') + (sum?row("合計",sum,true):'')
+    +'</tbody></table>';
+
+  if(!oc.url||!oc.code){
+    html+='<p class="hint">💡 もう一方の産地（'+esc(oName)+'）の数字は出していません。'
+      +'ヘッダーの「'+esc(oName)+'」に切り替えて、設定タブで共有DBにつなぐと並びます。</p>';
+  }else if(OTHER.err){
+    html+='<p class="hint" style="color:#C62828">⚠ '+esc(oName)+'の数字が読めませんでした：'+esc(OTHER.err)+'</p>';
+  }else{
+    html+='<p class="hint">💡 <b>受注</b>はダッシュボードの「受注合計」と同じ数え方、'
+      +'<b>請求済</b>は発行した請求書の合計（取消ぶんは除く）です。'
+      +(other?'　'+esc(oName)+'の数字は、あちらのアプリが数えたものをそのまま読んでいます。':'')+'</p>';
+  }
+  box.innerHTML=html;
+}
+
+// 読み直して描き直す
+async function refreshSanchi(force){
+  await loadOther(force);
+  drawSanchi();
+}
+
 // ===== freee への発行（2026-11-20 追加） =====
 //   共有データベースと同じ入口に action:'freeeXxx' を投げると、
 //   GASの freee請求書連携.gs が受けてくれます。
@@ -5660,7 +5837,7 @@ document.getElementById("mBackup").addEventListener("click",e=>{
   document.getElementById("mBackup").classList.remove("on");
 });
 // ===== まるごとバックアップ =====
-const FULL_KIND="krs_full_backup";
+const FULL_KIND=SA.pre+"full_backup";
 function opsSummary(o){
   o=o||{};
   const inv=(o.invoices||[]), bd=(o.buyDocs||[]);
@@ -5685,7 +5862,7 @@ let LAST_FULL="";
 function fullExport(){
   downloadJson(fullData(),"仕入販売管理_まるごと_"+stamp()+".json");
   LAST_FULL=nowStr();
-  try{localStorage.setItem("krs_last_full_backup",LAST_FULL);}catch(e){}
+  try{localStorage.setItem(SA.pre+"last_full_backup",LAST_FULL);}catch(e){}
   drawBackupInfo();
   dlMsg("すべてを書き出しました（設定・取引データ・修正・発行記録）","ok");
 }
@@ -5759,7 +5936,7 @@ function drawLog(){
 }
 function drawBackupInfo(){
   const el=document.getElementById("backupInfo"); if(!el) return;
-  let last=LAST_FULL; try{ last=localStorage.getItem("krs_last_full_backup")||LAST_FULL; }catch(e){}
+  let last=LAST_FULL; try{ last=localStorage.getItem(SA.pre+"last_full_backup")||LAST_FULL; }catch(e){}
   const n=OPS.invoices.length+OPS.buyDocs.length+Object.keys(OPS.adj).length+Object.keys(OPS.extra).length;
   el.innerHTML=last
     ?'最後に「すべてを書き出す」をした日時：<b>'+esc(last)+'</b>'
@@ -5804,6 +5981,30 @@ bzEl("bzRe").onclick=drawBunseki;
 bzEl("bzBySell").onclick=()=>{BZ_MODE="sell";drawBunseki();};
 bzEl("bzByTori").onclick=()=>{BZ_MODE="tori";drawBunseki();};
 document.getElementById("btnFullExport").onclick=fullExport;
+// ヘッダーの産地切替
+(function(){
+  document.querySelectorAll("[data-sanchi]").forEach(b=>{
+    if(b.dataset.sanchi===SANCHI_ID) b.classList.add("on");
+    b.onclick=()=>switchSanchi(b.dataset.sanchi);
+  });
+})();
+(function(){ const b=document.getElementById("btnSanchiRe");
+  if(b) b.onclick=()=>refreshSanchi(true); })();
+(function(){ const b=document.getElementById("btnOtherTest");
+  if(!b) return;
+  b.onclick=async()=>{
+    const o=otherCfg();
+    if(!o.url||!o.code){
+      alert(o.name+"の共有データベースにまだつないでいません。\n\n"
+        +"ヘッダーの「"+o.name+"」に切り替えて、設定タブでURLと合言葉を入れてください。"); return; }
+    await loadOther(true); drawSanchi();
+    if(OTHER.err){ alert("読めませんでした。\n\n"+OTHER.err); return; }
+    const n=Object.keys(OTHER.data||{}).length;
+    alert(n?("読めました。"+n+"か月ぶんの売上が入っています。"):
+      "つながりましたが、売上の控えがまだありません。\n\n"+o.name+"に切り替えて一度同期すると、数字が入ります。");
+  };
+})();
+setTimeout(()=>refreshSanchi(false),3000);
 ["syncUrl","syncCode"].forEach(id=>{ const el=document.getElementById(id);
   el.value=CFG[id]||"";
   el.oninput=()=>{
@@ -5878,7 +6079,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-20d 版（納品書を送るだけ）";
+const BUILD_LABEL="2026-11-21b 版（熊本・広島を1本に）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
