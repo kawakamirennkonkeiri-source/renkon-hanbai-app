@@ -907,9 +907,12 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <p class="hint">💡 <b>全部取り直す</b>…「ここまで受け取った」の印を消して、共有データベースの中身を
       <b>最初から全部受け取り直します</b>。他のPCには出ているのにこのPCにだけ出てこないときに使います。
       このPCの中身を消す機能ではありません。<br>
-      💡 <b>いまの内容を共有DBへ送る</b>…このPCの中身を<b>まるごと送り直します</b>。
-      <b>消す指示は送りません</b>ので、他のPCにしかないものが消えることはありません。
-      このPCには出ているのに<b>他のPCに出ていない</b>ときに使います。</p>
+      ⚠ <b>いまの内容を共有DBへ送る</b>…このPCの中身を<b>まるごと送り直します</b>。
+      <b style="color:#C62828">他のPCの新しい内容を、このPCの古い内容で上書きすることがあります。</b>
+      ふだんの同期は10秒ごとに動いているので、<b>このボタンはふつう使いません</b>。
+      このPCには出ているのに<b>他のPCに出ていない</b>ときだけ使ってください。
+      押すと、確認のあとに「送ります」と入力を求められます。<br>
+      （消す指示は送らないので、他のPCにしかないものが消えることはありません。）</p>
     <div class="note" id="syncInfo"></div>
   </div>
   <div class="card">
@@ -6358,9 +6361,20 @@ document.getElementById("btnSyncRepull").onclick=async()=>{
 };
 document.getElementById("btnSyncSeed").onclick=async()=>{
   if(!syncOn()){ alert("先にURLと合言葉を入れ、「共有する」にチェックを入れてください。"); return; }
-  if(!confirm("いまこのPCにある内容を、すべて共有データベースへ送ります。\n\n"
-    +"★ これは【最初の1台】だけで押してください。\n"
-    +"2台目以降で押すと、他のPCの内容を上書きしてしまいます。\n\nよろしいですか？")) return;
+  // 押し間違いで動かないよう、文字を打ってもらいます（2026-11-22 専務指示）。
+  //   このボタンだけは「自分の版で全部を塗り直す」ので、
+  //   古い内容のPCで押されると、ほかのPCの新しい内容が巻き戻ります。
+  {
+    const NL=String.fromCharCode(10);
+    const w=prompt("【ご注意】このボタンは、ほかのPCの新しい内容を、"+NL
+      +"このPCの古い内容で上書きすることがあります。"+NL+NL
+      +"ふだんの同期は10秒ごとに動いているので、このボタンはふつう使いません。"+NL
+      +"このPCにだけ出ていて、ほかのPCに出てこないときだけ使ってください。"+NL+NL
+      +"続けるときは　送ります　と入力してください。");
+    if(w===null) return;
+    const w2=String(w).split(" ").join("").split("　").join("");
+    if(w2!=="送ります"){ alert("入力がちがうので、何もしていません。"); return; }
+  }
   SNAP={}; saveSnap();
   dlMsg("共有データベースへ送っています…","wait");
   try{ await syncPush(); logOp("共有DBへ初期登録","このPCの内容をすべて送りました"); await syncPull();
@@ -6387,7 +6401,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-21i 版（広島は緑）";
+const BUILD_LABEL="2026-11-22a 版（送り直しに確認）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
