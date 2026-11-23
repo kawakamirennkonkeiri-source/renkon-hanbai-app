@@ -6597,7 +6597,10 @@ TABS.forEach(([id,label],i)=>{
     document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
     b.classList.add("active"); document.getElementById(id).classList.add("active");
     document.getElementById("ymBox").style.display=(id==="dashboard")?"":"none";
-    if(id==="bunseki") drawBunseki();};
+    if(id==="bunseki") drawBunseki();
+    //   起動のときは drawAll() が build() より先に走るので、明細を読む前の
+    //   数（0行）のままになります。設定を開いたら数え直します（2026-11-23）。
+    if(id==="settings") drawUsage();};
   nav.appendChild(b);});
 // 対象月を変えたら、産地別の表も描き直します（2026-11-21 追加）。
 //   render だけだと、産地別 売上の月が置いていかれていました。
@@ -6729,7 +6732,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-23b 版（年度の切替）";
+const BUILD_LABEL="2026-11-23c 版（年度の切替）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
