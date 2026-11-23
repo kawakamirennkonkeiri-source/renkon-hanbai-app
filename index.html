@@ -1925,6 +1925,7 @@ function saleTx(r,dq){
 //   いっぱいになり、請求書も設定も保存できなくなります。
 const FY_START=5;                 // 年度の始まり月
 const FY_KEEP=2;                  // 明細を手元に置く年度の数（今年度＋前年度）
+const FY_FIRST=2026;              // いちばん古い年度（これより前は記録がないので出しません）
 const fyOf=(y,m)=>(Number(m)>=FY_START?Number(y):Number(y)-1);
 const fyIdx_=m=>((Number(m)-FY_START+12)%12);   // 0＝5月 … 11＝翌年4月
 const fyNow_=()=>fyOf(TODAY.getFullYear(),TODAY.getMonth()+1);
@@ -1935,7 +1936,7 @@ const fyNote=f=>f+"年5月〜"+(f+1)+"年4月";
 //   ページを開き直すと戻ります。このあいだは明細をこのPCに保存しません。
 let FYWIDE=false;
 let FY=fyNow_();
-try{ const v=Number(localStorage.getItem(SA.pre+"fy")); if(v>2000) FY=v; }catch(e){}
+try{ const v=Number(localStorage.getItem(SA.pre+"fy")); if(v>=FY_FIRST) FY=v; }catch(e){}
 function setFy(f){
   f=Number(f); if(!(f>2000)) return;
   FY=f; try{ localStorage.setItem(SA.pre+"fy",String(f)); }catch(e){}
@@ -1951,7 +1952,7 @@ function fyList(){
     const y=Number(a[0]), m=Number(a[1]); if(y>2000&&m>0) s.add(fyOf(y,m)); });
   Object.keys(CFG).forEach(k=>{ if(metaCust_(k)) s.add(Number(String(k).slice(4))); });
   s.add(fyNow_());
-  return [...s].filter(x=>x>2000).sort((a,b)=>b-a);
+  return [...s].filter(x=>x>=FY_FIRST).sort((a,b)=>b-a);
 }
 function drawFyBox(){
   const sel=document.getElementById("fy"); if(!sel) return;
@@ -5998,10 +5999,10 @@ function bzFyDraw(){
       +'<span style="font-weight:normal;color:#888">'+fyLabel(use[0])+'</span></th>'
       +'<th class="num">件数<br><span style="font-weight:normal;color:#888">'
       +fyLabel(use[0])+'</span></th></tr></thead><tbody>';
-    const tt=use.map(()=>0); let tq=0, tc=0;
+    const tt=use.map(()=>0), hv=use.map(()=>false); let tq=0, tc=0;
     rows.forEach(r=>{
       h+='<tr><td><b>'+esc(r.n)+'</b></td>';
-      r.c.forEach((x,i)=>{ if(x) tt[i]+=x.v;
+      r.c.forEach((x,i)=>{ if(x){ tt[i]+=x.v; hv[i]=true; }
         h+='<td class="num">'+(x?("¥"+yen(Math.round(x.v))):'<span style="color:#888">—</span>')+'</td>'; });
       const a=r.c[0], b=r.c[1];
       h+='<td class="num">'+((a&&b)?sg(pc(a.v,b.v)):'<span style="color:#888">—</span>')+'</td>';
@@ -6010,8 +6011,10 @@ function bzFyDraw(){
         +'<td class="num">'+(a?a.c:"—")+'</td></tr>';
     });
     h+='</tbody><tfoot><tr class="total"><td>合計</td>';
-    tt.forEach(v=>{ h+='<td class="num">¥'+yen(Math.round(v))+'</td>'; });
-    h+='<td class="num">'+((tt[0]&&tt[1])?sg(pc(tt[0],tt[1])):'—')+'</td>'
+    tt.forEach((v,i)=>{ h+='<td class="num">'
+      +(hv[i]?('¥'+yen(Math.round(v))):'<span style="color:#888">—</span>')+'</td>'; });
+    h+='<td class="num">'+((hv[0]&&hv[1])?sg(pc(tt[0],tt[1]))
+        :'<span style="color:#888">—</span>')+'</td>'
       +'<td class="num">'+yen(Math.round(tq))+'</td>'
       +'<td class="num">'+tc+'</td></tr></tfoot></table>';
   }
@@ -6726,7 +6729,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-23a 版（年度の切替）";
+const BUILD_LABEL="2026-11-23b 版（年度の切替）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
