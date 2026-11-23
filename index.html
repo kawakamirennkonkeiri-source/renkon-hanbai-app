@@ -280,7 +280,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
 </header>
 <nav id="nav"></nav>
 <div class="topbar no-print">
+  <label id="fyBox">年度 <select id="fy"></select></label>
   <label id="ymBox">対象月 <select id="ym"></select></label>
+  <span id="fyWarn" class="hint" style="margin:0"></span>
   <span id="dlMsg"></span>
 </div>
 <input type="file" id="fileCfg" accept=".json" style="display:none">
@@ -394,6 +396,14 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
       数え方は<b>ダッシュボードの「受注合計」と同じ</b>（請求年月でまとめた受注）です。
       下の「シーズンはじめからの累計売上」は実績＋予定を日ぐりで足したものなので、数字は一致しません。</p>
     <div id="bzCross"></div></div>
+
+  <div class="card" id="bzFyCard"><h2>年度の比較 <span class="cnt" id="bzFyHead"></span><span class="sp"></span>
+      <span class="segzei"><button data-z="nuki">税抜で見る</button><button data-z="komi">税込で見る</button></span></h2>
+    <p class="hint">💡 年度は<b>5月はじまり</b>です（2026年度＝2026年5月～2027年4月）。<br>
+      <b>上の表は燊本と広島の両方</b>、<b>下の表はいま開いている産地だけ</b>です。<br>
+      ここは<b>集計だけ</b>を見ているので、<b>古い年度の明細がこのPCに無くても並びます</b>。<br>
+      消費税は<b>目安の数字</b>です（請求書の合計と数円ちがうことがあります）。</p>
+    <div id="bzFy"></div></div>
 
   <div class="card"><h2>シーズンはじめからの累計売上 <span class="cnt" id="bzCumHead"></span></h2>
     <div id="bzCum"></div></div>
@@ -916,6 +926,16 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="note" id="syncInfo"></div>
   </div>
   <div class="card">
+    <h2>このPCの保存のぐあい<span class="sp"></span>
+      <button class="btn sm sub" id="btnUsage">数え直す</button></h2>
+    <div class="note or" style="margin-top:0">ブラウザがアプリに貸してくれる場所は、
+      <b>1つのURLにつき約5MB</b>です。<b>燊本と広島で同じ場所を分け合います。</b><br>
+      いっぱいになると、請求書や設定が<b style="color:#C62828">保存できなくなります</b>。<br>
+      そのため、明細は<b>今年度と前年度だけ</b>を手元に置き、それより古い年度は
+      <b>月ごとの集計だけ</b>を残しています（明細は共有データベースにすべて残っています）。</div>
+    <div id="usageBox"></div>
+  </div>
+  <div class="card">
     <h2>もう一方の産地</h2>
     <div class="note or" style="margin-top:0">熊本と広島は、<b>別々の共有データベース</b>で動いています。
       ヘッダーの「熊本／広島」で切り替えると、取引・請求・マスタ・帳票番号のすべてが入れ替わります。<br>
@@ -1428,6 +1448,11 @@ const SYNC_ENT=["partners","price","freight","map","itemName","invoices","buyDoc
 //   totals（月別の売上）は、この産地が数えた結果です。もう一方の産地がこれを読みます。
 //   相手のURL・合言葉（otherSync / otherCode）は、つなぎ先と同じくPCごとの設定なので入れません。
 const META_KEYS=["company","taxFood","taxFreight","delivRule","shanai","nobill","takuhaiRates","dvGas","dvFolder","invGas","invFolder","alsoDownload","totals"];
+// 年度ごとの「販売先・取引先べつの集計」です。cust2026 のような名前にします（2026-11-23）。
+//   1年ぶんをひとつの記録にします。全年度をまとめると、
+//   Googleスプレッドシートの1マス（5万文字）に入らなくなるためです。
+const metaCust_=k=>/^cust[0-9][0-9][0-9][0-9]$/.test(String(k));
+const metaOK_=k=>META_KEYS.indexOf(k)>=0||metaCust_(k);
 // 送った控えは「指紋」だけにします（2026-11-09）。名前も変えたので、古い控えとは別物です。
 const SNAP_KEY=SA.pre+"sync_snap2", SINCE_KEY=SA.pre+"sync_since";
 let SNAP={}, SINCE="", SYNCBUSY=false, SYNCERR="", LASTSYNC="", SYNCTIMER=null, SYNCSOON=null;
@@ -1536,9 +1561,16 @@ function ensureIds(){
 function rowsRebuild_(){
   const pick=k=>Object.keys(ROWC).filter(x=>x.indexOf(k+"#")===0).sort()
     .reduce((a,x)=>a.concat(ROWC[x].rows||[]),[]);
-  SRC=pick("sale"); SRCB=pick("buy"); SRCP=pick("plan");
-  try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB));
-       localStorage.setItem(ROWP_KEY,JSON.stringify(SRCP)); }catch(e){}
+  // 手元に置くのは今年度と前年度だけです（2026-11-23）。
+  //   古い年度の明細は共有データベースにすべて残っています。
+  //   こうしないと3年ぶんでブラウザの保存箱（約5MB・燊本と広島で共用）が
+  //   いっぱいになり、請求書も設定も保存できなくなります。
+  SRC=fyCut_(pick("sale")); SRCB=fyCut_(pick("buy")); SRCP=fyCut_(pick("plan"));
+  //   「古い年度の明細を読み込む」を押しているあいだは保存しません。
+  if(!FYWIDE){
+    try{ localStorage.setItem(ROW_KEY,JSON.stringify(SRC)); localStorage.setItem(ROWB_KEY,JSON.stringify(SRCB));
+         localStorage.setItem(ROWP_KEY,JSON.stringify(SRCP)); }catch(e){}
+  }
 }
 function syncSnapshot(){
   if(ensureIds()) saveCfg();
@@ -1556,7 +1588,9 @@ function syncSnapshot(){
   kv("adj",OPS.adj); kv("extra",OPS.extra); kv("head",OPS.head); kv("st",OPS.st); kv("qty",OPS.qty);
   kv("doc",OPS.doc); kv("invLines",OPS.invLines); kv("buyLines",OPS.buyLines);
   // 取込データ（rows）は、ここに入れません。送らないからです（2026-11-09）。
-  const meta={}; META_KEYS.forEach(k=>{ meta[k]={id:k,v:CFG[k]}; }); s.meta=meta;
+  const meta={}; META_KEYS.forEach(k=>{ meta[k]={id:k,v:CFG[k]}; });
+  Object.keys(CFG).forEach(k=>{ if(metaCust_(k)) meta[k]={id:k,v:CFG[k]}; });
+  s.meta=meta;
   const lg={}; (OPS.log||[]).forEach(l=>{ if(l&&l.id) lg[l.id]=l; }); s.auditLog=lg;
   return s;
 }
@@ -1648,7 +1682,7 @@ function applyRemote(data){
     data.rows.forEach(r=>{ n++; if(r._del) delete ROWC[r.id]; else ROWC[r.id]=r; });
     rowsRebuild_();
   }
-  (data.meta||[]).forEach(r=>{ n++; if(!r._del&&META_KEYS.indexOf(r.id)>=0) CFG[r.id]=r.v; });
+  (data.meta||[]).forEach(r=>{ n++; if(!r._del&&metaOK_(r.id)) CFG[r.id]=r.v; });
   if((data.auditLog||[]).length){
     const have={}; (OPS.log||[]).forEach(l=>{have[l.id]=1;});
     data.auditLog.forEach(r=>{ n++; if(!r._del&&!have[r.id]) OPS.log.push({id:r.id,at:r.at,by:r.by,action:r.action,detail:r.detail}); });
@@ -1818,7 +1852,7 @@ function build(sale,buy){
       shanai:sh||isOut,status:(sh||isOut)?"off":(kin?"delivered":"created"),
       why:(sh||isOut)?"買取の対象外":(tk==null)?"買取単価が未設定":""});
   });
-  fillYM(); render(); publishTotals(); drawSanchi();
+  drawFyBox(); fillYM(); render(); publishTotals(); drawSanchi();
 }
 
 // 発注書の1行 → 取引1件。実績と予定で同じものを使います（dq は日付ごとの連番）
@@ -1883,10 +1917,82 @@ function saleTx(r,dq){
       why:sh?"対象外":!mp?"対応表に未登録":(tk==null)?"単価マスタに該当なし"
         :(betsu&&!fr&&!(aj&&aj.freight!=null))?"運賃マスタに該当なし":""};
 }
+// ===== 年度（5月はじまり）（2026-11-23 追加） =====
+//   2026年度 ＝ 2026年5月〜2027年4月。発注書の年度と同じ区切りです。
+//   アプリが明細を持つのは「今年度と前年度」だけです。
+//   それより古い年度は、月ごとの集計だけを残します（明細は共有データベースにあります）。
+//   こうしないと、3年ぶんでブラウザの保存箱（1つのURLにつき約5MB・熊本と広島で共用）が
+//   いっぱいになり、請求書も設定も保存できなくなります。
+const FY_START=5;                 // 年度の始まり月
+const FY_KEEP=2;                  // 明細を手元に置く年度の数（今年度＋前年度）
+const fyOf=(y,m)=>(Number(m)>=FY_START?Number(y):Number(y)-1);
+const fyIdx_=m=>((Number(m)-FY_START+12)%12);   // 0＝5月 … 11＝翌年4月
+const fyNow_=()=>fyOf(TODAY.getFullYear(),TODAY.getMonth()+1);
+const fyMin_=()=>fyNow_()-(FY_KEEP-1);
+const fyLabel=f=>f+"年度";
+const fyNote=f=>f+"年5月〜"+(f+1)+"年4月";
+// 「古い年度の明細を読み込む」を押しているあいだだけ true。
+//   ページを開き直すと戻ります。このあいだは明細をこのPCに保存しません。
+let FYWIDE=false;
+let FY=fyNow_();
+try{ const v=Number(localStorage.getItem(SA.pre+"fy")); if(v>2000) FY=v; }catch(e){}
+function setFy(f){
+  f=Number(f); if(!(f>2000)) return;
+  FY=f; try{ localStorage.setItem(SA.pre+"fy",String(f)); }catch(e){}
+  drawFyBox(); fillYM(); render(); drawSanchi();
+  const k=document.getElementById("bzKpi");
+  if(k&&k.innerHTML) drawBunseki();
+}
+// 選べる年度。手元の明細と、集計だけ残っている年度の両方から作ります。
+function fyList(){
+  const s=new Set();
+  TX.forEach(t=>{ if(!t.shanai) s.add(fyOf(t.y,t.m)); });
+  Object.keys(CFG.totals||{}).forEach(k=>{ const a=String(k).split("-");
+    const y=Number(a[0]), m=Number(a[1]); if(y>2000&&m>0) s.add(fyOf(y,m)); });
+  Object.keys(CFG).forEach(k=>{ if(metaCust_(k)) s.add(Number(String(k).slice(4))); });
+  s.add(fyNow_());
+  return [...s].filter(x=>x>2000).sort((a,b)=>b-a);
+}
+function drawFyBox(){
+  const sel=document.getElementById("fy"); if(!sel) return;
+  const arr=fyList();
+  if(arr.indexOf(FY)<0) FY=arr[0];
+  sel.innerHTML="";
+  arr.forEach(f=>{ const o=document.createElement("option");
+    o.value=String(f); o.textContent=fyLabel(f); sel.appendChild(o); });
+  sel.value=String(FY);
+  const w=document.getElementById("fyWarn"); if(!w) return;
+  if(FYWIDE){
+    w.innerHTML='⚠ <b>古い年度の明細を読み込んでいます。</b>'
+      +'このあいだはこのPCに保存しません。ページを開き直すと元に戻ります。';
+  }else if(FY<fyMin_()){
+    w.innerHTML='この年度の<b>明細はこのPCにありません</b>'
+      +'（分析の「年度の比較」は見られます）。'
+      +' <button class="btn sm sub" id="btnFyWide">明細を読み込む</button>';
+    const b=document.getElementById("btnFyWide");
+    if(b) b.onclick=()=>{ FYWIDE=true; rowsRebuild_(); build();
+      dlMsg("古い年度の明細を読み込みました。ページを開き直すと元に戻ります。","ok"); };
+  }else w.innerHTML="";
+}
+// 取込データの1行から年度を出します（販売・予定は出荷日、買取は日付）
+function rowFy_(r){
+  const d=parseDate((r&&(r.seisan||r.date))||""); if(!d) return null;
+  return fyOf(d.getFullYear(),d.getMonth()+1);
+}
+// 古い年度の明細を落とします（日付が読めない行は残します）
+function fyCut_(list){
+  if(FYWIDE) return list||[];
+  const lo=fyMin_();
+  return (list||[]).filter(r=>{ const f=rowFy_(r); return f==null||f>=lo; });
+}
 function fillYM(){
-  const set=new Set(TX.filter(t=>!t.shanai).map(t=>t.y+"/"+t.m));
+  // いま選んでいる年度の月だけを並べます（2026-11-23）
+  const set=new Set(TX.filter(t=>!t.shanai&&fyOf(t.y,t.m)===FY).map(t=>t.y+"/"+t.m));
   const arr=[...set].sort((a,b)=>{const[ay,am]=a.split("/").map(Number),[by,bm]=b.split("/").map(Number);
     return ay-by||am-bm;});
+  // 明細を持っていない年度は、その年度の12か月をそのまま並べます。
+  if(!arr.length){ for(let i=0;i<12;i++){ const mm=((FY_START-1+i)%12)+1;
+    arr.push((FY+(mm>=FY_START?0:1))+"/"+mm); } }
   const tx=document.getElementById("txYm");
   if(tx){ const keep=tx.value; tx.innerHTML='<option value="">全ての月</option>';
     arr.slice().reverse().forEach(k=>{const[y,m]=k.split("/");const o=document.createElement("option");
@@ -2034,7 +2140,9 @@ function bzKubunNote(name,srcSet){
   return '<div class="bz-sub">'+esc(src.join("・"))+' をまとめています</div>';
 }
 const bzPct=(v,t)=>(t>0?(v/t*100).toFixed(1)+"%":"—");
-const bzOK=t=>t.kind==="sale"&&!t.shanai&&!isFune(t)&&t.shohin!=null;
+// 分析は、いま選んでいる年度だけを数えます（2026-11-23）。
+//   年度を混ぜて数えると、年が増えたときに数字の意味が分からなくなるためです。
+const bzOK=t=>t.kind==="sale"&&!t.shanai&&!isFune(t)&&t.shohin!=null&&fyOf(t.y,t.m)===FY;
 const bzKg=t=>(t.cap>0?t.cap:0)*(t.qty||0);
 const BZ_LG='<div class="bz-lg"><span><s style="background:var(--or)"></s>実績</span>'
   +'<span><s style="background:#BFE2F1"></s>予定（発注書の明日以降）</span></div>';
@@ -2058,7 +2166,7 @@ const bzEl=id=>document.getElementById(id);
 function drawBunseki(){
   const act=TX.filter(bzOK), pl=TXP.filter(bzOK);
   bzNoteDraw(act,pl); bzKpiDraw(act,pl); bzKubunDraw(act,pl);
-  bzCrossDraw();
+  bzCrossDraw(); bzFyDraw();
   bzCumDraw(act,pl); bzRankDraw(act,pl); bzTankaDraw(act,pl);
 }
 
@@ -2106,7 +2214,8 @@ function bzKpiDraw(act,pl){
     +kpi("gp","シーズン見通し（実績＋予定）","¥"+yen(sA+sP),bzMan(sA+sP)+"円")
     +kpi("buy","数量　実績",""+yen(kA)+" kg",kP?"予定 "+yen(kP)+" kg":"")
     +kpi("","平均単価（運賃ぬき）",kOk?"¥"+yen(shA/kOk)+" /kg":"—","商品の金額 ÷ kg");
-  bzEl("bzHead").textContent=act.length+"件の実績"+(pl.length?"／"+pl.length+"件の予定":"");
+  bzEl("bzHead").textContent=fyLabel(FY)+"　"+act.length+"件の実績"
+    +(pl.length?"／"+pl.length+"件の予定":"");
   bzKpi2Draw(sA,sP,kpi);                 // 下に、もう片方の産地を同じ並びで出します
 }
 
@@ -4359,6 +4468,7 @@ document.addEventListener("click",e=>{
   drawTakuhai(); saveCfg("料金表を入れ直しました"); build();
 });
 function drawAll(){drawShime();drawPrice();drawFreight();drawTakuhai();drawMap();drawPar();drawShanai();drawNobill();drawItemName();
+  drawUsage();
   if(!QT.lines.length) QT.lines=[{item:"",qty:null,unit:"c/s",tanka:null,tax:"8%"}];
   drawQt();
   document.getElementById("taxFood").value=CFG.taxFood;
@@ -5550,13 +5660,70 @@ function calcTotals(){
   const out={}; Object.keys(t).sort().forEach(k=>{ out[k]=t[k]; });
   return out;
 }
+// ===== 販売先・取引先べつの集計（2026-11-23 追加） =====
+//   年度ごとに1つの記録（cust2026 など）に入れます。
+//   1年ぶんを「12か月ぶんの数字の並び」で持つので、場所を取りません。
+//     o…売上（税抜）　t…消費税　q…数量 c/s　k…kg　n…件数
+//   並びの先頭は5月です（0＝5月 … 11＝翌年4月）。
+//     s … 販売先ごと（発注書の行先の呼び名）
+//     c … 取引先ごと（対応表で決めた請求先＝請求書を出す相手）
+//   どちらも同じ取引から数えているので、合計は同じになります。
+//   消費税は1件ずつ切り捨てて足すので、月まとめの計算と数円ちがうことがあります。
+function calcCust(fy){
+  const tf=TF(), S={}, C={};
+  const z=()=>({o:[0,0,0,0,0,0,0,0,0,0,0,0],t:[0,0,0,0,0,0,0,0,0,0,0,0],
+                q:[0,0,0,0,0,0,0,0,0,0,0,0],k:[0,0,0,0,0,0,0,0,0,0,0,0],
+                n:[0,0,0,0,0,0,0,0,0,0,0,0]});
+  const add=(box,name,i,x)=>{
+    const b=box[name]||(box[name]=z());
+    b.o[i]+=Number(x.sale)||0;
+    b.t[i]+=Math.floor((Number(x.shohin)||0)*tf.food)+Math.floor((Number(x.freight)||0)*tf.fre);
+    b.q[i]+=Number(x.qty)||0;
+    b.k[i]+=bzKg(x);
+    b.n[i]++;
+  };
+  TX.forEach(x=>{
+    if(x.kind!=="sale"||x.shanai||isFune(x)||x.sale==null) return;
+    if(fyOf(x.y,x.m)!==fy) return;
+    const i=fyIdx_(x.m);
+    add(S,x.sell||"（行先なし）",i,x);
+    add(C,x.customer||"（請求先なし）",i,x);
+  });
+  const tidy=box=>{ const out={};
+    Object.keys(box).sort().forEach(k=>{ const b=box[k];
+      out[k]={o:b.o.map(v=>Math.round(v)),t:b.t.map(v=>Math.round(v)),
+              q:b.q.map(v=>Math.round(v*10)/10),k:b.k.map(v=>Math.round(v)),n:b.n}; });
+    return out; };
+  return {s:tidy(S),c:tidy(C)};
+}
 // 数えた結果を控えます。変わったときだけ保存します（＝そのときだけ共有DBへ送ります）
+//   ★ 手元に明細が無い年度は、前に数えた結果をそのまま残します（2026-11-23）。
+//     数え直すと0円で上書きしてしまい、過去の売上が消えるためです。
 function publishTotals(){
+  const lo=FYWIDE?-9999:fyMin_();
   try{
-    const now=JSON.stringify(calcTotals());
-    if(now===JSON.stringify(CFG.totals||{})) return;
-    CFG.totals=JSON.parse(now);
-    saveCfg();
+    const fresh=calcTotals(), keep=CFG.totals||{};
+    const t={}, inWin=k=>{ const a=String(k).split("-");
+      return fyOf(Number(a[0]),Number(a[1]))>=lo; };
+    [...new Set(Object.keys(keep).concat(Object.keys(fresh)))].sort().forEach(k=>{
+      // 手元に明細がある年度は数え直した方、無い年度は前の控えを使います。
+      const v=inWin(k)?fresh[k]:(keep[k]||((fresh[k]&&fresh[k].ordN)?fresh[k]:null));
+      if(v) t[k]=v;
+    });
+    const now=JSON.stringify(t);
+    if(now!==JSON.stringify(keep)){ CFG.totals=JSON.parse(now); saveCfg(); }
+  }catch(e){}
+  try{
+    const fys=new Set();
+    TX.forEach(x=>{ if(x.kind==="sale"&&!x.shanai) fys.add(fyOf(x.y,x.m)); });
+    let ch=false;
+    fys.forEach(f=>{
+      const k="cust"+f;
+      if(f<lo&&CFG[k]) return;        // 古い年度は、一度数えたらそのまま残します
+      const now=JSON.stringify(calcCust(f));
+      if(now!==JSON.stringify(CFG[k]||null)){ CFG[k]=JSON.parse(now); ch=true; }
+    });
+    if(ch) saveCfg();
   }catch(e){}
 }
 
@@ -5598,7 +5765,7 @@ function setZei(z){
   drawZeiSeg(); drawSanchi();
   // 分析タブをすでに描いていれば、上の数字ごと描き直します
   const k=document.getElementById("bzKpi");
-  if(k&&k.innerHTML) drawBunseki(); else bzCrossDraw();
+  if(k&&k.innerHTML) drawBunseki(); else { bzCrossDraw(); bzFyDraw(); }
 }
 
 // 1か月ぶんの数字を、いま選んでいる「税抜／税込」にそろえます。
@@ -5749,12 +5916,163 @@ function bzCrossDraw(){
   box.innerHTML=html;
 }
 
+// ===== 分析タブ「年度の比較」（2026-11-23 追加） =====
+//   集計だけを見ているので、古い年度の明細がこのPCに無くても並びます。
+let BZFY_MODE="s";          // s＝販売先ごと／c＝取引先（請求先）ごと
+// totals（月べつ）から1年度ぶんを合計します
+function fyTotal_(all,f){
+  if(!all) return null;
+  let has=false, o=Object.assign({},Z0);
+  Object.keys(all).forEach(k=>{ const a=String(k).split("-");
+    const y=Number(a[0]), m=Number(a[1]);
+    if(!(y>2000)||!(m>0)||fyOf(y,m)!==f) return;
+    o=zAdd(o,zeiOf(all[k])); has=true; });
+  return has?o:null;
+}
+function bzFyDraw(){
+  const box=document.getElementById("bzFy"); if(!box) return;
+  drawZeiSeg();
+  const hd=document.getElementById("bzFyHead");
+  if(hd) hd.textContent="（"+ZEIL()+"で表示）";
+  const mineAll=CFG.totals||{}, otherAll=OTHER.data;
+  const kuma=(SANCHI_ID==="kuma")?mineAll:otherAll;
+  const hiro=(SANCHI_ID==="kuma")?otherAll:mineAll;
+  const fys=fyList();
+  if(!fys.length){
+    box.innerHTML='<p class="hint">まだ売上の控えがありません。一度同期すると数字が入ります。</p>';
+    return;
+  }
+  const pc=(a,b)=>(b>0)?((a-b)/b*100):null;
+  const sg=v=>(v==null)?'<span style="color:#888">—</span>'
+    :'<span style="color:'+(v>=0?"#1B5E20":"#C62828")+'">'+(v>=0?"+":"")+v.toFixed(1)+'%</span>';
+  const yn=(o,k)=>o?("¥"+yen(Math.round(o[k]))):"—";
+
+  // --- 表1　年度ごとの売上（熊本・広島・合計） ---
+  const tot=fys.map(f=>{ const a=fyTotal_(kuma,f), b=fyTotal_(hiro,f);
+    return {f:f,a:a,b:b,sum:(a?a.ord:0)+(b?b.ord:0),
+            qty:(a?a.qty:0)+(b?b.qty:0),cnt:(a?a.ordN:0)+(b?b.ordN:0)}; });
+  let h='<table><thead><tr><th>年度</th><th class="num">熊本</th><th class="num">広島</th>'
+    +'<th class="num">合計</th><th class="num">前年比</th><th class="num">数量 c/s</th>'
+    +'<th class="num">取引件数</th></tr></thead><tbody>';
+  tot.forEach((r,i)=>{ const pv=tot[i+1];
+    h+='<tr><td><b>'+fyLabel(r.f)+'</b>'
+      +(r.f===FY?' <span class="badge b-now">いま見ている年度</span>':"")
+      +'<div style="font-size:10px;color:#888">'+fyNote(r.f)+'</div></td>'
+      +'<td class="num">'+yn(r.a,"ord")+'</td><td class="num">'+yn(r.b,"ord")+'</td>'
+      +'<td class="num"><b>¥'+yen(Math.round(r.sum))+'</b></td>'
+      +'<td class="num">'+(pv?sg(pc(r.sum,pv.sum)):'<span style="color:#888">—</span>')+'</td>'
+      +'<td class="num">'+yen(Math.round(r.qty))+'</td>'
+      +'<td class="num">'+r.cnt+'</td></tr>'; });
+  h+='</tbody></table>';
+
+  // --- 表2　販売先／取引先ごとの年度比較（いま開いている産地だけ） ---
+  const use=fys.slice(0,3);                    // 新しい順に3年
+  const komi=(ZEI==="komi"), names=new Set(), byF={};
+  use.forEach(f=>{ const rec=CFG["cust"+f];
+    const g=(rec&&rec[BZFY_MODE])||null; byF[f]=g;
+    if(g) Object.keys(g).forEach(n=>names.add(n)); });
+  const ad=a=>(a||[]).reduce((s,v)=>s+(Number(v)||0),0);
+  const sum12=(g,n)=>{ const b=g&&g[n]; if(!b) return null;
+    return {v:ad(b.o)+(komi?ad(b.t):0),q:ad(b.q),c:ad(b.n)}; };
+
+  h+='<h3 style="margin:24px 0 4px;font-size:14px">'
+    +(BZFY_MODE==="s"?"販売先ごと":"取引先（請求先）ごと")+'の年度比較　'
+    +sanBadge(SANCHI_ID)
+    +'<span class="sp"></span>'
+    +'<button class="btn sm'+(BZFY_MODE==="s"?"":" sub")+'" id="bzFySell">販売先ごと</button> '
+    +'<button class="btn sm'+(BZFY_MODE==="c"?"":" sub")+'" id="bzFyTori">取引先ごと</button></h3>';
+
+  if(!names.size){
+    h+='<p class="hint">この産地の販売先べつの控えがまだありません。'
+      +'一度同期すると、今年度ぶんから入ります。<br>'
+      +'（過去の年度は、その年度の明細がこのPCにあったときに数えた控えが残ります。）</p>';
+  }else{
+    const rows=[...names].map(n=>({n:n,c:use.map(f=>sum12(byF[f],n))}))
+      .sort((a,b)=>((b.c[0]?b.c[0].v:0)-(a.c[0]?a.c[0].v:0)));
+    h+='<p class="hint">「販売先」は<b>発注書の行先の呼び名</b>、'
+      +'「取引先」は<b>対応表で決めた請求先</b>（請求書を出す相手）です。'
+      +'どちらで見ても合計は同じです。</p>'
+      +'<table><thead><tr><th>'+(BZFY_MODE==="s"?"販売先":"取引先")+'</th>';
+    use.forEach(f=>{ h+='<th class="num">'+fyLabel(f)+'</th>'; });
+    h+='<th class="num">前年比</th><th class="num">数量 c/s<br>'
+      +'<span style="font-weight:normal;color:#888">'+fyLabel(use[0])+'</span></th>'
+      +'<th class="num">件数<br><span style="font-weight:normal;color:#888">'
+      +fyLabel(use[0])+'</span></th></tr></thead><tbody>';
+    const tt=use.map(()=>0); let tq=0, tc=0;
+    rows.forEach(r=>{
+      h+='<tr><td><b>'+esc(r.n)+'</b></td>';
+      r.c.forEach((x,i)=>{ if(x) tt[i]+=x.v;
+        h+='<td class="num">'+(x?("¥"+yen(Math.round(x.v))):'<span style="color:#888">—</span>')+'</td>'; });
+      const a=r.c[0], b=r.c[1];
+      h+='<td class="num">'+((a&&b)?sg(pc(a.v,b.v)):'<span style="color:#888">—</span>')+'</td>';
+      if(a){ tq+=a.q; tc+=a.c; }
+      h+='<td class="num">'+(a?yen(Math.round(a.q)):"—")+'</td>'
+        +'<td class="num">'+(a?a.c:"—")+'</td></tr>';
+    });
+    h+='</tbody><tfoot><tr class="total"><td>合計</td>';
+    tt.forEach(v=>{ h+='<td class="num">¥'+yen(Math.round(v))+'</td>'; });
+    h+='<td class="num">'+((tt[0]&&tt[1])?sg(pc(tt[0],tt[1])):'—')+'</td>'
+      +'<td class="num">'+yen(Math.round(tq))+'</td>'
+      +'<td class="num">'+tc+'</td></tr></tfoot></table>';
+  }
+  box.innerHTML=h;
+  const bs=document.getElementById("bzFySell"), bt=document.getElementById("bzFyTori");
+  if(bs) bs.onclick=()=>{ BZFY_MODE="s"; bzFyDraw(); };
+  if(bt) bt.onclick=()=>{ BZFY_MODE="c"; bzFyDraw(); };
+}
+
+// ===== このPCの保存のぐあい（2026-11-23 追加） =====
+//   ブラウザがアプリに貸してくれる場所は1つのURLにつき約5MBで、
+//   熊本（krs_）と広島（krh_）がその場所を分け合っています。
+const USAGE_MAX=5*1024*1024;
+function usageCalc(){
+  const by={}, out={total:0,by:by,n:0};
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i), v=localStorage.getItem(k)||"";
+      const c=(String(k).length+String(v).length)*2;   // 1文字2バイトで数えます
+      out.total+=c; out.n++;
+      const g=(k.indexOf("krs_")===0)?"熊本":(k.indexOf("krh_")===0)?"広島":"そのほか";
+      by[g]=(by[g]||0)+c;
+    }
+  }catch(e){}
+  return out;
+}
+const mbLabel=n=>(n/1024/1024).toFixed(2)+" MB";
+function drawUsage(){
+  const box=document.getElementById("usageBox"); if(!box) return;
+  const u=usageCalc(), p=Math.min(100,u.total/USAGE_MAX*100);
+  const col=(p>=85)?"#C62828":(p>=60)?"#E08900":"var(--grn)";
+  let h='<div class="bz-bar" style="height:18px"><i class="a" style="width:'+p.toFixed(1)
+    +'%;background:'+col+'"></i></div>'
+    +'<p style="margin:7px 0 12px"><b style="color:'+col+';font-size:16px">'+mbLabel(u.total)+'</b>'
+    +'　／　約 '+mbLabel(USAGE_MAX)+'　（'+p.toFixed(0)+'%）</p>'
+    +'<table><thead><tr><th>中身</th><th class="num">大きさ</th></tr></thead><tbody>';
+  Object.keys(u.by).sort().forEach(k=>{
+    h+='<tr><td>'+esc(k)+'</td><td class="num">'+mbLabel(u.by[k])+'</td></tr>'; });
+  h+='</tbody></table>'
+    +'<p style="margin:12px 0 0">このPCが持っている<b>取引の明細</b>　'
+    +'販売 '+SRC.length+'行／買取 '+SRCB.length+'行／予定 '+SRCP.length+'行<br>'
+    +'<span style="color:#888;font-size:11px">'
+    +(FYWIDE?'いまは古い年度も読み込んでいます（保存はしていません）'
+            :fyLabel(fyMin_())+'以降だけを手元に置いています')+'</span></p>';
+  if(p>=85){
+    h+='<p class="hint" style="color:#C62828">⚠ <b>そろそろいっぱいです。</b>'
+      +'このままだと請求書や設定が保存できなくなります。'
+      +'手元に置く年度を1年ぶんに減らす必要があるので、専務か曽我さんにご相談ください。</p>';
+  }else if(p>=60){
+    h+='<p class="hint">半分を超えました。いまのところ問題はありませんが、'
+      +'ときどきこの画面を見てください。</p>';
+  }
+  box.innerHTML=h;
+}
+
 // 読み直して描き直す
 async function refreshSanchi(force){
   await loadOther(force);
   drawSanchi();
   const k=document.getElementById("bzKpi");
-  if(k&&k.innerHTML) drawBunseki(); else bzCrossDraw();
+  if(k&&k.innerHTML) drawBunseki(); else { bzCrossDraw(); bzFyDraw(); }
 }
 
 // ===== freee への発行（2026-11-20 追加） =====
@@ -6294,6 +6612,13 @@ document.getElementById("btnFullExport").onclick=fullExport;
 })();
 (function(){ const b=document.getElementById("btnSanchiRe");
   if(b) b.onclick=()=>refreshSanchi(true); })();
+// 年度の切替と、保存のぐあい（2026-11-23 追加）
+(function(){
+  const f=document.getElementById("fy");
+  if(f) f.onchange=()=>setFy(f.value);
+  const u=document.getElementById("btnUsage");
+  if(u) u.onclick=()=>{ drawUsage(); dlMsg("数え直しました","ok"); };
+})();
 // 税抜／税込のボタン（2026-11-21 追加）。どの画面で押しても両方が変わります
 (function(){
   document.querySelectorAll(".segzei button").forEach(b=>{ b.onclick=()=>setZei(b.dataset.z); });
@@ -6401,7 +6726,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-22a 版（送り直しに確認）";
+const BUILD_LABEL="2026-11-23a 版（年度の切替）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
