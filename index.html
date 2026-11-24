@@ -459,6 +459,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
         <button class="btn" data-menu="qt">見積書を発行</button>
         <div class="menu-list" id="m-qt">
           <button data-pdf="qt" data-key="new">見積書PDF</button>
+          <button data-qtfreee="1">◆ freee で作成</button>
           <div class="sep"></div><button id="btnQtPrev">画面で確認する</button>
         </div>
       </span>
@@ -471,7 +472,7 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <div class="scroll" style="max-height:40vh">
       <table id="tQtList"><thead><tr>
         <th>見積書No.</th><th>お客様</th><th>件名</th><th>見積日</th><th>有効期限</th>
-        <th class="num">金額(税込)</th><th>発行者</th><th>PDF</th><th></th>
+        <th class="num">金額(税込)</th><th>発行者</th><th>PDF</th><th>freee</th><th></th>
       </tr></thead><tbody></tbody></table>
     </div>
   </div>
@@ -929,7 +930,9 @@ tr.new{animation:fl 1.4s ease-out}@keyframes fl{from{background:#FFF4DB}to{backg
     <h2>このPCの保存のぐあい<span class="sp"></span>
       <button class="btn sm sub" id="btnUsage">数え直す</button></h2>
     <div class="note or" style="margin-top:0">ブラウザがアプリに貸してくれる場所は、
-      <b>1つのURLにつき約5MB</b>です。<b>燊本と広島で同じ場所を分け合います。</b><br>
+      <b>1つのURLにつき約10MB</b>です（Chrome で実際に測った値です）。<br>
+      この場所は<b>熊本と広島</b>だけでなく、<b>同じURLで動いているほかのアプリ</b>
+      （電子黒板・資材・荷造りなど）とも<b>分け合っています</b>。<br>
       いっぱいになると、請求書や設定が<b style="color:#C62828">保存できなくなります</b>。<br>
       そのため、明細は<b>今年度と前年度だけ</b>を手元に置き、それより古い年度は
       <b>月ごとの集計だけ</b>を残しています（明細は共有データベースにすべて残っています）。</div>
@@ -4713,9 +4716,10 @@ async function issueQuote_run(){
     if(c) c.scrollIntoView({behavior:"smooth", block:"start"});
     logOp("見積書を発行",q.quoteNo+"／"+((q.partner&&q.partner.name)||q.customer)+"／税込 ¥"+yen(q.total||0));
     dlMsg("見積書を発行しました："+q.quoteNo+"（ドライブに保存済み）","ok");
+    return q;
   }catch(e){ dlMsg("PDFを保存できませんでした："+e.message,"ng"); }
 }
-function drawQtList(){
+function drawQtList(noFetch){
   const tb=document.querySelector("#tQtList tbody"); if(!tb) return;
   tb.innerHTML="";
   const list=OPS.quotes.slice().sort((a,b)=>a.quoteNo<b.quoteNo?1:-1);
@@ -4726,6 +4730,7 @@ function drawQtList(){
       +'<td>'+esc(q.date)+'</td><td>'+esc(q.valid||"—")+'</td>'
       +'<td class="num">¥'+yen(q.total)+'</td><td>'+esc(q.issuedBy||"—")+'</td>'
       +'<td>'+(q.pdfUrl?'<a href="'+esc(q.pdfUrl)+'" target="_blank" style="color:var(--or)">PDFを開く</a>':'—')+'</td>'
+      +'<td>'+qtFreeeCell(q)+'</td>'
       +'<td><button class="edit" data-qtcopy="'+esc(q.id)+'">同じ内容で作る</button></td>';
     tb.appendChild(tr);});
   document.getElementById("qtCnt").textContent="("+list.length+"件)";
@@ -4736,6 +4741,9 @@ function drawQtList(){
     qtSave(); drawQt();
     document.getElementById("qtEditor").scrollIntoView({behavior:"smooth",block:"start"});
     dlMsg("同じ内容を入力欄に読み込みました","ok");});
+  tb.querySelectorAll("[data-qtsend]").forEach(b=>b.onclick=()=>{
+    const q=OPS.quotes.find(x=>x.id===b.dataset.qtsend); if(q) freeeSendQt(q);});
+  if(!noFetch) freeeRefreshQt(list);
 }
 // 画面で確認する
 function showQt(){
@@ -6027,7 +6035,32 @@ function bzFyDraw(){
 // ===== このPCの保存のぐあい（2026-11-23 追加） =====
 //   ブラウザがアプリに貸してくれる場所は1つのURLにつき約5MBで、
 //   熊本（krs_）と広島（krh_）がその場所を分け合っています。
-const USAGE_MAX=5*1024*1024;
+//   ブラウザが1つのURLに貸してくれる大きさです。
+//   2026-11-24 に Chrome 157 で実際に測ったところ、ちょうど 10MB でした。
+//   （以前は「5MB」と書いていましたが、これは古い数字でした。）
+//   ブラウザによって違うので、「数え直す」を押すと、そのPCで本当の値を測ります。
+let USAGE_MAX=10*1024*1024;
+let USAGE_HOW="";
+//   測り方：大きな文字を書いてみて、入ったらすぐ消す、を何回かくり返します。
+//   書いたものは必ず消すので、中身は増えません。
+function usageProbe_(){
+  const K="__ksize__";
+  let lo=0, hi=40;                       // MB。40MBより上は測りません
+  try{
+    for(let i=0;i<8;i++){
+      const mid=(lo+hi)/2;
+      try{ localStorage.setItem(K,"x".repeat(Math.round(mid*512*1024))); lo=mid; }
+      catch(e){ hi=mid; }
+      try{ localStorage.removeItem(K); }catch(e){}
+    }
+  }catch(e){}
+  try{ localStorage.removeItem(K); }catch(e){}
+  const max=usageCalc().total+lo*1048576;
+  if(max>1048576){ USAGE_MAX=max;
+    // 40MBまでしか測らないので、そこまで入ったときは「以上」と書きます
+    USAGE_HOW=(lo>=39)?"40MB以上入ります（ここまでしか測っていません）"
+                      :"このPCで実際に測った値です"; }
+}
 function usageCalc(){
   const by={}, out={total:0,by:by,n:0};
   try{
@@ -6035,7 +6068,8 @@ function usageCalc(){
       const k=localStorage.key(i), v=localStorage.getItem(k)||"";
       const c=(String(k).length+String(v).length)*2;   // 1文字2バイトで数えます
       out.total+=c; out.n++;
-      const g=(k.indexOf("krs_")===0)?"熊本":(k.indexOf("krh_")===0)?"広島":"そのほか";
+      const g=(k.indexOf("krs_")===0)?"熊本":(k.indexOf("krh_")===0)?"広島"
+              :"ほかのアプリ（同じURL）";
       by[g]=(by[g]||0)+c;
     }
   }catch(e){}
@@ -6049,7 +6083,8 @@ function drawUsage(){
   let h='<div class="bz-bar" style="height:18px"><i class="a" style="width:'+p.toFixed(1)
     +'%;background:'+col+'"></i></div>'
     +'<p style="margin:7px 0 12px"><b style="color:'+col+';font-size:16px">'+mbLabel(u.total)+'</b>'
-    +'　／　約 '+mbLabel(USAGE_MAX)+'　（'+p.toFixed(0)+'%）</p>'
+    +'　／　約 '+mbLabel(USAGE_MAX)+'　（'+p.toFixed(0)+'%）'
+    +(USAGE_HOW?'<span style="font-size:11px;color:#888">　'+USAGE_HOW+'</span>':'')+'</p>'
     +'<table><thead><tr><th>中身</th><th class="num">大きさ</th></tr></thead><tbody>';
   Object.keys(u.by).sort().forEach(k=>{
     h+='<tr><td>'+esc(k)+'</td><td class="num">'+mbLabel(u.by[k])+'</td></tr>'; });
@@ -6085,7 +6120,7 @@ async function refreshSanchi(force){
 //   ・freeeSend  … 実際に送る
 //   ・freeeSent  … もう送ったか
 //   アプリは freee のトークンを一切持ちません。鍵はGAS側にだけ置いてあります。
-let FREEE={sent:{}};
+let FREEE={sent:{},qt:{}};
 
 // syncApi は ok:false のとき例外にしてしまうので、freee 用は別にします。
 //   「すでに送っています」のような返事も、中身ごと受け取りたいためです。
@@ -6327,6 +6362,118 @@ async function deliveryMakeInFreee(txNo){
   if(!doc) return;                       // 発行できなかった
   await freeeSendDv(doc);
 }
+
+// ===== 見積書を freee に作ります（2026-11-24 追加） =====
+//   作りは納品書と同じです。見積書の中身はアプリが持っているので、
+//   組み立てたものをそのまま GAS に渡します（鍵は GAS にしかありません）。
+function freeeStampQt(q,s){
+  if(!q||!s||!s.id) return false;
+  if(String(q.freeeId||"")===String(s.id)&&String(q.freeeNo||"")===String(s.no||"")
+     &&String(q.freeeUrl||"")===String(s.url||"")) return false;
+  q.freeeId=String(s.id); q.freeeNo=s.no||""; q.freeeUrl=s.url||"";
+  q.freeeAt=s.at||""; q.freeeBy=s.by||"";
+  return true;
+}
+function qtByNo(no){ return OPS.quotes.find(x=>x.quoteNo===no); }
+
+// 見積書一覧の「freee」欄
+function qtFreeeCell(q){
+  const s=FREEE.qt[q.quoteNo];
+  if(q.freeeId||(s&&s.id)){
+    const no=q.freeeNo||(s&&s.no)||"", url=q.freeeUrl||(s&&s.url)||"";
+    const nm=no?("freee "+no):"freee 作成済み";
+    return url?'<a href="'+esc(url)+'" target="_blank" style="font-size:11px;color:#2E7D32">'+esc(nm)+'</a>'
+              :'<span style="font-size:11px;color:#2E7D32">'+esc(nm)+'</span>';
+  }
+  if(s&&s.sending) return '<span style="font-size:11px;color:#888">送信中…</span>';
+  return '<button class="edit" data-qtsend="'+esc(q.id)+'">freeeへ送る</button>';
+}
+
+// 一覧を描いたあと、送信済みかどうかをGASに聞きに行きます（読むだけ）。
+//   ほかのPCから送ったぶんや、送れたのに控えそこねたぶんを、ここで拾い直します。
+async function freeeRefreshQt(list){
+  if(!syncOn()) return;
+  const nos=(list||[]).map(q=>q.quoteNo).filter(Boolean);
+  if(!nos.length) return;
+  let j;
+  try{ j=await freeeApi("freeeSentQt",{quoteNos:nos}); }catch(e){ return; }
+  if(!j||!j.ok) return;
+  let changed=false,stamped=false;
+  Object.keys(j.sent||{}).forEach(k=>{
+    if(JSON.stringify(FREEE.qt[k])!==JSON.stringify(j.sent[k])){ FREEE.qt[k]=j.sent[k]; changed=true; }
+    if(freeeStampQt(qtByNo(k),j.sent[k])) stamped=true;
+  });
+  if(stamped) saveOps();
+  if(changed||stamped) drawQtList(true);
+}
+
+// 1通を freee に送ります（下見 → 確認 → 送信）
+async function freeeSendQt(q){
+  if(!q||!q.quoteNo) return false;
+  if(!(await freeeOk())) return false;
+
+  let c;
+  try{ c=await freeeApi("freeeCheckQt",{quote:q}); }
+  catch(e){ alert("下見ができませんでした。\n\n"+e.message); return false; }
+  if(!c||!c.ok){ alert("freee に送れません。\n\n"+((c&&c.error)||"")); return false; }
+
+  if(c.sent&&c.sent.id){
+    if(freeeStampQt(q,c.sent)){ saveOps(); drawQtList(true); }
+    alert("見積書 "+q.quoteNo+" は、すでに freee に送っています。\n\nfreee の見積書："
+      +(c.sent.no||("id "+c.sent.id))+"\n\n二重に作らないよう、送りません。");
+    return false;
+  }
+  if(!c.partner.freeeId){
+    alert("freee に取引先が見あたりません。\n\n　"+c.partner.now
+      +"\n\nfreee の取引先に登録してから、もう一度お試しください。");
+    return false;
+  }
+  if(!c.same){
+    alert("合計がアプリと合いません。念のため送りません。\n\n　freee：¥"+yen(c.total)
+      +"\n　アプリ：¥"+yen(c.appTotal)+"\n\n管理者にお伝えください。");
+    return false;
+  }
+
+  if(!confirm("この内容で freee に見積書を作ります。\n\n"
+    +"　見積書No.　　："+q.quoteNo+"\n"
+    +"　お客様　　　："+c.partner.now+"\n"
+    +"　件名　　　　："+(c.subject||"（なし）")+"\n"
+    +"　見積日　　　："+(c.date||"（なし）")+"\n"
+    +"　有効期限　　："+(c.valid||"（なし）")+"\n"
+    +"　明細　　　　："+c.items+"行\n"
+    +"　金額　　　　：¥"+yen(c.total)+"（税抜 ¥"+yen(c.net)
+    +"／8% ¥"+yen(c.tax8)+"／10% ¥"+yen(c.tax10)+"）\n\n"
+    +"★ freee の見積書は、あとから消せません。\n　よろしいですか？")) return false;
+
+  if(!busyOn("freee に送っています…")) return false;
+  let r;
+  try{ r=await freeeApi("freeeSendQt",{quote:q, by:CFG.userName||""}); }
+  catch(e){ alert("送れませんでした。\n\n"+e.message
+    +"\n\n★ freee の画面で、見積書ができていないかご確認ください。"); return false; }
+  finally{ busyOff(); }
+
+  if(!r||!r.ok){
+    if(r&&r.sent&&freeeStampQt(q,r.sent)){ saveOps(); drawQtList(true); }
+    alert("送れませんでした。\n\n"+((r&&r.error)||""));
+    return false;
+  }
+  if(freeeStampQt(q,r.sent)){ saveOps(); drawQtList(true); }
+  logOp("freeeへ見積書を送信", q.quoteNo+"／freee "+(r.sent.no||("id "+r.sent.id))+"／¥"+yen(r.sent.total));
+  dlMsg("freee に見積書を作りました："+(r.sent.no||("id "+r.sent.id)),"ok");
+  alert("freee に見積書を作りました。\n\n　アプリ　："+q.quoteNo
+    +"\n　freee　："+(r.sent.no||("id "+r.sent.id))
+    +"\n\n一覧の「freee …」のリンクから、freee の画面を開けます。");
+  return true;
+}
+
+// 「◆ freee で作成」… いつもどおり発行（PDFも保存）してから、そのまま freee に送ります
+async function quoteMakeInFreee(){
+  if(!(await freeeOk())) return;
+  const q=await issueQuote();
+  if(!q) return;                         // 発行できなかった
+  await freeeSendQt(q);
+}
+
 // 発行済請求書の一覧
 function drawIssuedInvoices(noFetch){
   const [y,m]=(document.getElementById("invYm").value||"0/0").split("/").map(Number);
@@ -6437,6 +6584,9 @@ document.addEventListener("click",e=>{
   const dm=e.target.closest("[data-dvfreee]");
   if(dm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
     deliveryMakeInFreee(dm.dataset.dvfreee); return; }
+  const qm=e.target.closest("[data-qtfreee]");
+  if(qm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
+    quoteMakeInFreee(); return; }
   const fm=e.target.closest("[data-invfreee]");
   if(fm){ document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
     invoiceMakeInFreee(fm.dataset.invfreee); return; }
@@ -6635,7 +6785,8 @@ document.getElementById("btnFullExport").onclick=fullExport;
   const f=document.getElementById("fy");
   if(f) f.onchange=()=>setFy(f.value);
   const u=document.getElementById("btnUsage");
-  if(u) u.onclick=()=>{ drawUsage(); dlMsg("数え直しました","ok"); };
+  if(u) u.onclick=()=>{ usageProbe_(); drawUsage();
+    dlMsg("数え直しました（このPCの上限は "+mbLabel(USAGE_MAX)+" でした）","ok"); };
 })();
 // 税抜／税込のボタン（2026-11-21 追加）。どの画面で押しても両方が変わります
 (function(){
@@ -6744,7 +6895,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-24a 版（発行メニューの見切れを修正）";
+const BUILD_LABEL="2026-11-24c 版（見積書のfreee連携・保存上限の実測）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
