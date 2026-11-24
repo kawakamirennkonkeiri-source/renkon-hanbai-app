@@ -6402,14 +6402,26 @@ function cancelInvoice(id){
   return true;
 }
 
+// 発行メニューが画面の外へはみ出さないようにします（2026-11-24 追加）。
+//   メニューはもともと「ボタンの右はし」にそろえて出していました（CSS の right:0）。
+//   そのため、見積の「見積書を発行」のようにボタンが画面の左はしにあると、
+//   メニューが画面の左へ 70px ほど出てしまい、文字が見切れていました。
+//   左へ出るときだけ、左そろえに切り替えます。
+function menuFix_(m){
+  if(!m||!m.classList.contains("on")) return;
+  m.style.right=""; m.style.left="";                 // いちど元（右そろえ）に戻して測ります
+  if(m.getBoundingClientRect().left<8){ m.style.right="auto"; m.style.left="0"; }
+}
 // 発行メニュー
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-menu]");
   document.querySelectorAll(".menu-list.on").forEach(m=>{
     if(!b||m.id!=="m-"+b.dataset.menu) m.classList.remove("on");});
-  if(b){ const m=document.getElementById("m-"+b.dataset.menu); if(m) m.classList.toggle("on"); return; }
+  if(b){ const m=document.getElementById("m-"+b.dataset.menu);
+         if(m){ m.classList.toggle("on"); menuFix_(m); } return; }
   const mb=e.target.closest("#btnBackup");
-  if(mb){ document.getElementById("mBackup").classList.toggle("on"); return; }
+  if(mb){ const m=document.getElementById("mBackup");
+          m.classList.toggle("on"); menuFix_(m); return; }
   if(!e.target.closest(".menu-list")) document.querySelectorAll(".menu-list.on").forEach(m=>m.classList.remove("on"));
 });
 document.addEventListener("click",e=>{
@@ -6732,7 +6744,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-23c 版（年度の切替）";
+const BUILD_LABEL="2026-11-24a 版（発行メニューの見切れを修正）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
