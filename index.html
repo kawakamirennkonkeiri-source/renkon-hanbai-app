@@ -4677,14 +4677,41 @@ function nextQuoteNo(){
     const v=parseInt(q.quoteNo.slice(pre.length),10); if(v>n) n=v; }});
   return pre+String(n+1).padStart(3,"0");
 }
+// 日付を 2026-02-28 の形にそろえます。
+//   freee はゼロ埋めした形しか受け付けません（2026-2-28 は弾かれます）。
+const qtYmd_=s=>{ const d=parseDate(s);
+  return d?ymd(d.getFullYear(),d.getMonth()+1,d.getDate()):""; };
 function qtBuild(){
   if(!QT.customer){ alert("お客様を選んでください。"); return null; }
   const ls=QT.lines.filter(l=>l.item&&Number(l.qty)>0&&l.tanka!=null&&l.tanka!=="");
   if(!ls.length){ alert("品名・数量・単価が入った明細を1行以上入れてください。"); return null; }
+  //   日付の点検（2026-11-24 追加）。
+  //   PDFも画面もfreeeも、みんなこの関数を通るので、ここで止めれば全部止まります。
+  //   freee も「有効期限は見積日以降の日付にしてください」と断ってきます。
+  //   同じことを、PDFを作る前にこちらで知らせます。
+  const date=qtYmd_(QT.date)||todayStr();
+  if(QT.date&&!qtYmd_(QT.date)){
+    alert("見積日が正しくありません。\n\n　入力したもの："+QT.date
+      +"\n\n2026-10-17 のように、年-月-日 の形で入れてください。");
+    document.getElementById("qtDate").focus(); return null; }
+  const valid=qtYmd_(QT.valid);
+  if(QT.valid&&!valid){
+    alert("有効期限が正しくありません。\n\n　入力したもの："+QT.valid
+      +"\n\n2027-02-28 のように、年-月-日 の形で入れてください。"
+      +"\n空欄のままでも発行できます。");
+    document.getElementById("qtValid").focus(); return null; }
+  if(valid&&valid<date){
+    alert("有効期限が正しくありません。\n\n　見積日　　："+date
+      +"\n　有効期限　："+valid
+      +"\n\n有効期限は、見積日より後の日付にしてください。"
+      +"\n年を打ちまちがえていないか、ご確認ください。");
+    document.getElementById("qtValid").focus(); return null; }
+
   const p=partnerOf(QT.customer), t=qtTotals();
   return { id:"qt"+Date.now(), quoteNo:nextQuoteNo(), customer:QT.customer,
     partner:p?{name:p.name,zip:p.zip,addr:p.addr,person:p.person}:{name:QT.customer},
-    subject:QT.subject||"", date:QT.date||todayStr(), valid:QT.valid||"", memo:QT.memo||"",
+    subject:QT.subject||"", date:date, valid:valid,
+    memo:QT.memo||"",
     lines:ls.map(l=>({item:l.item, qty:Number(l.qty), unit:l.unit||"c/s",
       tanka:Number(l.tanka), tax:l.tax||"8%", amount:Number(l.qty)*Number(l.tanka)})),
     s8:t.s8, s10:t.s10, t8:t.t8, t10:t.t10, total:t.total,
@@ -6434,6 +6461,15 @@ async function freeeSendQt(q){
     return false;
   }
 
+  //   発行済みの見積書にも、古い日付のものが残っていることがあります。
+  //   freee は受け付けないので、送る前にこちらで止めます。
+  if(c.valid&&c.date&&c.valid<c.date){
+    alert("有効期限が正しくありません。\n\n　見積書No.　："+q.quoteNo
+      +"\n　見積日　　："+c.date+"\n　有効期限　："+c.valid
+      +"\n\nfreee は、見積日より前の有効期限を受け付けません。"
+      +"\n\n発行した見積書は中身を直せないので、"
+      +"\n「同じ内容で作る」から有効期限を直して、作り直してください。");
+    return false; }
   if(!confirm("この内容で freee に見積書を作ります。\n\n"
     +"　見積書No.　　："+q.quoteNo+"\n"
     +"　お客様　　　："+c.partner.now+"\n"
@@ -6895,7 +6931,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-24c 版（見積書のfreee連携・保存上限の実測）";
+const BUILD_LABEL="2026-11-24e 版（見積書のfreee連携・有効期限の点検）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
