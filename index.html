@@ -6179,8 +6179,17 @@ function freeeCell(i){
   const nm=i.freeeNo||(s&&s.no)||(id?"id "+id:"");
   const url=i.freeeUrl||(s&&s.url)||"";
   if(i.status==="cancelled"){
-    // 取り消しても、freee の請求書は残ります。消し忘れに気づけるよう、赤で出します。
-    return id?'<span style="font-size:11px;color:#C62828" title="freee には請求書が残っています。freee の画面でご確認ください">★'+esc(nm)+'</span>':'—';
+    // 取り消しても、freee の請求書は残ります。freee のAPIからは消せないので、
+    // 人が freee の画面で消したら、ここに印を付けてもらいます（2026-11-25 追加）。
+    if(!id) return '—';
+    if(i.freeeCancelOk){
+      return '<span style="font-size:11px;color:#888" title="freee の画面で取り消したことを確認済みです（'
+        +esc(i.freeeCancelOkAt||"")+'　'+esc(i.freeeCancelOkBy||"")+'）">'
+        +esc(nm)+'（freee取消済）</span>';
+    }
+    return '<span style="font-size:11px;color:#C62828" title="freee には請求書が残っています。freee の画面でご確認ください">★'
+      +esc(nm)+'</span><br><button class="edit" data-freeecancelok="'+esc(i.invoiceNo)
+      +'">freee側で取消済にする</button>';
   }
   if(id){
     return url?'<a href="'+esc(url)+'" target="_blank" style="color:var(--or)">'+esc(nm)+'</a>'
@@ -6537,6 +6546,20 @@ function drawIssuedInvoices(noFetch){
   });
   document.getElementById("issuedCnt").textContent="("+list.length+"件)";
   tb.querySelectorAll("[data-freeesend]").forEach(b=>b.onclick=()=>freeeSendNo(b.dataset.freeesend));
+  //   freee の画面で消したことを、人が確かめて印を付けます。
+  //   この印はアプリの記録を変えるだけで、freee には何もしません。
+  tb.querySelectorAll("[data-freeecancelok]").forEach(b=>b.onclick=()=>{
+    const inv=invByNo(b.dataset.freeecancelok); if(!inv) return;
+    const nm=inv.freeeNo||("id "+inv.freeeId);
+    if(!confirm("freee の画面で "+nm+" を取り消したことを、ご確認いただけましたか？\n\n"
+      +"　請求書No.："+inv.invoiceNo+"\n　freee　　："+nm+"\n\n"
+      +"「はい」を押すと、この一覧の赤い★が消えます。\n"
+      +"★ この操作は、アプリの記録に印を付けるだけです。freee には何もしません。")) return;
+    inv.freeeCancelOk=1; inv.freeeCancelOkAt=nowStr(); inv.freeeCancelOkBy=CFG.userName||"";
+    saveOps();
+    logOp("freee側の取消を確認", inv.invoiceNo+"／"+nm);
+    drawIssuedInvoices(true);
+    dlMsg("freee側で取消済にしました："+inv.invoiceNo,"ok");});
   if(!noFetch) freeeRefresh(list);
   tb.querySelectorAll("[data-cancelinv]").forEach(b=>b.onclick=()=>cancelInvoice(b.dataset.cancelinv));
   tb.querySelectorAll("[data-fixinv]").forEach(b=>b.onclick=()=>{
@@ -6931,7 +6954,7 @@ try{const a=localStorage.getItem(ROW_KEY); if(a) iA=JSON.parse(a);
 //   それまでは new Date() だったので、古い版を開いても今日の日付が出てしまい、
 //   「新しい版に差し替わったか」を画面で確かめられませんでした。
 //   4台をそろえたか確かめるのに使います。
-const BUILD_LABEL="2026-11-24e 版（見積書のfreee連携・有効期限の点検）";
+const BUILD_LABEL="2026-11-25a 版（freee側の取消を印せるように）";
 document.getElementById("verLabel").textContent=BUILD_LABEL;
 try{document.getElementById("syncBadge").textContent=
   localStorage.getItem(CFG_KEY)?"● 自動保存中":"● 保存待ち";}catch(e){
